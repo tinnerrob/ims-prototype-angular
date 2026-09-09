@@ -1,0 +1,34 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Feature Modules</h1>
+      <p class="page-sub">Administration: toggle industry modules over the always-on inventory core.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="strong mb-2">Core · always on</div>
+      <p class="empty">Inventory, Parties &amp; Orders, Hand-Off, Locations, Receiving/Inspections, Categories, Dashboard.</p>
+      <div class="divider"></div>
+      <div class="strong mb-2">Optional modules</div>
+
+      <table class="table">
+        <thead><tr><th>Module</th><th>Description</th><th class="th-end">Enabled</th></tr></thead>
+        <tbody>
+          @for (m of modules; track m.key) {
+            <tr>
+              <td class="strong">{{ m.label }}</td>
+              <td class="muted-cell">{{ m.desc }}</td>
+              <td class="td-end">
+                <span class="switch" [class.on]="on(m.key)" role="switch" [attr.aria-checked]="on(m.key)" tabindex="0"
+                  (click)="toggle(m.key)" (keydown.enter)="toggle(m.key)"></span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      <p class="empty mt">Turning a module off hides its nav entry and blocks its route (a disabled route falls back to the dashboard). Core is never affected.</p>
+    </div>
+  </div>
+</section>

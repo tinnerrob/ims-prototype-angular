@@ -50,6 +50,10 @@ export class AppComponent {
         { label: 'Billing & Invoicing', route: '/invoicing', soon: true },
       ],
     },
+    {
+      title: 'Administration',
+      items: [{ label: 'Feature Modules', route: '/admin' }],
+    },
   ];
 
   readonly today = new Date().toLocaleDateString('en-US', {

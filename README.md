@@ -22,6 +22,7 @@ src/app/
 │   ├── models.ts        # Typed domain models + catalog type registry
 │   └── data.service.ts  # Typed in-memory store + localStorage persistence (the apiAdapter seam)
 ├── features/
+│   ├── config/          # Feature Modules (admin: toggle industry modules)
 │   ├── dashboard/       # Landing + port roadmap
 │   ├── categories/      # Categories & Types (list + add/rename/remove)
 │   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
@@ -61,7 +62,8 @@ touching feature code.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
-- [ ] Remaining modules: allocations + telemetry (timeline + GPS-sim UI are the two complex ones) and an Admin config view to toggle modules.
+- [x] Admin: Feature Modules toggle view.
+- [ ] Remaining modules: allocations + telemetry (timeline + GPS-sim UI are the two complex ones).
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

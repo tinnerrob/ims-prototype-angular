@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 
 import { requireModule } from './core/module.guard';
 import { CategoriesComponent } from './features/categories/categories.component';
+import { ConfigComponent } from './features/config/config.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { HandoffComponent } from './features/handoff/handoff.component';
 import { InspectionsComponent } from './features/inspections/inspections.component';
@@ -23,6 +24,7 @@ export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: 'dashboard', component: DashboardComponent },
   { path: 'categories', component: CategoriesComponent },
+  { path: 'admin', component: ConfigComponent },
   { path: 'handoff', component: HandoffComponent },
   { path: 'inspections', component: InspectionsComponent },
   { path: 'invoicing', component: InvoicingComponent, canActivate: [requireModule('billing')] },
