@@ -274,6 +274,33 @@ export class DataService {
     this.save();
   }
 
+  /** Minutes-of-day window (defaults 08:00–17:00). */
+  orderT0(order: Order): number { return order.t0 ?? 480; }
+  orderT1(order: Order): number { return order.t1 ?? 1020; }
+
+  /** Resize the order's time-of-day window in Day view. */
+  updateOrderTimes(orderId: string, t0: number, t1: number): void {
+    const order = this.getOrder(orderId);
+    if (!order) return;
+    order.t0 = Math.max(0, Math.min(1440, Math.round(t0 / 15) * 15));
+    order.t1 = Math.max(0, Math.min(1440, Math.round(t1 / 15) * 15));
+    if (order.t1 < order.t0) order.t1 = order.t0;
+    this.save();
+  }
+
+  /** Resize a line's time-of-day window, clamped inside the order's window. */
+  updateOrderLineTimes(orderId: string, lineId: string, t0: number, t1: number): void {
+    const order = this.getOrder(orderId);
+    const li = order?.lineItems.find((l) => l.id === lineId);
+    if (!order || !li) return;
+    const lo = this.orderT0(order);
+    const hi = this.orderT1(order);
+    li.t0 = Math.max(lo, Math.min(hi, Math.round(t0 / 15) * 15));
+    li.t1 = Math.max(lo, Math.min(hi, Math.round(t1 / 15) * 15));
+    if (li.t1 < li.t0) li.t1 = li.t0;
+    this.save();
+  }
+
   private nextLineId(order: Order): string {
     let max = 0;
     for (const l of order.lineItems) {

@@ -51,12 +51,16 @@ export class SchedulerComponent implements OnDestroy {
         const c = new Date(d.getFullYear(), d.getMonth(), i);
         out.push({ start: c.getTime(), label: String(i), sub: DAY_NAMES[c.getDay()] });
       }
-    } else {
-      const n = this.view === 'week' ? 7 : 1;
+    } else if (this.view === 'week') {
       const base = this.mondayOf(this.anchor);
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < 7; i++) {
         const c = new Date(base + i * DAY_MS);
         out.push({ start: c.getTime(), label: DAY_NAMES[c.getDay()], sub: MONTHS[c.getMonth()] + ' ' + c.getDate() });
+      }
+    } else {
+      // Day view: 24 one-hour segments (00:00 .. 23:00)
+      for (let h = 0; h < 24; h++) {
+        out.push({ start: 0, label: this.pad2(h) + ':00', sub: '' });
       }
     }
     return out;
@@ -67,6 +71,7 @@ export class SchedulerComponent implements OnDestroy {
   tlWidth(): number { return 170 + this.colCount() * DAY_W; }
 
   rangeLabel(): string {
+    if (this.view === 'day') return new Date(this.anchor).toLocaleDateString() + ' · 24h';
     const c = this.columns();
     const a = new Date(c[0].start);
     if (this.view === 'month') return MONTHS[a.getMonth()] + ' ' + a.getFullYear();
@@ -97,6 +102,36 @@ export class SchedulerComponent implements OnDestroy {
     const d = new Date(ms);
     const p = (n: number) => String(n).padStart(2, '0');
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  private pad2(n: number): string {
+    return n < 10 ? '0' + n : String(n);
+  }
+  orderT0(o: Order): number { return this.data.orderT0(o); }
+  orderT1(o: Order): number { return this.data.orderT1(o); }
+  lineT0(li: OrderLine, o: Order): number { return li.t0 ?? this.orderT0(o); }
+  lineT1(li: OrderLine, o: Order): number { return li.t1 ?? this.orderT1(o); }
+
+  /** Does this order's date window include the Day-view anchor? */
+  private dateIncludes(o: Order): boolean {
+    const day = new Date(this.anchor);
+    day.setHours(0, 0, 0, 0);
+    const d = day.getTime();
+    const s = new Date(o.startDate + 'T00:00:00').getTime();
+    const e = new Date(o.endDate + 'T00:00:00').getTime() + DAY_MS - 1;
+    return d >= s && d <= e;
+  }
+
+  /** Percentage geometry across the 24-hour day (0..1440 minutes). */
+  private geomMin(t0: number, t1: number): BarGeom | null {
+    const l = Math.max(0, Math.min(1440, t0));
+    const r = Math.max(0, Math.min(1440, t1));
+    if (r <= l) return null;
+    return { left: (l / 1440) * 100, width: ((r - l) / 1440) * 100 };
+  }
+
+  fmtMin(t: number): string {
+    return this.pad2(Math.floor(t / 60)) + ':' + this.pad2(Math.round(t % 60));
   }
 
   geom(startISO: string, endISO: string): BarGeom | null {
@@ -134,19 +169,47 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   models(): OrderModel[] {
+    const isDay = this.view === 'day';
     return this.orders().map((o) => {
-      const og = this.geom(o.startDate, o.endDate);
+      let og: BarGeom | null = null;
+      let oSub = o.lineItems.length + ' items';
+      if (isDay) {
+        if (this.dateIncludes(o)) {
+          og = this.geomMin(this.orderT0(o), this.orderT1(o));
+          oSub = this.fmtMin(this.orderT0(o)) + '–' + this.fmtMin(this.orderT1(o));
+        }
+      } else {
+        og = this.geom(o.startDate, o.endDate);
+      }
       const orderBar: BarModel | null = og
-        ? { orderId: o.orderId, liId: null, label: o.orderId, sub: o.lineItems.length + ' items', color: '#334155', conflict: false, geom: og }
+        ? { orderId: o.orderId, liId: null, label: o.orderId, sub: oSub, color: '#334155', conflict: false, geom: og }
         : null;
       const lines: BarModel[] = [];
       for (const li of o.lineItems) {
-        const lg = this.geom(this.lineStart(li, o), this.lineEnd(li, o));
+        let lg: BarGeom | null = null;
+        let sub = '';
+        if (isDay) {
+          if (this.dateIncludes(o)) {
+            const t0 = Math.max(this.orderT0(o), Math.min(this.orderT1(o), this.lineT0(li, o)));
+            const t1 = Math.max(t0, Math.min(this.orderT1(o), this.lineT1(li, o)));
+            lg = this.geomMin(t0, t1);
+            sub = this.fmtMin(t0) + '–' + this.fmtMin(t1);
+          }
+        } else {
+          lg = this.geom(this.lineStart(li, o), this.lineEnd(li, o));
+          sub = this.lineDays(li, o) + 'd';
+        }
         if (!lg) continue;
-        const conflict = this.isConflicted(li, o);
-        lines.push({ orderId: o.orderId, liId: li.id, label: this.itemName(li.type, li.refId),
-          sub: this.lineDays(li, o) + 'd' + (conflict ? ' - CONFLICT' : ''), color: TYPE_COLORS[li.type] ?? '#334155',
-          conflict, geom: lg });
+        const conflict = !isDay && this.isConflicted(li, o);
+        lines.push({
+          orderId: o.orderId,
+          liId: li.id,
+          label: this.itemName(li.type, li.refId),
+          sub: sub + (conflict ? ' - CONFLICT' : ''),
+          color: TYPE_COLORS[li.type] ?? '#334155',
+          conflict,
+          geom: lg,
+        });
       }
       return { order: o, isExpanded: this.expanded.has(o.orderId), orderBar, lines };
     });
@@ -196,10 +259,37 @@ export class SchedulerComponent implements OnDestroy {
     const r = this.resizing;
     if (!r) return;
     const rect = r.track.getBoundingClientRect();
-    const idx = Math.floor(((ev.clientX - rect.left) / rect.width) * this.colCount());
-    const day = this.dateAt(this.viewStart() + idx * DAY_MS);
     const order = this.data.getOrder(r.orderId);
     if (!order) return;
+
+    // Day view: 15-minute snapping across the 24-hour day.
+    if (this.view === 'day') {
+      const mins = Math.round((((ev.clientX - rect.left) / rect.width) * 1440) / 15) * 15;
+      if (r.liId == null) {
+        let a = this.data.orderT0(order);
+        let b = this.data.orderT1(order);
+        if (r.edge === 'l') { a = mins; if (b < a) b = a; }
+        else { b = mins; if (a > b) a = b; }
+        this.data.updateOrderTimes(order.orderId, a, b);
+      } else {
+        const li = order.lineItems.find((l) => l.id === r.liId);
+        if (!li) return;
+        const lo = this.data.orderT0(order);
+        const hi = this.data.orderT1(order);
+        const m = Math.max(lo, Math.min(hi, mins));
+        let a = this.lineT0(li, order);
+        let b = this.lineT1(li, order);
+        if (r.edge === 'l') { a = m; if (b < a) b = a; }
+        else { b = m; if (a > b) a = b; }
+        this.data.updateOrderLineTimes(order.orderId, li.id, a, b);
+      }
+      this.cdr.detectChanges();
+      return;
+    }
+
+    // Week / Month: day-granular date snapping.
+    const idx = Math.floor(((ev.clientX - rect.left) / rect.width) * this.colCount());
+    const day = this.dateAt(this.viewStart() + idx * DAY_MS);
     if (r.liId == null) {
       let ns = order.startDate;
       let ne = order.endDate;

@@ -54,6 +54,9 @@ export interface OrderLine {
   /** Per-line window (JS variant stores these); falls back to the order window. */
   startDate?: string; // "YYYY-MM-DD"
   endDate?: string; // "YYYY-MM-DD"
+  /** Minutes-of-day window in Day view; falls back to the order's. */
+  t0?: number;
+  t1?: number;
 }
 
 export interface Order {
@@ -66,6 +69,9 @@ export interface Order {
   endDate: string;
   status: OrderStatus;
   lineItems: OrderLine[];
+  /** Minutes-of-day window used in Day view (defaults 08:00–17:00). */
+  t0?: number;
+  t1?: number;
 }
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
