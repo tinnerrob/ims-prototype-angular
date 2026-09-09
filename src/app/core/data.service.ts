@@ -213,7 +213,13 @@ export class DataService {
   addOrderLine(orderId: string, line: Omit<OrderLine, 'id'>): void {
     const order = this.getOrder(orderId);
     if (!order) return;
-    order.lineItems.push({ id: this.nextLineId(order), ...line });
+    const li: OrderLine = {
+      id: this.nextLineId(order),
+      ...line,
+      startDate: line.startDate ?? order.startDate,
+      endDate: line.endDate ?? order.endDate,
+    };
+    order.lineItems.push(li);
     this.save();
   }
 
@@ -225,6 +231,26 @@ export class DataService {
       order.lineItems.splice(i, 1);
       this.save();
     }
+  }
+
+  /** Resize an order line window (day ISO). Clamped to the order window. */
+  updateOrderLineDates(orderId: string, lineId: string, startISO: string, endISO: string): void {
+    const order = this.getOrder(orderId);
+    const li = order?.lineItems.find((l) => l.id === lineId);
+    if (!order || !li) return;
+    const clamp = (iso: string, lo: string, hi: string): string => {
+      const t = Date.parse(iso + 'T00:00:00');
+      const l = Date.parse(lo + 'T00:00:00');
+      const h = Date.parse(hi + 'T00:00:00');
+      const v = Math.min(h, Math.max(l, t));
+      return new Date(v).toISOString().slice(0, 10);
+    };
+    li.startDate = clamp(startISO, order.startDate, order.endDate);
+    li.endDate = clamp(endISO, li.startDate, order.endDate);
+    if (Date.parse(li.endDate + 'T00:00:00') < Date.parse(li.startDate + 'T00:00:00')) {
+      li.endDate = li.startDate;
+    }
+    this.save();
   }
 
   private nextLineId(order: Order): string {

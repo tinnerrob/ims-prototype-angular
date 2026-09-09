@@ -2,13 +2,13 @@
   <div class="page-head">
     <div>
       <h1>Allocations &amp; Scheduling</h1>
-      <p class="page-sub">Pick an order on the left, drag pool items to book, and watch the calendar + conflicts.</p>
+      <p class="page-sub">Orders sit on top of the calendar — expand one to see and resize its inventory.</p>
     </div>
     <span class="mod-tag">MODULE · scheduling</span>
   </div>
 
   <div class="scheduler-3col">
-    <!-- ================= LEFT: pickers ================= -->
+    <!-- ================= LEFT ================= -->
     <aside class="sched-side">
       <div class="card">
         <div class="card-header"><i class="bi bi-folder2-open"></i> Orders &amp; Allocations <span class="count-pill">{{ orders().length }} active</span></div>
@@ -18,13 +18,10 @@
               class="queue-order"
               [class.active]="selectedOrderId === o.orderId"
               (dragover)="allowDrop($event)"
-              (drop)="onDropOrder($event, o)"
+              (drop)="onDropOrder($event, o.orderId)"
               (click)="selectOrder(o.orderId)"
             >
-              <div class="qc-head">
-                <span class="mono strong">{{ o.orderId }}</span>
-                <span class="badge">{{ bookedCount(o) }}</span>
-              </div>
+              <div class="qc-head"><span class="mono strong">{{ o.orderId }}</span><span class="badge">{{ o.lineItems.length }}</span></div>
               <div class="qc-sub">{{ o.projectName }}</div>
               <div class="qc-dates">{{ o.startDate }} → {{ o.endDate }}</div>
             </div>
@@ -40,7 +37,6 @@
               <option [value]="t.key">{{ t.label }}</option>
             }
           </select>
-          <div class="pool-scope"><i class="bi bi-calendar-range"></i> Availability for {{ rangeLabel() }}</div>
           <div class="pool-list">
             @for (it of lanes(); track it.id) {
               <div
@@ -49,7 +45,6 @@
                 (dragstart)="onPoolStart($event, it)"
                 (dragend)="onDragEnd()"
                 [class.dragging]="dragging?.refId === it.id"
-                (click)="selectOrder(it.id)"
               >
                 <div class="res-name">{{ it.name }}</div>
                 <div class="res-meta mono">{{ it.id }} · ${{ it.rateDaily }}/day</div>
@@ -62,7 +57,7 @@
       </div>
     </aside>
 
-    <!-- ================= MIDDLE: calendar ================= -->
+    <!-- ================= MIDDLE CALENDAR ================= -->
     <div class="sched-timeline">
       <div class="tl-nav">
         <button class="btn btn-ghost btn-sm" (click)="shift(-1)"><i class="bi bi-chevron-left"></i></button>
@@ -76,51 +71,101 @@
       </div>
 
       <div class="tl-scroll">
-        <table class="tl-table">
-          <thead>
-            <tr>
-              <th class="tl-corner">Resource</th>
-              @for (col of columns(); track col.start) {
-                <th class="tl-day"><div class="tl-day-name">{{ col.head }}</div><div class="tl-day-sub">{{ col.sub }}</div></th>
-              }
-            </tr>
-          </thead>
-          <tbody>
-            @for (row of board(); track row.item.id) {
-              <tr class="tl-row">
-                <td class="tl-label"><div class="res-name">{{ row.item.name }}</div><div class="res-meta mono">{{ row.item.id }}</div></td>
-                @for (cell of row.cells; track $index) {
-                  <td class="tl-cell">
-                    @if (cell) {
-                      <span
-                        class="tl-block"
-                        [class.conflict]="cell.conflict"
-                        [class.selected]="selectedOrderId === cell.orderId"
-                        (click)="selectOrder(cell.orderId)"
-                        title="Click to inspect {{ cell.orderId }}"
-                      >{{ cell.label }}</span>
-                    }
-                  </td>
-                }
-              </tr>
-            } @empty {
-              <tr><td colspan="2" class="empty">No {{ poolType }} resources.</td></tr>
+        <div class="tl" [style.width.px]="tlWidth()">
+          <div class="tl-head" [style.gridTemplateColumns]="'170px repeat(' + colCount() + ', ' + 90 + 'px)'">
+            <div class="tl-corner">Resource</div>
+            @for (c of columns(); track c.start) {
+              <div class="tl-day"><div class="tl-day-name">{{ c.label }}</div><div class="tl-day-sub">{{ c.sub }}</div></div>
             }
-          </tbody>
-        </table>
+          </div>
+          <!-- order rows -->
+          @for (m of models(); track m.order.orderId) {
+            <div
+              class="tl-row tl-order"
+              [class.selected]="selectedOrderId === m.order.orderId"
+              (dragover)="allowDrop($event)"
+              (drop)="onDropOrder($event, m.order.orderId)"
+              (click)="selectOrder(m.order.orderId)"
+            >
+              <div class="tl-label">
+                <div class="row-head">
+                  <button class="chev" (click)="toggleExpand(m.order.orderId); $event.stopPropagation()" title="Expand / collapse">
+                    <i class="bi" [class.bi-chevron-down]="!m.isExpanded" [class.bi-chevron-up]="m.isExpanded"></i>
+                  </button>
+                  <span class="mono strong">{{ m.order.orderId }}</span>
+                </div>
+                <div class="row-sub">{{ m.order.projectName }}</div>
+                <div class="row-dates">{{ m.order.startDate }} → {{ m.order.endDate }}</div>
+              </div>
+              <div class="tl-track">
+                @if (m.orderBar) {
+                  <div
+                    class="tl-block order"
+                    [class.selected]="selectedOrderId === m.order.orderId"
+                    [style.left.px]="m.orderBar.geom.left"
+                    [style.width.px]="m.orderBar.geom.width"
+                  >
+                    <span class="tl-block-title">{{ m.order.projectName }}</span>
+                    <span class="tl-block-sub">{{ m.orderBar.sub }}</span>
+                  </div>
+                }
+              </div>
+            </div>
+
+            @if (m.isExpanded) {
+              @if (m.lines.length === 0) {
+                <div class="tl-row tl-empty">
+                  <div class="tl-label"></div>
+                  <div class="tl-track"><span class="tl-hint">Drag pool items onto this order to book them.</span></div>
+                </div>
+              }
+              @for (line of m.lines; track line.liId) {
+                <div class="tl-row tl-res" [class.conflict]="line.conflict">
+                  <div class="tl-label res">
+                    <div class="row-head"><span class="dot" [style.background]="line.color"></span><span class="mono">{{ line.liId }}</span></div>
+                    <div class="row-sub">{{ line.label }}</div>
+                  </div>
+                  <div class="tl-track">
+                    <div
+                      class="tl-block res"
+                      [class.conflict]="line.conflict"
+                      [class.selected]="selectedOrderId === m.order.orderId"
+                      [style.left.px]="line.geom.left"
+                      [style.width.px]="line.geom.width"
+                      [style.background]="line.color"
+                      (click)="selectOrder(m.order.orderId)"
+                    >
+                      <span class="tl-block-title">{{ line.label }}</span>
+                      <span class="tl-block-sub">{{ line.sub }}</span>
+                      <span class="h h-l" (pointerdown)="startResize($event, line, 'l')" title="Drag to change start"></span>
+                      <span class="h h-r" (pointerdown)="startResize($event, line, 'r')" title="Drag to change end"></span>
+                    </div>
+                  </div>
+                </div>
+              }
+            }
+          }
+        </div>
       </div>
     </div>
 
-    <!-- ================= RIGHT: conflicts + detail ================= -->
+    <!-- ================= RIGHT ================= -->
     <aside class="sched-inspector">
       <div class="card">
-        <div class="card-header"><i class="bi bi-exclamation-triangle"></i> Conflicts</div>
+        <div class="card-header">
+          <i class="bi bi-exclamation-triangle"></i> Conflicts
+          <span class="count-pill danger" [hidden]="conflictCount() === 0">{{ conflictCount() }}</span>
+        </div>
         <div class="card-body">
-          @if (conflicts().length === 0) {
-            <p class="empty">No conflicts in this range.</p>
+          @if (conflictCount() === 0) {
+            <p class="empty">No conflicts.</p>
           }
-          @for (c of conflicts(); track c) {
-            <div class="conflict-row"><span class="conflict-dot"></span>{{ c }}</div>
+          @for (m of models(); track m.order.orderId) {
+            @for (line of m.lines; track line.liId) {
+              @if (line.conflict) {
+                <div class="conflict-row"><span class="conflict-dot"></span>{{ line.label }} on {{ m.order.orderId }} is double-booked.</div>
+              }
+            }
           }
         </div>
       </div>
@@ -128,20 +173,18 @@
       <div class="card">
         <div class="card-header"><i class="bi bi-clipboard-data"></i> Order details</div>
         <div class="card-body">
-          @if (selectedOrder(); as o) {
+          @if (data.getOrder(selectedOrderId); as o) {
             <div class="strong">{{ o.orderId }}</div>
             <div class="qc-sub">{{ o.projectName }}</div>
             <div class="qc-dates">{{ o.startDate }} → {{ o.endDate }}</div>
             <div class="divider"></div>
-            <div class="detail-lines">
-              @for (li of o.lineItems; track li.id) {
-                <div class="line"><span class="mono">{{ li.type }}·{{ li.refId }}</span><span class="r">x{{ li.qty }}</span></div>
-              } @empty {
-                <p class="empty">No lines — drag a pool item onto this order.</p>
-              }
-            </div>
+            @for (li of o.lineItems; track li.id) {
+              <div class="line"><span>{{ itemName(li.type, li.refId) }}</span><span class="r">{{ li.startDate ?? o.startDate }} → {{ li.endDate ?? o.endDate }}</span></div>
+            } @empty {
+              <p class="empty">No booked inventory yet — drag a pool item onto this order.</p>
+            }
           } @else {
-            <p class="empty">Click an order (left) or a booked block to inspect it here.</p>
+            <p class="empty">Click an order row or queue card to inspect it.</p>
           }
         </div>
       </div>

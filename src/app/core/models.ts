@@ -51,6 +51,9 @@ export interface OrderLine {
   type: CatalogType;
   refId: string;
   qty: number;
+  /** Per-line window (JS variant stores these); falls back to the order window. */
+  startDate?: string; // "YYYY-MM-DD"
+  endDate?: string; // "YYYY-MM-DD"
 }
 
 export interface Order {
