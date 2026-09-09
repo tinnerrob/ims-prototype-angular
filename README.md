@@ -26,6 +26,7 @@ src/app/
 │   ├── categories/      # Categories & Types (list + add/rename/remove)
 │   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
+│   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
 │   ├── locations/       # Locations (yards/branches/warehouses/bins)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
@@ -52,7 +53,8 @@ touching feature code.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
 - [x] Locations (core) — yard/branch/warehouse/bin CRUD.
-- [ ] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
+- [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
+- [ ] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

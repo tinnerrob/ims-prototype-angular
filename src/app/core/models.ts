@@ -151,6 +151,20 @@ export const LOCATION_TYPE_LABEL: Record<LocationType, string> = {
   bin: 'Bin',
 };
 
+export type InspectionDirection = 'out' | 'in';
+
+export interface Inspection {
+  id: string;
+  itemId: string; // serialized item
+  date: string; // ISO date
+  direction: InspectionDirection;
+  meter: number;
+  fuel: number;
+  notes?: string;
+  status: 'Open' | 'Closed';
+}
+
+
 
 
 

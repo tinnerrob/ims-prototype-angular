@@ -28,6 +28,7 @@ export class AppComponent {
         { label: 'Items & Stock', route: '/items' },
         { label: 'Parties & Orders', route: '/orders' },
         { label: 'Item Hand-Off & Custody', route: '/handoff' },
+        { label: 'Receiving / Inspections', route: '/inspections' },
         { label: 'Locations', route: '/locations' },
         { label: 'Categories & Types', route: '/categories' },
       ],

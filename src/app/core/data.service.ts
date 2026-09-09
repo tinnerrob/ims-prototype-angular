@@ -4,6 +4,7 @@ import {
   CatalogType,
   CATALOG_TYPE_KEYS,
   Item,
+  Inspection,
   Location,
   Movement,
   MovementKind,
@@ -33,6 +34,7 @@ export class DataService {
     items: Record<string, Item[]>;
     movements: Movement[];
     locations: Location[];
+    inspections: Inspection[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
@@ -40,6 +42,7 @@ export class DataService {
     items: this.seedItems(),
     movements: this.seedMovements(),
     locations: this.seedLocations(),
+    inspections: this.seedInspections(),
   };
 
   constructor() {
@@ -61,6 +64,7 @@ export class DataService {
       if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
       if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
       if (Array.isArray(snap.locations)) this.db.locations = snap.locations;
+      if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -79,6 +83,7 @@ export class DataService {
           items: this.db.items,
           movements: this.db.movements,
           locations: this.db.locations,
+          inspections: this.db.inspections,
         }),
       );
     } catch {
@@ -281,6 +286,44 @@ export class DataService {
 
   /* -------------------------------- seeds ------------------------------- */
 
+  /* ---------------------------- inspections ----------------------------- */
+
+  listInspections(): Inspection[] {
+    return [...this.db.inspections].sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+
+  createInspection(data: Omit<Inspection, 'id'>): Inspection {
+    const rec: Inspection = { ...data, id: this.nextInspectionId() };
+    this.db.inspections.push(rec);
+    this.save();
+    return rec;
+  }
+
+  closeInspection(id: string): void {
+    const r = this.db.inspections.find((x) => x.id === id);
+    if (r) {
+      r.status = 'Closed';
+      this.save();
+    }
+  }
+
+  removeInspection(id: string): void {
+    const i = this.db.inspections.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.inspections.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextInspectionId(): string {
+    let max = 0;
+    for (const r of this.db.inspections) {
+      const n = Number(r.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'INS-' + String(max + 1).padStart(3, '0');
+  }
+
   /* ----------------------------- locations ------------------------------ */
 
   listLocations(): Location[] {
@@ -471,6 +514,13 @@ export class DataService {
       { id: 'LOC-002', name: 'Atlanta Branch', type: 'branch', address: 'Atlanta, GA', parentId: 'LOC-001' },
       { id: 'LOC-003', name: 'Savannah Yard', type: 'yard', address: 'Savannah, GA' },
       { id: 'LOC-004', name: 'Parts Warehouse A', type: 'warehouse', address: 'Atlanta, GA', parentId: 'LOC-002' },
+    ];
+  }
+
+  private seedInspections(): Inspection[] {
+    return [
+      { id: 'INS-001', itemId: 'EQ-101', date: new Date().toISOString().slice(0, 10), direction: 'out', meter: 2210, fuel: 85, notes: 'Issued out — clean.', status: 'Open' },
+      { id: 'INS-002', itemId: 'EQ-103', date: new Date(Date.now() - 86400000).toISOString().slice(0, 10), direction: 'in', meter: 3180, fuel: 40, notes: 'Returned from shop.', status: 'Closed' },
     ];
   }
 }

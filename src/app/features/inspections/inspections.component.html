@@ -1,0 +1,86 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Receiving / Inspections</h1>
+      <p class="page-sub">Core: check items in/out at the yard with meter + fuel readings.</p>
+    </div>
+    <span class="core-tag">Core · always on</span>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="toolbar">
+        <span class="count">{{ inspections().length }} record(s)</span>
+        <button class="btn btn-primary" (click)="openForm()">+ New Inspection</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>ID</th><th>Item</th><th>Date</th><th>Dir</th><th class="th-end">Meter</th><th class="th-end">Fuel</th><th>Status</th><th>Notes</th><th class="th-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (r of inspections(); track r.id) {
+            <tr>
+              <td class="mono strong">{{ r.id }}</td>
+              <td>{{ data.itemLabel('serialized', r.itemId) }}</td>
+              <td>{{ r.date }}</td>
+              <td><span class="status">{{ r.direction === 'out' ? 'Out' : 'In' }}</span></td>
+              <td class="td-end">{{ r.meter }}</td>
+              <td class="td-end">{{ r.fuel }}</td>
+              <td><span class="status" [class.off]="r.status === 'Closed'">{{ r.status }}</span></td>
+              <td>{{ r.notes || '—' }}</td>
+              <td class="td-end">
+                @if (r.status === 'Open') {
+                  <button class="btn btn-ghost btn-sm" (click)="close(r)">Close</button>
+                }
+                <button class="btn btn-danger-ghost btn-sm" (click)="remove(r)">Remove</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="9" class="empty">No inspections yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+@if (formOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">New Inspection</span>
+        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Serialized item *</label>
+          <select class="input" [(ngModel)]="form.itemId">
+            <option value="" disabled>Choose an item…</option>
+            @for (it of items(); track it.id) {
+              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Date</label><input class="input" type="date" [(ngModel)]="form.date" /></div>
+          <div class="field">
+            <label>Direction</label>
+            <select class="input" [(ngModel)]="form.direction">
+              <option value="in">In (return)</option>
+              <option value="out">Out (issue)</option>
+            </select>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Meter hours</label><input class="input" type="number" min="0" [(ngModel)]="form.meter" /></div>
+          <div class="field"><label>Fuel %</label><input class="input" type="number" min="0" max="100" [(ngModel)]="form.fuel" /></div>
+        </div>
+        <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="!form.itemId">Save</button>
+      </div>
+    </div>
+  </div>
+}

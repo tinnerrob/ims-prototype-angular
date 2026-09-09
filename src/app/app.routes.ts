@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { CategoriesComponent } from './features/categories/categories.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { HandoffComponent } from './features/handoff/handoff.component';
+import { InspectionsComponent } from './features/inspections/inspections.component';
 import { ItemsComponent } from './features/items/items.component';
 import { LocationsComponent } from './features/locations/locations.component';
 import { OrdersComponent } from './features/orders/orders.component';
@@ -17,6 +18,7 @@ export const routes: Routes = [
   { path: 'dashboard', component: DashboardComponent },
   { path: 'categories', component: CategoriesComponent },
   { path: 'handoff', component: HandoffComponent },
+  { path: 'inspections', component: InspectionsComponent },
   { path: 'items', component: ItemsComponent },
   { path: 'locations', component: LocationsComponent },
   { path: 'orders', component: OrdersComponent },

@@ -193,6 +193,13 @@ body {
   margin-bottom: 12px;
 }
 
+.count {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12.5px;
+  align-self: center;
+}
+
 /* ---------- tables ---------- */
 .table {
   width: 100%;
