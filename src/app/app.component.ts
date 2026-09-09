@@ -36,6 +36,7 @@ export class AppComponent {
     {
       title: 'Modules · Opt-in',
       items: [
+        { label: 'Allocations & Scheduling', route: '/scheduler' },
         { label: 'Field Service & Maintenance', route: '/maintenance' },
         { label: 'Labor & Timesheets', route: '/timesheet' },
         { label: 'Logistics & Dispatch', route: '/logistics' },
@@ -46,8 +47,7 @@ export class AppComponent {
     {
       title: 'Modules · Planned',
       items: [
-        { label: 'Allocations & Scheduling', route: '/scheduler', soon: true },
-        { label: 'Billing & Invoicing', route: '/invoicing', soon: true },
+        { label: 'Fleet Telemetry', route: '/telemetry', soon: true },
       ],
     },
     {

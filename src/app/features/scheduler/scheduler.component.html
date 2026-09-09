@@ -1,0 +1,93 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Allocations &amp; Scheduling</h1>
+      <p class="page-sub">Industry module: plan serialized item availability over time; detect conflicts.</p>
+    </div>
+    <span class="mod-tag">MODULE · scheduling</span>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn btn-ghost btn-sm" (click)="shift(-1)">‹ Prev</button>
+    <span class="week-label">{{ board().length > 0 ? '' : '' }}{{ dateLabel(0) }} – {{ dateLabel(6) }}</span>
+    <button class="btn btn-ghost btn-sm" (click)="shift(1)">Next ›</button>
+  </div>
+
+  <!-- BOOKING -->
+  <div class="card log-card">
+    <div class="card-header">Book an item onto an order</div>
+    <div class="card-body">
+      <div class="row3">
+        <div class="field">
+          <label>Active order</label>
+          <select class="input" [(ngModel)]="bookOrderId">
+            <option value="" disabled>Choose an order…</option>
+            @for (o of activeOrders(); track o.orderId) {
+              <option [value]="o.orderId">{{ o.orderId }} · {{ o.projectName }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Serialized item</label>
+          <select class="input" [(ngModel)]="bookItemId">
+            <option value="" disabled>Choose an item…</option>
+            @for (it of serialized(); track it.id) {
+              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" (click)="book()" [disabled]="!bookOrderId || !bookItemId">Book</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIMELINE -->
+  <div class="card log-card">
+    <div class="card-header">Week availability</div>
+    <div class="table-wrap">
+      <table class="table alloc">
+        <thead>
+          <tr>
+            <th class="item-col">Item</th>
+            @for (n of dayNames; track n) {
+              <th class="day-col">{{ n }}<div class="day-date">{{ dateLabel($index) }}</div></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of board(); track row.item.id) {
+            <tr>
+              <td class="item-col strong">{{ row.item.id }}</td>
+              @for (cell of row.cells; track $index) {
+                <td class="day-col">
+                  @if (cell) {
+                    <span class="alloc-cell" [class.conflict]="cell.conflict">{{ cell.label }}</span>
+                  }
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CONFLICTS -->
+  <div class="card log-card">
+    <div class="card-header">Scheduling conflicts</div>
+    <div class="card-body">
+      @if (conflicts().length === 0) {
+        <p class="empty">No conflicts in the shown week.</p>
+      } @else {
+        <ul class="ho-list">
+          @for (c of conflicts(); track c) {
+            <li class="ho-row"><span class="conflict-dot"></span><span>{{ c }}</span></li>
+          }
+        </ul>
+      }
+    </div>
+  </div>
+</section>

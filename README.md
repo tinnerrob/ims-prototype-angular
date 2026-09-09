@@ -33,6 +33,7 @@ src/app/
 │   ├── logistics/       # Logistics & Dispatch (module: truck dispatch)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
+│   ├── scheduler/       # Allocations & Scheduling (module: week timeline + conflicts)
 │   ├── timesheet/       # Labor & Timesheets (module: time records)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
@@ -63,7 +64,8 @@ touching feature code.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
 - [x] Admin: Feature Modules toggle view.
-- [ ] Remaining modules: allocations + telemetry (timeline + GPS-sim UI are the two complex ones).
+- [x] Allocations & Scheduling — week timeline, conflict detection, item booking.
+- [ ] Fleet Telemetry — GPS-sim live feed (the last module).
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 
