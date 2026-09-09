@@ -1,0 +1,176 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Parties &amp; Orders</h1>
+      <p class="page-sub">Counterparties (customers / vendors / sites) and the orders placed against inventory.</p>
+    </div>
+    <span class="core-tag">Core · always on</span>
+  </div>
+
+  <div class="card">
+    <div class="type-tabs">
+      <button type="button" class="type-tab" [class.active]="tab === 'parties'" (click)="tab = 'parties'">Parties</button>
+      <button type="button" class="type-tab" [class.active]="tab === 'orders'" (click)="tab = 'orders'">Orders</button>
+    </div>
+
+    <!-- ============================= PARTIES ============================= -->
+    @if (tab === 'parties') {
+      <div class="card-body">
+        <div class="toolbar">
+          <button class="btn btn-primary" (click)="openPartyForm()">+ New Party</button>
+        </div>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th><th>Contact</th><th>Phone</th><th>Billing</th><th>Status</th><th class="th-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of parties(); track p.id) {
+              <tr [class.inactive]="p.active === false">
+                <td class="strong">{{ p.name }}</td>
+                <td>{{ p.contact }}</td>
+                <td>{{ p.phone }}</td>
+                <td>{{ p.billingCycle }}</td>
+                <td><span class="status" [class.off]="p.active === false">{{ p.active === false ? 'Inactive' : 'Active' }}</span></td>
+                <td class="td-end">
+                  <button class="btn btn-ghost btn-sm" (click)="openPartyForm(p)">Edit</button>
+                  <button class="btn btn-ghost btn-sm" (click)="data.togglePartyActive(p.id)">{{ p.active === false ? 'Activate' : 'Deactivate' }}</button>
+                  <button class="btn btn-danger-ghost btn-sm" (click)="removeParty(p)">Remove</button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="empty">No parties yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- ============================== ORDERS ============================== -->
+    @if (tab === 'orders') {
+      <div class="card-body">
+        <div class="toolbar">
+          <button class="btn btn-primary" (click)="newOrder()">+ New Order</button>
+        </div>
+
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Order</th><th>Party</th><th>Project</th><th>Dates</th><th>Status</th><th class="th-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (o of orders(); track o.orderId) {
+              <tr>
+                <td class="strong mono">{{ o.orderId }}</td>
+                <td>{{ o.party }}</td>
+                <td>{{ o.projectName }}</td>
+                <td>{{ o.startDate }} → {{ o.endDate }}</td>
+                <td><span class="status">{{ statusLabel[o.status] }}</span></td>
+                <td class="td-end">
+                  <button class="btn btn-ghost btn-sm" (click)="openOrderId = openOrderId === o.orderId ? null : o.orderId">
+                    {{ openOrderId === o.orderId ? 'Hide detail' : 'Detail (' + lineCount(o) + ')' }}
+                  </button>
+                </td>
+              </tr>
+              @if (openOrderId === o.orderId) {
+                <tr class="detail-row">
+                  <td colspan="6">
+                    <div class="detail">
+                      <div class="detail-meta">
+                        <div><span class="lbl">Job site</span>{{ o.jobSite }}</div>
+                        <div><span class="lbl">Start</span>{{ o.startDate }}</div>
+                        <div><span class="lbl">End</span>{{ o.endDate }}</div>
+                      </div>
+                      @if (o.lineItems.length === 0) {
+                        <p class="empty">No line items yet — item booking arrives with the Items &amp; Stock slice.</p>
+                      } @else {
+                        <table class="table inner">
+                          <thead><tr><th>Line</th><th>Type</th><th>Ref</th><th class="th-end">Qty</th></tr></thead>
+                          <tbody>
+                            @for (li of o.lineItems; track li.id) {
+                              <tr><td class="mono">{{ li.id }}</td><td>{{ li.type }}</td><td class="mono">{{ li.refId }}</td><td class="td-end">{{ li.qty }}</td></tr>
+                            }
+                          </tbody>
+                        </table>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            } @empty {
+              <tr><td colspan="6" class="empty">No orders yet.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</section>
+
+<!-- ============================ PARTY FORM ============================ -->
+@if (partyFormOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">{{ editingId ? 'Edit Party' : 'New Party' }}</span>
+        <button class="icon-btn" (click)="closePartyForm()" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field"><label>Name *</label><input class="input" [(ngModel)]="form.name" /></div>
+        <div class="row2">
+          <div class="field"><label>Contact</label><input class="input" [(ngModel)]="form.contact" /></div>
+          <div class="field"><label>Phone</label><input class="input" [(ngModel)]="form.phone" /></div>
+        </div>
+        <div class="field"><label>Email</label><input class="input" [(ngModel)]="form.email" /></div>
+        <div class="field"><label>Billing address</label><input class="input" [(ngModel)]="form.billingAddress" /></div>
+        <div class="row2">
+          <div class="field">
+            <label>Billing cycle</label>
+            <select class="input" [(ngModel)]="form.billingCycle">
+              @for (c of cycles; track c) { <option [value]="c">{{ c }}</option> }
+            </select>
+          </div>
+          <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
+        </div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="closePartyForm()">Cancel</button>
+        <button class="btn btn-primary" (click)="saveParty()" [disabled]="!form.name.trim()">Save</button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ============================ ORDER FORM ============================ -->
+@if (orderFormOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">New Order</span>
+        <button class="icon-btn" (click)="orderFormOpen = false" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Party *</label>
+          <select class="input" [(ngModel)]="orderForm.partyId">
+            @for (p of parties(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+          </select>
+        </div>
+        <div class="field"><label>Project name *</label><input class="input" [(ngModel)]="orderForm.projectName" /></div>
+        <div class="field"><label>Job site</label><input class="input" [(ngModel)]="orderForm.jobSite" /></div>
+        <div class="row2">
+          <div class="field"><label>Start</label><input class="input" type="date" [(ngModel)]="orderForm.startDate" /></div>
+          <div class="field"><label>End</label><input class="input" type="date" [(ngModel)]="orderForm.endDate" /></div>
+        </div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="orderFormOpen = false">Cancel</button>
+        <button class="btn btn-primary" (click)="saveOrder()" [disabled]="!orderForm.projectName.trim()">Create</button>
+      </div>
+    </div>
+  </div>
+}
+

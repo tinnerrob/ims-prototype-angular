@@ -23,7 +23,8 @@ src/app/
 │   └── data.service.ts  # Typed in-memory store + localStorage persistence (the apiAdapter seam)
 ├── features/
 │   ├── dashboard/       # Landing + port roadmap
-│   └── categories/      # Categories & Types (first ported core view — the pattern-setter)
+│   ├── categories/      # Categories & Types (list + add/rename/remove)
+│   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
 ├── app.routes.ts        # Core-first route map
 └── app.config.ts
@@ -43,7 +44,8 @@ touching feature code.
 ## Port roadmap
 
 - [x] Foundation: shell, typed data store + persistence, routing, Categories & Types.
-- [ ] Parties & Orders (core) — parties list + order headers.
+- [x] Parties & Orders (core) — parties CRUD + order headers + detail + persistence.
+- [ ] Items & Stock (core) — typed catalog + item registry + line-item booking.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [ ] Item Hand-Off & Custody (core) — movements / issue-return.
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,

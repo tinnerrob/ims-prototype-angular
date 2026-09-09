@@ -3,6 +3,9 @@ import { Injectable } from '@angular/core';
 import {
   CatalogType,
   CATALOG_TYPE_KEYS,
+  Order,
+  OrderLine,
+  OrderStatus,
   Party,
 } from './models';
 
@@ -22,9 +25,11 @@ export class DataService {
   private db: {
     settings: { categories: Record<string, string[]> };
     parties: Party[];
+    orders: Order[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
+    orders: this.seedOrders(),
   };
 
   constructor() {
@@ -42,6 +47,7 @@ export class DataService {
       if (!snap || snap._v !== this.VERSION) return; // stale/incompatible -> reseed
       if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
       if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
+      if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -52,7 +58,12 @@ export class DataService {
     try {
       localStorage.setItem(
         this.KEY,
-        JSON.stringify({ _v: this.VERSION, settings: this.db.settings, parties: this.db.parties }),
+        JSON.stringify({
+          _v: this.VERSION,
+          settings: this.db.settings,
+          parties: this.db.parties,
+          orders: this.db.orders,
+        }),
       );
     } catch {
       /* storage unavailable (private mode / quota) -> in-memory only */
@@ -63,6 +74,86 @@ export class DataService {
 
   listParties(): Party[] {
     return [...this.db.parties];
+  }
+
+  getParty(id: string): Party | undefined {
+    return this.db.parties.find((p) => p.id === id);
+  }
+
+  createParty(data: Omit<Party, 'id' | 'active'>): Party {
+    const rec: Party = { ...data, id: this.nextPartyId(), active: true };
+    this.db.parties.push(rec);
+    this.save();
+    return rec;
+  }
+
+  updateParty(id: string, patch: Partial<Party>): void {
+    const p = this.db.parties.find((x) => x.id === id);
+    if (p) {
+      Object.assign(p, patch);
+      this.save();
+    }
+  }
+
+  togglePartyActive(id: string): void {
+    const p = this.db.parties.find((x) => x.id === id);
+    if (p) {
+      p.active = p.active === false;
+      this.save();
+    }
+  }
+
+  removeParty(id: string): void {
+    const i = this.db.parties.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.parties.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextPartyId(): string {
+    let max = 0;
+    for (const p of this.db.parties) {
+      const n = Number(p.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'PTY-' + String(max + 1).padStart(3, '0');
+  }
+
+  /* ------------------------------- orders ------------------------------- */
+
+  listOrders(): Order[] {
+    return [...this.db.orders];
+  }
+
+  getOrder(orderId: string): Order | undefined {
+    return this.db.orders.find((o) => o.orderId === orderId);
+  }
+
+  createOrder(data: Omit<Order, 'orderId' | 'status' | 'lineItems'>): Order {
+    const rec: Order = {
+      ...data,
+      orderId: this.nextOrderId(),
+      status: 'active',
+      lineItems: [],
+    };
+    this.db.orders.push(rec);
+    this.save();
+    return rec;
+  }
+
+  private nextOrderId(): string {
+    const year = new Date().getFullYear();
+    const prefix = `CT-${year}-`;
+    let max = 0;
+    for (const o of this.db.orders) {
+      const m = o.orderId.match(/-(\d+)$/);
+      if (m) {
+        const n = Number(m[1]);
+        if (n > max) max = n;
+      }
+    }
+    return prefix + String(max + 1).padStart(3, '0');
   }
 
   /* ------------------------------ categories ---------------------------- */
@@ -131,6 +222,38 @@ export class DataService {
     return [
       { id: 'PTY-001', name: 'Halstead Construction', contact: 'M. Halstead', phone: '(404) 555-0134', email: 'projects@halstead.com', billingAddress: '100 Peachtree Pkwy NE, Atlanta, GA', billingCycle: 'weekly', notes: 'Boom & aerial work; weekly cadence.', active: true },
       { id: 'PTY-002', name: 'Meridian Civil Works', contact: 'L. Bishop', phone: '(678) 555-0192', email: 'ops@meridiancivil.com', billingAddress: '88 River Rd, Atlanta, GA', billingCycle: 'bi-weekly', notes: 'Bridge / heavy civil. Net-30 terms.', active: true },
+      { id: 'PTY-003', name: 'Coastal Energy Group', contact: 'R. Vance', phone: '(404) 555-0117', email: 'supply@coastalenergy.com', billingAddress: '1 Fuel Pier, Savannah, GA', billingCycle: 'monthly', notes: 'Refinery/hazmat; risk premium applies.', active: true },
+    ];
+  }
+
+  private seedOrders(): Order[] {
+    return [
+      {
+        orderId: 'CT-2026-001',
+        partyId: 'PTY-001',
+        party: 'Halstead Construction',
+        projectName: 'Downtown Plaza Renovation',
+        jobSite: '245 Peachtree St, Atlanta, GA',
+        startDate: '2026-08-20',
+        endDate: '2026-09-10',
+        status: 'active',
+        lineItems: [
+          { id: 'LI-101', type: 'serialized', refId: 'BL-119', qty: 1 },
+          { id: 'LI-102', type: 'serialized', refId: 'FL-401', qty: 1 },
+          { id: 'LI-103', type: 'bulk', refId: 'CN-018', qty: 50 },
+        ],
+      },
+      {
+        orderId: 'CT-2026-002',
+        partyId: 'PTY-002',
+        party: 'Meridian Civil Works',
+        projectName: 'River Crossing — Phase 1',
+        jobSite: '88 River Rd, Atlanta, GA',
+        startDate: '2026-09-01',
+        endDate: '2026-10-05',
+        status: 'active',
+        lineItems: [{ id: 'LI-201', type: 'serialized', refId: 'SS-204', qty: 1 }],
+      },
     ];
   }
 }

@@ -43,3 +43,31 @@ export interface Party {
   notes: string;
   active?: boolean;
 }
+
+export type OrderStatus = 'draft' | 'active' | 'closed';
+
+export interface OrderLine {
+  id: string;
+  type: CatalogType;
+  refId: string;
+  qty: number;
+}
+
+export interface Order {
+  orderId: string;
+  partyId: string;
+  party: string;
+  projectName: string;
+  jobSite: string;
+  startDate: string;
+  endDate: string;
+  status: OrderStatus;
+  lineItems: OrderLine[];
+}
+
+export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  draft: 'Draft',
+  active: 'Active',
+  closed: 'Closed',
+};
+

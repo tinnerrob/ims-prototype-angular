@@ -19,8 +19,8 @@ interface Milestone {
 })
 export class DashboardComponent {
   milestones: Milestone[] = [
-    { route: '/categories', title: 'Categories & Types', done: true, note: 'Ported (list + add/rename/remove + persistence). Pattern-setter.' },
-    { route: '/parties', title: 'Parties & Orders', done: false, note: 'Core: parties list + order headers.' },
+    { route: '/categories', title: 'Categories & Types', done: true, note: 'Ported (list + add/rename/remove + persistence).' },
+    { route: '/orders', title: 'Parties & Orders', done: true, note: 'Ported (party CRUD + order headers + detail + persistence).' },
     { route: '/inventory', title: 'Items & Stock', done: false, note: 'Core: typed catalog + registry.' },
     { route: '/handoff', title: 'Item Hand-Off & Custody', done: false, note: 'Core: movements / issue-return.' },
     { route: '/scheduler', title: 'Allocations (module)', done: false, note: 'Industry module over core.' },

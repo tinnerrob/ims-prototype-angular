@@ -25,13 +25,13 @@ export class AppComponent {
       title: 'Inventory · Core',
       items: [
         { label: 'Dashboard', route: '/dashboard' },
+        { label: 'Parties & Orders', route: '/orders' },
         { label: 'Categories & Types', route: '/categories' },
       ],
     },
     {
       title: 'Planned (to port)',
       items: [
-        { label: 'Parties & Orders', route: '/parties', soon: true },
         { label: 'Items & Stock', route: '/inventory', soon: true },
         { label: 'Item Hand-Off & Custody', route: '/handoff', soon: true },
         { label: 'Allocations & Scheduling', route: '/scheduler', soon: true },
