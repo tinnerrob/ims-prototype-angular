@@ -12,6 +12,7 @@ import {
   OrderLine,
   OrderStatus,
   Party,
+  Timesheet,
   WorkOrder,
   WorkOrderStatus,
 } from './models';
@@ -38,6 +39,7 @@ export class DataService {
     locations: Location[];
     inspections: Inspection[];
     workOrders: WorkOrder[];
+    timesheets: Timesheet[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
@@ -47,6 +49,7 @@ export class DataService {
     locations: this.seedLocations(),
     inspections: this.seedInspections(),
     workOrders: this.seedWorkOrders(),
+    timesheets: this.seedTimesheets(),
   };
 
   constructor() {
@@ -70,6 +73,7 @@ export class DataService {
       if (Array.isArray(snap.locations)) this.db.locations = snap.locations;
       if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
       if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
+      if (Array.isArray(snap.timesheets)) this.db.timesheets = snap.timesheets;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -90,6 +94,7 @@ export class DataService {
           locations: this.db.locations,
           inspections: this.db.inspections,
           workOrders: this.db.workOrders,
+          timesheets: this.db.timesheets,
         }),
       );
     } catch {
@@ -317,6 +322,40 @@ export class DataService {
   }
 
   /* -------------------------------- seeds ------------------------------- */
+
+  /* ----------------------------- timesheets ----------------------------- */
+
+  listTimesheets(): Timesheet[] {
+    return [...this.db.timesheets].sort((a, b) => (a.date < b.date ? 1 : -1));
+  }
+
+  createTimesheet(data: Omit<Timesheet, 'id'>): Timesheet {
+    const rec: Timesheet = { ...data, id: this.nextTimesheetId() };
+    this.db.timesheets.push(rec);
+    this.save();
+    return rec;
+  }
+
+  removeTimesheet(id: string): void {
+    const i = this.db.timesheets.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.timesheets.splice(i, 1);
+      this.save();
+    }
+  }
+
+  totalHours(): number {
+    return this.db.timesheets.reduce((s, t) => s + t.hours, 0);
+  }
+
+  private nextTimesheetId(): string {
+    let max = 0;
+    for (const t of this.db.timesheets) {
+      const n = Number(t.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'TS-' + String(max + 1).padStart(4, '0');
+  }
 
   /* ---------------------------- work orders ----------------------------- */
 
@@ -598,6 +637,13 @@ export class DataService {
     return [
       { id: 'WO-001', itemId: 'EQ-103', title: 'Hydraulic leak repair', serviceType: 'Repair', status: 'Open', priority: 'high', openedAt: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), notes: 'Bucket tilt line weeping.' },
       { id: 'WO-002', itemId: 'EQ-101', title: '50-hour service', serviceType: 'Preventive', status: 'In Progress', priority: 'normal', openedAt: new Date(Date.now() - 86400000).toISOString().slice(0, 10) },
+    ];
+  }
+
+  private seedTimesheets(): Timesheet[] {
+    return [
+      { id: 'TS-0001', empId: 'EMP-001', date: new Date().toISOString().slice(0, 10), hours: 8, orderId: 'CT-2026-001', targetLabel: 'CT-2026-001 · Downtown Plaza', note: 'Boom operator' },
+      { id: 'TS-0002', empId: 'EMP-001', date: new Date().toISOString().slice(0, 10), hours: 4, orderId: null, targetLabel: 'Shop', note: 'Maintenance support' },
     ];
   }
 }

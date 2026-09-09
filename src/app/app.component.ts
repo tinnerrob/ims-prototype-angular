@@ -37,6 +37,7 @@ export class AppComponent {
       title: 'Modules · Opt-in',
       items: [
         { label: 'Field Service & Maintenance', route: '/maintenance' },
+        { label: 'Labor & Timesheets', route: '/timesheet' },
       ],
     },
     {

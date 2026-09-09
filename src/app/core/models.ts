@@ -208,6 +208,17 @@ export interface WorkOrder {
 
 export const WORK_ORDER_STATUSES: WorkOrderStatus[] = ['Open', 'In Progress', 'Completed'];
 
+export interface Timesheet {
+  id: string;
+  empId: string; // labor item id (EMP-…)
+  date: string; // ISO date
+  hours: number;
+  orderId?: string | null;
+  targetLabel: string; // display target (order id, shop, etc.)
+  note?: string;
+}
+
+
 
 
 
