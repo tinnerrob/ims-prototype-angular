@@ -1,32 +1,54 @@
 import { Component, OnDestroy } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { Item, Order } from '../../core/models';
+import { CatalogType, CATALOG_TYPES, Item, Order } from '../../core/models';
 
 const DAY_MS = 86400000;
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-interface OccCell {
+type View = 'day' | 'week' | 'month';
+
+interface Column {
+  start: number;
+  end: number;
+  head: string;
+  sub: string;
+}
+
+interface Occ {
   orderId: string;
   label: string;
   conflict: boolean;
 }
 
-interface BoardRow {
+interface Lane {
   item: Item;
-  cells: (OccCell | null)[];
+  cells: (Occ | null)[];
 }
+
+const POOL_TYPES: { key: CatalogType; label: string }[] = CATALOG_TYPES.map((t) => ({
+  key: t.key,
+  label: 'Items (' + t.label + ')',
+}));
 
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
+  imports: [FormsModule],
   templateUrl: './scheduler.component.html',
   styleUrl: './scheduler.component.scss',
 })
 export class SchedulerComponent implements OnDestroy {
   readonly dayNames = DAY_NAMES;
-  weekStart: number = this.mondayOf(new Date());
-  draggingItemId = '';
+  readonly poolTypes = POOL_TYPES;
+
+  view: View = 'week';
+  anchor: number = this.startOfDay(new Date());
+  poolType: CatalogType = 'serialized';
+  selectedOrderId = '';
+  dragging: { type: CatalogType; refId: string } | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -34,59 +56,76 @@ export class SchedulerComponent implements OnDestroy {
     /* no timers */
   }
 
-  activeOrders(): Order[] {
+  orders(): Order[] {
     return this.data.listOrders().filter((o) => o.status === 'active');
   }
 
-  serialized(): Item[] {
-    return this.data.listItems('serialized');
+  selectedOrder(): Order | undefined {
+    return this.selectedOrderId ? this.data.getOrder(this.selectedOrderId) : undefined;
   }
 
-  /** Resource pool: serialized items currently free to book. */
-  pool(): Item[] {
-    return this.data.availableItems();
+  /** Items for the current pool type (the timeline lanes). */
+  lanes(): Item[] {
+    return this.data.listItems(this.poolType);
   }
 
-  bookedIds(order: Order): string[] {
-    return order.lineItems.filter((li) => li.type === 'serialized').map((li) => li.refId);
+  bookedCount(order: Order): number {
+    return order.lineItems.length;
   }
 
-  /* ---------------------------- drag & drop ----------------------------- */
-
-  onDragStart(e: Event, itemId: string): void {
-    (e as DragEvent).dataTransfer?.setData('text/plain', itemId);
-    this.draggingItemId = itemId;
+  selectOrder(id: string): void {
+    this.selectedOrderId = this.selectedOrderId === id ? '' : id;
   }
 
-  onDragEnd(): void {
-    this.draggingItemId = '';
+  /* ------------------------------ columns ------------------------------- */
+
+  columns(): Column[] {
+    const out: Column[] = [];
+    if (this.view === 'month') {
+      const d = new Date(this.anchor);
+      const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      for (let i = 0; i < days; i++) {
+        const start = this.startOfDay(new Date(d.getFullYear(), d.getMonth(), i + 1));
+        out.push(this.col(start));
+      }
+    } else {
+      const n = this.view === 'week' ? 7 : 1;
+      const mon = this.mondayOf(this.anchor);
+      for (let i = 0; i < n; i++) {
+        out.push(this.col(mon + i * DAY_MS));
+      }
+    }
+    return out;
   }
 
-  allowDrop(e: Event): void {
-    e.preventDefault();
+  rangeLabel(): string {
+    const c = this.columns();
+    const a = new Date(c[0].start);
+    const b = new Date(c[c.length - 1].start);
+    if (this.view === 'month') return `${MONTHS[a.getMonth()]} ${a.getFullYear()}`;
+    return `${a.toLocaleDateString()} – ${b.toLocaleDateString()}`;
   }
 
-  onDropOrder(e: Event, order: Order): void {
-    e.preventDefault();
-    const id = (e as DragEvent).dataTransfer?.getData('text/plain') ?? '';
-    this.draggingItemId = '';
-    if (!id || this.orderHasItem(order, id)) return;
-    this.data.addOrderLine(order.orderId, { type: 'serialized', refId: id, qty: 1 });
+  shift(dir: number): void {
+    if (this.view === 'month') {
+      const d = new Date(this.anchor);
+      this.anchor = this.startOfDay(new Date(d.getFullYear(), d.getMonth() + dir, 1));
+    } else {
+      this.anchor += dir * (this.view === 'week' ? 7 : 1) * DAY_MS;
+    }
   }
+  /* ------------------------------ occupancy ----------------------------- */
 
-  /* ------------------------------- board ------------------------------- */
-
-  board(): BoardRow[] {
-    const rows: BoardRow[] = [];
-    for (const item of this.serialized()) {
-      const cells: (OccCell | null)[] = [];
-      for (let i = 0; i < 7; i++) {
-        const dayStart = this.weekStart + i * DAY_MS;
-        const dayEnd = dayStart + DAY_MS - 1;
-        const occ: OccCell[] = [];
-        for (const order of this.activeOrders()) {
-          if (!this.orderHasItem(order, item.id)) continue;
-          if (this.overlaps(order, dayStart, dayEnd)) occ.push({ orderId: order.orderId, label: order.orderId, conflict: false });
+  board(): Lane[] {
+    const cols = this.columns();
+    const rows: Lane[] = [];
+    for (const item of this.lanes()) {
+      const cells: (Occ | null)[] = [];
+      for (const col of cols) {
+        const occ: Occ[] = [];
+        for (const order of this.orders()) {
+          if (!this.orderHasItem(order, item.type, item.id)) continue;
+          if (this.overlaps(order, col.start, col.end)) occ.push({ orderId: order.orderId, label: order.orderId, conflict: false });
         }
         cells.push(occ.length === 0 ? null : { ...occ[0], conflict: occ.length > 1 });
       }
@@ -99,30 +138,49 @@ export class SchedulerComponent implements OnDestroy {
     const out: string[] = [];
     for (const row of this.board()) {
       row.cells.forEach((c, i) => {
-        if (c) {
-          const others = this.activeOrders().filter(
-            (o) =>
-              o.orderId !== c.orderId &&
-              this.orderHasItem(o, row.item.id) &&
-              this.overlaps(o, this.weekStart + i * DAY_MS, this.weekStart + i * DAY_MS + DAY_MS - 1),
-          );
-          if (others.length) out.push(`${this.fmtDay(i)}: ${row.item.id} booked to ${c.orderId} + ${others.map((o) => o.orderId).join(', ')}`);
+        if (c && c.conflict) {
+          out.push(`${new Date(this.columns()[i].start).toLocaleDateString()}: ${row.item.id} double-booked`);
         }
       });
     }
     return [...new Set(out)];
   }
 
-  dateLabel(i: number): string {
-    return this.fmtDay(i);
+  itemLabel(item: Item): string {
+    return this.data.itemLabel(item.type, item.id);
   }
 
-  shift(weeks: number): void {
-    this.weekStart += weeks * 7 * DAY_MS;
+  /* ----------------------------- drag & drop ---------------------------- */
+
+  onPoolStart(e: Event, item: Item): void {
+    (e as DragEvent).dataTransfer?.setData('text/plain', `${item.type}|${item.id}`);
+    this.dragging = { type: item.type, refId: item.id };
   }
 
-  private orderHasItem(order: Order, itemId: string): boolean {
-    return order.lineItems.some((li) => li.type === 'serialized' && li.refId === itemId);
+  onDragEnd(): void {
+    this.dragging = null;
+  }
+
+  allowDrop(e: Event): void {
+    e.preventDefault();
+  }
+
+  onDropOrder(e: Event, order: Order): void {
+    e.preventDefault();
+    const raw = (e as DragEvent).dataTransfer?.getData('text/plain');
+    this.dragging = null;
+    if (!raw) return;
+    const [type, refId] = raw.split('|');
+    const t = type as CatalogType;
+    if (this.orderHasItem(order, t, refId)) return;
+    this.data.addOrderLine(order.orderId, { type: t, refId, qty: 1 });
+    this.selectedOrderId = order.orderId;
+  }
+
+  /* -------------------------------- misc -------------------------------- */
+
+  private orderHasItem(order: Order, type: CatalogType, refId: string): boolean {
+    return order.lineItems.some((li) => li.type === type && li.refId === refId);
   }
 
   private overlaps(order: Order, dayStart: number, dayEnd: number): boolean {
@@ -131,15 +189,27 @@ export class SchedulerComponent implements OnDestroy {
     return s <= dayEnd && e >= dayStart;
   }
 
-  private mondayOf(d: Date): number {
+  private col(start: number): Column {
+    const d = new Date(start);
+    return {
+      start,
+      end: start + DAY_MS - 1,
+      head: DAY_NAMES[d.getDay()],
+      sub: `${MONTHS[d.getMonth()]} ${d.getDate()}`,
+    };
+  }
+
+  private startOfDay(d: Date): number {
     const x = new Date(d);
-    const day = (x.getDay() + 6) % 7;
-    x.setDate(x.getDate() - day);
     x.setHours(0, 0, 0, 0);
     return x.getTime();
   }
 
-  private fmtDay(i: number): string {
-    return new Date(this.weekStart + i * DAY_MS).toISOString().slice(0, 10);
+  private mondayOf(ms: number): number {
+    const x = new Date(ms);
+    const day = (x.getDay() + 6) % 7;
+    x.setDate(x.getDate() - day);
+    return this.startOfDay(x);
   }
 }
+

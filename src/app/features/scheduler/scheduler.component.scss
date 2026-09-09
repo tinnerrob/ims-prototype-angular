@@ -1,68 +1,132 @@
-/* Allocations & Scheduling — prototype-style drag-and-drop board. */
+/* Allocations & Scheduling — prototype-style 3-column board. */
 
-.week-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.week-label {
-  font-weight: 700;
-  flex: 1;
-  text-align: center;
-}
-
-/* ---------- 3-column DnD board ---------- */
-.sched-grid {
+.scheduler-3col {
   display: grid;
-  grid-template-columns: 260px 1fr 300px;
-  gap: 16px;
+  grid-template-columns: 300px 1fr 300px;
+  gap: 14px;
   align-items: start;
 
-  @media (max-width: 1100px) {
+  @media (max-width: 1200px) {
     grid-template-columns: 1fr;
   }
 }
 
-.panel-col {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+.sched-side,
+.sched-inspector {
   display: flex;
   flex-direction: column;
-  max-height: 520px;
+  gap: 12px;
+  min-width: 0;
 }
 
-.col-head {
+/* ---------- header helpers ---------- */
+.card-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--line);
-  font-weight: 700;
-  font-size: 13px;
-
   i {
     color: var(--accent);
   }
 }
 
-/* ---- resource pool (drag source) ---- */
-.pool-list {
-  padding: 10px;
-  overflow: auto;
+.count-pill {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--success);
+  background: rgba(22, 163, 74, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.12);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.pool-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: auto;
+}
+
+/* ---------- orders queue ---------- */
+.queue {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 300px;
+  overflow: auto;
 }
 
-.pool-card {
+.queue-order {
+  border: 1px solid var(--slate-200);
+  border-radius: 10px;
+  padding: 9px 11px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+
+  &:hover {
+    border-color: var(--accent);
+  }
+
+  &.active {
+    border-color: var(--accent);
+    background: rgba(37, 99, 235, 0.06);
+  }
+}
+
+.qc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.qc-sub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+.qc-dates {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ---------- inventory pool ---------- */
+.input {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.pool-scope {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+
+  i {
+    margin-right: 4px;
+  }
+}
+
+.pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.res-card {
   border: 1px solid var(--slate-200);
   background: #f8fafc;
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 9px 11px;
   cursor: grab;
   transition: box-shadow 0.12s ease, transform 0.12s ease, opacity 0.12s ease;
 
@@ -81,95 +145,160 @@
   }
 }
 
-.pool-name {
+.res-name {
   font-weight: 700;
   font-size: 13px;
 }
 
-.pool-meta {
-  font-size: 12px;
+.res-meta {
+  font-size: 11.5px;
   color: var(--muted);
 }
 
-/* ---- active orders (drop target) ---- */
-.orders-list {
-  padding: 10px;
-  overflow: auto;
+/* ---------- middle timeline ---------- */
+.sched-timeline {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  min-width: 0;
+  min-height: 0;
 }
 
-.order-drop {
-  border: 1.5px dashed var(--slate-200);
-  border-radius: 10px;
-  padding: 10px 12px;
-  transition: border-color 0.12s ease, background 0.12s ease;
+.tl-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
 
-  &.drop-active {
-    border-color: var(--accent);
-    background: rgba(37, 99, 235, 0.05);
+.week-label {
+  font-weight: 700;
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--slate-200);
+  border-radius: 8px;
+  overflow: hidden;
+
+  .btn {
+    border-radius: 0;
+    background: transparent;
+    color: var(--ink);
+
+    &.active {
+      background: var(--accent);
+      color: #fff;
+    }
   }
 }
 
-.order-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: baseline;
-}
-
-.order-project {
-  color: var(--muted);
-  font-size: 12px;
-  text-align: right;
-}
-
-.order-dates {
-  font-size: 11.5px;
-  color: var(--muted);
-  margin: 2px 0 8px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.chip {
-  font-size: 11.5px;
-  font-weight: 700;
-  background: rgba(37, 99, 235, 0.12);
-  color: #1d4ed8;
-  padding: 3px 9px;
-  border-radius: 999px;
-}
-
-.empty-chip {
-  background: transparent;
-  color: var(--muted);
-  font-weight: 500;
-  border: 1px dashed var(--slate-200);
-}
-
-/* ---- conflicts ---- */
-.conflict-list {
-  padding: 10px;
+.tl-scroll {
   overflow: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
+.tl-table {
+  border-collapse: collapse;
+  min-width: 100%;
+
+  th,
+  td {
+    border-bottom: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+}
+
+.tl-corner {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  text-align: left;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 6px 8px;
+  min-width: 170px;
+  z-index: 2;
+}
+
+.tl-day {
+  padding: 6px 4px;
+  text-align: center;
+}
+
+.tl-day-name {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.tl-day-sub {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.tl-row {
+  td.tl-cell {
+    text-align: center;
+    padding: 3px;
+  }
+}
+
+.tl-label {
+  position: sticky;
+  left: 0;
+  background: #fff;
+  padding: 4px 8px;
+  min-width: 170px;
+  text-align: left;
+  border-right: 1px solid var(--line);
+  z-index: 1;
+}
+
+.tl-block {
+  display: inline-block;
+  width: 94%;
+  padding: 6px 4px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: filter 0.1s ease;
+
+  &:hover {
+    filter: brightness(1.1);
+  }
+
+  &.conflict {
+    background: linear-gradient(135deg, #dc2626, #991b1b);
+  }
+
+  &.selected {
+    outline: 2px solid var(--ink);
+  }
+}
+
+/* ---------- right inspector ---------- */
 .conflict-row {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 12.5px;
+  font-size: 12px;
   padding: 6px 8px;
   border-radius: 8px;
   background: rgba(220, 38, 38, 0.07);
+  margin-bottom: 6px;
 }
 
 .conflict-dot {
@@ -178,47 +307,17 @@
   border-radius: 50%;
   background: var(--danger);
   flex-shrink: 0;
-  align-self: center;
 }
 
-/* ---- week timeline table ---- */
-.table-wrap {
-  overflow: auto;
+.divider {
+  height: 1px;
+  background: var(--line);
+  margin: 10px 0;
 }
 
-.alloc {
-  .item-col {
-    width: 150px;
-    position: sticky;
-    left: 0;
-    background: #fff;
-  }
-
-  .day-col {
-    text-align: center;
-    min-width: 96px;
-  }
-
-  .day-date {
-    font-size: 11px;
-    font-weight: 400;
-    color: var(--muted);
-    text-transform: none;
-    letter-spacing: 0;
-  }
-}
-
-.alloc-cell {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(37, 99, 235, 0.14);
-  color: #1d4ed8;
-  font-weight: 700;
-  font-size: 11.5px;
-
-  &.conflict {
-    background: rgba(220, 38, 38, 0.14);
-    color: #b91c1c;
-  }
+.line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding: 3px 0;
 }

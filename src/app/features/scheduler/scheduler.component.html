@@ -2,111 +2,149 @@
   <div class="page-head">
     <div>
       <h1>Allocations &amp; Scheduling</h1>
-      <p class="page-sub">Industry module: drag an available item onto an order to book it; conflicts surface automatically.</p>
+      <p class="page-sub">Pick an order on the left, drag pool items to book, and watch the calendar + conflicts.</p>
     </div>
     <span class="mod-tag">MODULE · scheduling</span>
   </div>
 
-  <div class="week-bar">
-    <button class="btn btn-ghost btn-sm" (click)="shift(-1)">‹ Prev week</button>
-    <span class="week-label">{{ dateLabel(0) }} – {{ dateLabel(6) }}</span>
-    <button class="btn btn-ghost btn-sm" (click)="shift(1)">Next week ›</button>
-  </div>
-
-  <div class="sched-grid">
-    <!-- RESOURCE POOL (drag source) -->
-    <div class="panel-col">
-      <div class="col-head"><i class="bi bi-box-seam"></i> Resource pool</div>
-      <div class="pool-list">
-        @if (pool().length === 0) {
-          <p class="empty">No items available to book.</p>
-        }
-        @for (it of pool(); track it.id) {
-          <div
-            class="pool-card"
-            draggable="true"
-            (dragstart)="onDragStart($event, it.id)"
-            (dragend)="onDragEnd()"
-            [class.dragging]="draggingItemId === it.id"
-          >
-            <div class="pool-name">{{ it.name }}</div>
-            <div class="pool-meta"><span class="mono">{{ it.id }}</span> · ${{ it.rateDaily }}/day</div>
-          </div>
-        }
-      </div>
-    </div>
-
-    <!-- ACTIVE ORDERS (drop target) -->
-    <div class="panel-col">
-      <div class="col-head"><i class="bi bi-folder2-open"></i> Active orders — drop an item to book</div>
-      <div class="orders-list">
-        @for (o of activeOrders(); track o.orderId) {
-          <div
-            class="order-drop"
-            (dragover)="allowDrop($event)"
-            (drop)="onDropOrder($event, o)"
-            [class.drop-active]="draggingItemId !== ''"
-          >
-            <div class="order-head">
-              <span class="mono strong">{{ o.orderId }}</span>
-              <span class="order-project">{{ o.projectName }}</span>
+  <div class="scheduler-3col">
+    <!-- ================= LEFT: pickers ================= -->
+    <aside class="sched-side">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-folder2-open"></i> Orders &amp; Allocations <span class="count-pill">{{ orders().length }} active</span></div>
+        <div class="card-body queue">
+          @for (o of orders(); track o.orderId) {
+            <div
+              class="queue-order"
+              [class.active]="selectedOrderId === o.orderId"
+              (dragover)="allowDrop($event)"
+              (drop)="onDropOrder($event, o)"
+              (click)="selectOrder(o.orderId)"
+            >
+              <div class="qc-head">
+                <span class="mono strong">{{ o.orderId }}</span>
+                <span class="badge">{{ bookedCount(o) }}</span>
+              </div>
+              <div class="qc-sub">{{ o.projectName }}</div>
+              <div class="qc-dates">{{ o.startDate }} → {{ o.endDate }}</div>
             </div>
-            <div class="order-dates">{{ o.startDate }} → {{ o.endDate }}</div>
-            <div class="chips">
-              @if (bookedIds(o).length === 0) {
-                <span class="chip empty-chip">no items yet — drag one here</span>
-              }
-              @for (b of bookedIds(o); track b) {
-                <span class="chip">{{ b }}</span>
-              }
-            </div>
-          </div>
-        }
+          }
+        </div>
       </div>
-    </div>
 
-    <!-- CONFLICTS -->
-    <div class="panel-col">
-      <div class="col-head"><i class="bi bi-exclamation-triangle"></i> Conflicts</div>
-      <div class="conflict-list">
-        @if (conflicts().length === 0) {
-          <p class="empty">No conflicts in this week.</p>
-        }
-        @for (c of conflicts(); track c) {
-          <div class="conflict-row"><span class="conflict-dot"></span>{{ c }}</div>
-        }
-      </div>
-    </div>
-  </div>
-
-  <!-- WEEK TIMELINE -->
-  <div class="card log-card">
-    <div class="card-header">Week availability</div>
-    <div class="table-wrap">
-      <table class="table alloc">
-        <thead>
-          <tr>
-            <th class="item-col">Item</th>
-            @for (n of dayNames; track n) {
-              <th class="day-col">{{ n }}<div class="day-date">{{ dateLabel($index) }}</div></th>
+      <div class="card">
+        <div class="card-header"><i class="bi bi-box-seam"></i> Inventory Pool <span class="pool-hint">drag to an order</span></div>
+        <div class="card-body">
+          <select class="input" [(ngModel)]="poolType">
+            @for (t of poolTypes; track t.key) {
+              <option [value]="t.key">{{ t.label }}</option>
             }
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of board(); track row.item.id) {
+          </select>
+          <div class="pool-scope"><i class="bi bi-calendar-range"></i> Availability for {{ rangeLabel() }}</div>
+          <div class="pool-list">
+            @for (it of lanes(); track it.id) {
+              <div
+                class="res-card"
+                draggable="true"
+                (dragstart)="onPoolStart($event, it)"
+                (dragend)="onDragEnd()"
+                [class.dragging]="dragging?.refId === it.id"
+                (click)="selectOrder(it.id)"
+              >
+                <div class="res-name">{{ it.name }}</div>
+                <div class="res-meta mono">{{ it.id }} · ${{ it.rateDaily }}/day</div>
+              </div>
+            } @empty {
+              <p class="empty">No {{ poolType }} items yet.</p>
+            }
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ================= MIDDLE: calendar ================= -->
+    <div class="sched-timeline">
+      <div class="tl-nav">
+        <button class="btn btn-ghost btn-sm" (click)="shift(-1)"><i class="bi bi-chevron-left"></i></button>
+        <span class="week-label">{{ rangeLabel() }}</span>
+        <button class="btn btn-ghost btn-sm" (click)="shift(1)"><i class="bi bi-chevron-right"></i></button>
+        <div class="view-toggle">
+          <button class="btn btn-sm" [class.active]="view === 'day'" (click)="view = 'day'">Day</button>
+          <button class="btn btn-sm" [class.active]="view === 'week'" (click)="view = 'week'">Week</button>
+          <button class="btn btn-sm" [class.active]="view === 'month'" (click)="view = 'month'">Month</button>
+        </div>
+      </div>
+
+      <div class="tl-scroll">
+        <table class="tl-table">
+          <thead>
             <tr>
-              <td class="item-col strong">{{ row.item.id }}</td>
-              @for (cell of row.cells; track $index) {
-                <td class="day-col">
-                  @if (cell) {
-                    <span class="alloc-cell" [class.conflict]="cell.conflict">{{ cell.label }}</span>
-                  }
-                </td>
+              <th class="tl-corner">Resource</th>
+              @for (col of columns(); track col.start) {
+                <th class="tl-day"><div class="tl-day-name">{{ col.head }}</div><div class="tl-day-sub">{{ col.sub }}</div></th>
               }
             </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (row of board(); track row.item.id) {
+              <tr class="tl-row">
+                <td class="tl-label"><div class="res-name">{{ row.item.name }}</div><div class="res-meta mono">{{ row.item.id }}</div></td>
+                @for (cell of row.cells; track $index) {
+                  <td class="tl-cell">
+                    @if (cell) {
+                      <span
+                        class="tl-block"
+                        [class.conflict]="cell.conflict"
+                        [class.selected]="selectedOrderId === cell.orderId"
+                        (click)="selectOrder(cell.orderId)"
+                        title="Click to inspect {{ cell.orderId }}"
+                      >{{ cell.label }}</span>
+                    }
+                  </td>
+                }
+              </tr>
+            } @empty {
+              <tr><td colspan="2" class="empty">No {{ poolType }} resources.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
     </div>
+
+    <!-- ================= RIGHT: conflicts + detail ================= -->
+    <aside class="sched-inspector">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-exclamation-triangle"></i> Conflicts</div>
+        <div class="card-body">
+          @if (conflicts().length === 0) {
+            <p class="empty">No conflicts in this range.</p>
+          }
+          @for (c of conflicts(); track c) {
+            <div class="conflict-row"><span class="conflict-dot"></span>{{ c }}</div>
+          }
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><i class="bi bi-clipboard-data"></i> Order details</div>
+        <div class="card-body">
+          @if (selectedOrder(); as o) {
+            <div class="strong">{{ o.orderId }}</div>
+            <div class="qc-sub">{{ o.projectName }}</div>
+            <div class="qc-dates">{{ o.startDate }} → {{ o.endDate }}</div>
+            <div class="divider"></div>
+            <div class="detail-lines">
+              @for (li of o.lineItems; track li.id) {
+                <div class="line"><span class="mono">{{ li.type }}·{{ li.refId }}</span><span class="r">x{{ li.qty }}</span></div>
+              } @empty {
+                <p class="empty">No lines — drag a pool item onto this order.</p>
+              }
+            </div>
+          } @else {
+            <p class="empty">Click an order (left) or a booked block to inspect it here.</p>
+          }
+        </div>
+      </div>
+    </aside>
   </div>
 </section>
