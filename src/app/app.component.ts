@@ -38,6 +38,7 @@ export class AppComponent {
       items: [
         { label: 'Field Service & Maintenance', route: '/maintenance' },
         { label: 'Labor & Timesheets', route: '/timesheet' },
+        { label: 'Logistics & Dispatch', route: '/logistics' },
         { label: 'Rentals & Sub-Rentals', route: '/rentals' },
       ],
     },

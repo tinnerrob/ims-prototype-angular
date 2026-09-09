@@ -13,7 +13,10 @@ import {
   OrderStatus,
   Party,
   RentalSub,
+  Dispatch,
+  DispatchStatus,
   Timesheet,
+  Vehicle,
   WorkOrder,
   WorkOrderStatus,
 } from './models';
@@ -42,6 +45,8 @@ export class DataService {
     workOrders: WorkOrder[];
     timesheets: Timesheet[];
     rentals: RentalSub[];
+    vehicles: Vehicle[];
+    dispatches: Dispatch[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
@@ -53,6 +58,8 @@ export class DataService {
     workOrders: this.seedWorkOrders(),
     timesheets: this.seedTimesheets(),
     rentals: this.seedRentals(),
+    vehicles: this.seedVehicles(),
+    dispatches: this.seedDispatches(),
   };
 
   constructor() {
@@ -78,6 +85,8 @@ export class DataService {
       if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
       if (Array.isArray(snap.timesheets)) this.db.timesheets = snap.timesheets;
       if (Array.isArray(snap.rentals)) this.db.rentals = snap.rentals;
+      if (Array.isArray(snap.vehicles)) this.db.vehicles = snap.vehicles;
+      if (Array.isArray(snap.dispatches)) this.db.dispatches = snap.dispatches;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -100,6 +109,8 @@ export class DataService {
           workOrders: this.db.workOrders,
           timesheets: this.db.timesheets,
           rentals: this.db.rentals,
+          vehicles: this.db.vehicles,
+          dispatches: this.db.dispatches,
         }),
       );
     } catch {
@@ -396,6 +407,58 @@ export class DataService {
     return 'RR-' + String(max + 1).padStart(3, '0');
   }
 
+  /* ---------------------------- dispatch -------------------------------- */
+
+  listVehicles(): Vehicle[] {
+    return [...this.db.vehicles];
+  }
+
+  listDispatches(): Dispatch[] {
+    return [...this.db.dispatches];
+  }
+
+  createDispatch(data: Omit<Dispatch, 'id' | 'orderLabel' | 'status'> & { status?: DispatchStatus }): Dispatch {
+    const order = this.getOrder(data.orderId);
+    const rec: Dispatch = {
+      ...data,
+      id: this.nextDispatchId(),
+      orderLabel: order ? `${order.orderId} · ${order.projectName}` : data.orderId,
+      status: data.status ?? 'Staged',
+    };
+    this.db.dispatches.push(rec);
+    this.save();
+    return rec;
+  }
+
+  setDispatchStatus(id: string, status: DispatchStatus): void {
+    const d = this.db.dispatches.find((x) => x.id === id);
+    if (d) {
+      d.status = status;
+      this.save();
+    }
+  }
+
+  removeDispatch(id: string): void {
+    const i = this.db.dispatches.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.dispatches.splice(i, 1);
+      this.save();
+    }
+  }
+
+  vehicleName(id: string): string {
+    return this.db.vehicles.find((v) => v.id === id)?.name ?? id;
+  }
+
+  private nextDispatchId(): string {
+    let max = 0;
+    for (const d of this.db.dispatches) {
+      const n = Number(d.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'DSP-' + String(max + 1).padStart(3, '0');
+  }
+
   /* ---------------------------- work orders ----------------------------- */
 
   listWorkOrders(): WorkOrder[] {
@@ -689,6 +752,20 @@ export class DataService {
   private seedRentals(): RentalSub[] {
     return [
       { id: 'RR-001', itemId: null, assetName: 'Generac 100 kW Generator', vendor: 'PowerGen Rentals', vendorCost: 110, retailRate: 175, qty: 1, note: 'Backfill for EQ fleet' },
+    ];
+  }
+
+  private seedVehicles(): Vehicle[] {
+    return [
+      { id: 'TRK-01', name: 'Freightliner M2 26 ft', plate: 'ABC-4521', status: 'Available' },
+      { id: 'TRK-02', name: 'F-550 Flatbed', plate: 'XYZ-7789', status: 'Available' },
+      { id: 'TRK-03', name: 'Isuzu NPR Box', plate: 'QRS-9912', status: 'Available' },
+    ];
+  }
+
+  private seedDispatches(): Dispatch[] {
+    return [
+      { id: 'DSP-001', orderId: 'CT-2026-001', orderLabel: 'CT-2026-001 · Downtown Plaza Renovation', itemId: 'EQ-101', vehicleId: 'TRK-01', status: 'En Route' },
     ];
   }
 }

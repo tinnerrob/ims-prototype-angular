@@ -1,0 +1,96 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Logistics &amp; Dispatch</h1>
+      <p class="page-sub">Industry module: assign trucks and track deliveries for orders.</p>
+    </div>
+    <span class="mod-tag">MODULE · dispatch</span>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="toolbar">
+        <button class="btn btn-primary" (click)="openForm()">+ New Dispatch</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>ID</th><th>Order</th><th>Vehicle</th><th>Status</th><th class="th-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (d of dispatches(); track d.id) {
+            <tr>
+              <td class="mono strong">{{ d.id }}</td>
+              <td>{{ d.orderLabel }}</td>
+              <td>{{ data.vehicleName(d.vehicleId) }}</td>
+              <td>
+                <select class="input status-sel" [value]="d.status" (change)="setStatus(d, $any($event.target).value)">
+                  @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+                </select>
+              </td>
+              <td class="td-end"><button class="btn btn-danger-ghost btn-sm" (click)="remove(d)">Remove</button></td>
+            </tr>
+          } @empty {
+            <tr><td colspan="5" class="empty">No dispatches yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card log-card">
+    <div class="card-header">Fleet (vehicles)</div>
+    <div class="card-body">
+      <table class="table">
+        <thead><tr><th>ID</th><th>Name</th><th>Plate</th><th>Status</th></tr></thead>
+        <tbody>
+          @for (v of vehicles(); track v.id) {
+            <tr><td class="mono strong">{{ v.id }}</td><td>{{ v.name }}</td><td class="mono">{{ v.plate }}</td><td>{{ v.status }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+@if (formOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">New Dispatch</span>
+        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Order *</label>
+          <select class="input" [(ngModel)]="form.orderId">
+            <option value="" disabled>Choose an order…</option>
+            @for (o of orders(); track o.orderId) {
+              <option [value]="o.orderId">{{ o.orderId }} · {{ o.projectName }}</option>
+            }
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Vehicle *</label>
+            <select class="input" [(ngModel)]="form.vehicleId">
+              <option value="" disabled>Choose a truck…</option>
+              @for (v of vehicles(); track v.id) {
+                <option [value]="v.id">{{ v.name }} ({{ v.plate }})</option>
+              }
+            </select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select class="input" [(ngModel)]="form.status">
+              @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="!form.orderId || !form.vehicleId">Create</button>
+      </div>
+    </div>
+  </div>
+}

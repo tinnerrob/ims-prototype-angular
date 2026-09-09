@@ -28,6 +28,7 @@ src/app/
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
 │   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
 │   ├── locations/       # Locations (yards/branches/warehouses/bins)
+│   ├── logistics/       # Logistics & Dispatch (module: truck dispatch)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
 │   ├── timesheet/       # Labor & Timesheets (module: time records)
@@ -58,8 +59,8 @@ touching feature code.
 - [x] Locations (core) — yard/branch/warehouse/bin CRUD.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
-- [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor & Timesheets, Rentals ported.
-- [ ] Remaining modules: allocations, dispatch, telemetry, billing (each needs its own data tables + UI).
+- [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch ported.
+- [ ] Remaining modules: allocations, telemetry, billing (allocations timeline + telemetry sim are the two complex UI ones).
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

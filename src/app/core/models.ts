@@ -229,6 +229,28 @@ export interface RentalSub {
   note?: string;
 }
 
+export interface Vehicle {
+  id: string;
+  name: string;
+  plate: string;
+  status: 'Available' | 'En Route' | 'In Use' | 'Out of Service';
+}
+
+export type DispatchStatus = 'Staged' | 'En Route' | 'Delivered' | 'Pending Return';
+
+export interface Dispatch {
+  id: string;
+  orderId: string;
+  orderLabel: string;
+  itemId?: string | null;
+  vehicleId: string;
+  driverId?: string | null;
+  status: DispatchStatus;
+}
+
+export const DISPATCH_STATUSES: DispatchStatus[] = ['Staged', 'En Route', 'Delivered', 'Pending Return'];
+
+
 
 
 

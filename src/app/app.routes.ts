@@ -7,6 +7,7 @@ import { HandoffComponent } from './features/handoff/handoff.component';
 import { InspectionsComponent } from './features/inspections/inspections.component';
 import { ItemsComponent } from './features/items/items.component';
 import { LocationsComponent } from './features/locations/locations.component';
+import { LogisticsComponent } from './features/logistics/logistics.component';
 import { MaintenanceComponent } from './features/maintenance/maintenance.component';
 import { OrdersComponent } from './features/orders/orders.component';
 import { RentalsComponent } from './features/rentals/rentals.component';
@@ -25,6 +26,7 @@ export const routes: Routes = [
   { path: 'inspections', component: InspectionsComponent },
   { path: 'items', component: ItemsComponent },
   { path: 'locations', component: LocationsComponent },
+  { path: 'logistics', component: LogisticsComponent, canActivate: [requireModule('dispatch')] },
   { path: 'maintenance', component: MaintenanceComponent, canActivate: [requireModule('service')] },
   { path: 'orders', component: OrdersComponent },
   { path: 'rentals', component: RentalsComponent, canActivate: [requireModule('rentals')] },
