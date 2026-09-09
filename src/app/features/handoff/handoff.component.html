@@ -1,0 +1,92 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Item Hand-Off &amp; Custody</h1>
+      <p class="page-sub">Core: issue serialized items out to an order and return them — every step writes an immutable chain-of-custody movement.</p>
+    </div>
+    <span class="core-tag">Core · always on</span>
+  </div>
+
+  <div class="stat-row">
+    <div class="card stat"><span class="stat-label">Out (custody)</span><span class="stat-value">{{ custody().length }}</span></div>
+    <div class="card stat"><span class="stat-label">Available to issue</span><span class="stat-value">{{ available().length }}</span></div>
+    <div class="card stat"><span class="stat-label">Movements logged</span><span class="stat-value">{{ data.listMovements().length }}</span></div>
+  </div>
+
+  <div class="split">
+    <!-- ISSUE -->
+    <div class="card">
+      <div class="card-header">Issue out to an order</div>
+      <div class="card-body">
+        <div class="field">
+          <label>Order</label>
+          <select class="input" [(ngModel)]="orderId">
+            @for (o of orders(); track o.orderId) {
+              <option [value]="o.orderId">{{ o.orderId }} · {{ o.projectName }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Available item</label>
+          <select class="input" [(ngModel)]="itemId">
+            <option value="" disabled>Choose an available item…</option>
+            @for (it of available(); track it.id) {
+              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="field"><label>Note</label><input class="input" [(ngModel)]="note" placeholder="Optional" /></div>
+        <button class="btn btn-primary" (click)="issue()" [disabled]="!itemId || !orderId || available().length === 0">Issue / Check Out</button>
+      </div>
+    </div>
+
+    <!-- CUSTODY -->
+    <div class="card">
+      <div class="card-header">Active custody</div>
+      <div class="card-body">
+        @if (custody().length === 0) {
+          <p class="empty">Nothing is out right now.</p>
+        } @else {
+          <ul class="ho-list">
+            @for (it of custody(); track it.id) {
+              <li class="ho-row">
+                <div>
+                  <div class="strong">{{ it.id }} · {{ it.name }}</div>
+                  <div class="sub">Out to {{ outFor(it) }}</div>
+                </div>
+                <button class="btn btn-ghost btn-sm" (click)="returnItem(it)">Return</button>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- MOVEMENT LOG -->
+  <div class="card log-card">
+    <div class="card-header">Chain-of-custody log</div>
+    <div class="card-body">
+      <table class="table">
+        <thead>
+          <tr><th>ID</th><th>Kind</th><th>Item</th><th>Order / party</th><th>Qty</th><th>When</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          @for (m of movements(); track m.id) {
+            <tr>
+              <td class="mono">{{ m.id }}</td>
+              <td><span class="status">{{ kindLabel[m.kind] }}</span></td>
+              <td>{{ data.itemLabel(m.type, m.refId) }}</td>
+              <td>{{ m.orderId || m.party || '—' }}</td>
+              <td>{{ m.qty }}</td>
+              <td>{{ m.at }}</td>
+              <td>{{ m.note || '—' }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="empty">No movements yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>

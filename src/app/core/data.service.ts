@@ -4,6 +4,8 @@ import {
   CatalogType,
   CATALOG_TYPE_KEYS,
   Item,
+  Movement,
+  MovementKind,
   Order,
   OrderLine,
   OrderStatus,
@@ -28,11 +30,13 @@ export class DataService {
     parties: Party[];
     orders: Order[];
     items: Record<string, Item[]>;
+    movements: Movement[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
     orders: this.seedOrders(),
     items: this.seedItems(),
+    movements: this.seedMovements(),
   };
 
   constructor() {
@@ -52,6 +56,7 @@ export class DataService {
       if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
       if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
       if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
+      if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -68,6 +73,7 @@ export class DataService {
           parties: this.db.parties,
           orders: this.db.orders,
           items: this.db.items,
+          movements: this.db.movements,
         }),
       );
     } catch {
@@ -270,6 +276,68 @@ export class DataService {
 
   /* -------------------------------- seeds ------------------------------- */
 
+  /* ----------------------------- movements ------------------------------ */
+
+  listMovements(): Movement[] {
+    return [...this.db.movements].sort((a, b) => (a.at < b.at ? 1 : -1));
+  }
+
+  /** Append an immutable movement + (for serialized items) flip custody status. */
+  logMovement(input: {
+    type: CatalogType;
+    refId: string;
+    kind: MovementKind;
+    qty: number;
+    orderId?: string | null;
+    party?: string;
+    note?: string;
+  }): Movement {
+    const rec: Movement = {
+      id: this.nextMovementId(),
+      type: input.type,
+      refId: input.refId,
+      kind: input.kind,
+      qty: input.qty,
+      orderId: input.orderId ?? null,
+      party: input.party ?? '',
+      at: new Date().toISOString(),
+      by: 'D. Reynolds',
+      note: input.note ?? '',
+    };
+    this.db.movements.push(rec);
+    // Serialized items are whole-unit custody: an issue rents it out, a return frees it.
+    if (input.type === 'serialized') {
+      const it = this.getItem('serialized', input.refId);
+      if (it) it.status = input.kind === 'issue' ? 'On Rent' : 'Available';
+    }
+    this.save();
+    return rec;
+  }
+
+  /** Serialized items currently out (On Rent) — active custody. */
+  custodyItems(): Item[] {
+    return this.listItems('serialized').filter((i) => i.status === 'On Rent');
+  }
+
+  /** Serialized items free to issue. */
+  availableItems(): Item[] {
+    return this.listItems('serialized').filter((i) => i.status === 'Available');
+  }
+
+  itemLabel(type: CatalogType, id: string): string {
+    const it = this.getItem(type, id);
+    return it ? `${it.id} · ${it.name}` : id;
+  }
+
+  private nextMovementId(): string {
+    let max = 0;
+    for (const m of this.db.movements) {
+      const n = Number(m.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'MV-' + String(max + 1).padStart(4, '0');
+  }
+
   private seedCategories(): Record<string, string[]> {
     return {
       serialized: ['Boom Lifts', 'Scissor Lifts', 'Forklifts', 'Excavators', 'Cranes'],
@@ -346,5 +414,11 @@ export class DataService {
         { id: 'ACC-050', type: 'attachment', name: '48" Bucket', category: 'Buckets', status: 'Available', qty: 1, rateDaily: 60 },
       ],
     };
+  }
+
+  private seedMovements(): Movement[] {
+    return [
+      { id: 'MV-0001', type: 'serialized', refId: 'EQ-102', orderId: 'CT-2026-001', party: 'Halstead Construction', kind: 'issue', qty: 1, at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), by: 'D. Reynolds', note: 'Issued to order CT-2026-001' },
+    ];
   }
 }

@@ -27,13 +27,13 @@ export class AppComponent {
         { label: 'Dashboard', route: '/dashboard' },
         { label: 'Items & Stock', route: '/items' },
         { label: 'Parties & Orders', route: '/orders' },
+        { label: 'Item Hand-Off & Custody', route: '/handoff' },
         { label: 'Categories & Types', route: '/categories' },
       ],
     },
     {
       title: 'Planned (to port)',
       items: [
-        { label: 'Item Hand-Off & Custody', route: '/handoff', soon: true },
         { label: 'Allocations & Scheduling', route: '/scheduler', soon: true },
         { label: 'Billing & Invoicing', route: '/invoicing', soon: true },
       ],

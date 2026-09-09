@@ -25,6 +25,7 @@ src/app/
 │   ├── dashboard/       # Landing + port roadmap
 │   ├── categories/      # Categories & Types (list + add/rename/remove)
 │   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
+│   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
 ├── app.routes.ts        # Core-first route map
@@ -48,7 +49,7 @@ touching feature code.
 - [x] Parties & Orders (core) — parties CRUD + order headers + detail + persistence.
 - [x] Items & Stock (core) — typed catalog: list + CRUD per item type.
 - [ ] Items & Stock (core) — typed catalog + item registry.
-- [ ] Item Hand-Off & Custody (core) — movements / issue-return.
+- [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

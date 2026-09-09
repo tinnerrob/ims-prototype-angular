@@ -109,4 +109,30 @@ export const ITEM_STATUSES: Record<CatalogType, ItemStatus[]> = {
   attachment: ['Available', 'On Rent'],
 };
 
+export type MovementKind = 'issue' | 'return' | 'receive' | 'transfer' | 'adjust';
+
+/** Immutable chain-of-custody record (core). Issue = out to an order/party;
+ *  return = back to a location. Never mutate a written movement. */
+export interface Movement {
+  id: string;
+  type: CatalogType;
+  refId: string;
+  orderId?: string | null;
+  party?: string;
+  kind: MovementKind;
+  qty: number;
+  at: string; // ISO timestamp
+  by: string;
+  note?: string;
+}
+
+export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
+  issue: 'Issue',
+  return: 'Return',
+  receive: 'Receive',
+  transfer: 'Transfer',
+  adjust: 'Adjust',
+};
+
+
 
