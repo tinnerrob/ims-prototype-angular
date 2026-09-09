@@ -177,6 +177,32 @@ export class DataService {
     return prefix + String(max + 1).padStart(3, '0');
   }
 
+  addOrderLine(orderId: string, line: Omit<OrderLine, 'id'>): void {
+    const order = this.getOrder(orderId);
+    if (!order) return;
+    order.lineItems.push({ id: this.nextLineId(order), ...line });
+    this.save();
+  }
+
+  removeOrderLine(orderId: string, lineId: string): void {
+    const order = this.getOrder(orderId);
+    if (!order) return;
+    const i = order.lineItems.findIndex((l) => l.id === lineId);
+    if (i >= 0) {
+      order.lineItems.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextLineId(order: Order): string {
+    let max = 0;
+    for (const l of order.lineItems) {
+      const n = Number(l.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'LI-' + String(max + 1).padStart(3, '0');
+  }
+
   /* ------------------------------- items -------------------------------- */
 
   private static readonly ID_PREFIX: Record<string, string> = {

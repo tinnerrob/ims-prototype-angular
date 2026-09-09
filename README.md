@@ -54,7 +54,7 @@ touching feature code.
 - [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
 - [x] Locations (core) — yard/branch/warehouse/bin CRUD.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
-- [ ] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
+- [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

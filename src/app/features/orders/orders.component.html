@@ -84,14 +84,34 @@
                         <div><span class="lbl">Start</span>{{ o.startDate }}</div>
                         <div><span class="lbl">End</span>{{ o.endDate }}</div>
                       </div>
+                      <div class="book-row">
+                        <span class="lbl">Add line</span>
+                        <select class="input" [(ngModel)]="addType" (ngModelChange)="onTypeChange()">
+                          @for (t of types(); track t.key) { <option [value]="t.key">{{ t.label }}</option> }
+                        </select>
+                        <select class="input" [(ngModel)]="addItemId">
+                          <option value="" disabled>Choose an item…</option>
+                          @for (it of lineCandidates(); track it.id) {
+                            <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
+                          }
+                        </select>
+                        <input class="input qty" type="number" min="1" [(ngModel)]="addQty" aria-label="Qty" />
+                        <button class="btn btn-primary btn-sm" (click)="addLine(o)" [disabled]="!addItemId">Add</button>
+                      </div>
+
                       @if (o.lineItems.length === 0) {
-                        <p class="empty">No line items yet — item booking arrives with the Items &amp; Stock slice.</p>
+                        <p class="empty">No line items yet — add a catalog item above.</p>
                       } @else {
                         <table class="table inner">
-                          <thead><tr><th>Line</th><th>Type</th><th>Ref</th><th class="th-end">Qty</th></tr></thead>
+                          <thead><tr><th>Line</th><th>Item</th><th class="th-end">Qty</th><th class="th-end">Remove</th></tr></thead>
                           <tbody>
                             @for (li of o.lineItems; track li.id) {
-                              <tr><td class="mono">{{ li.id }}</td><td>{{ li.type }}</td><td class="mono">{{ li.refId }}</td><td class="td-end">{{ li.qty }}</td></tr>
+                              <tr>
+                                <td class="mono">{{ li.id }}</td>
+                                <td>{{ lineName(li.type, li.refId) }}</td>
+                                <td class="td-end">{{ li.qty }}</td>
+                                <td class="td-end"><button class="btn btn-danger-ghost btn-sm" (click)="removeLine(o, li.id)">Remove</button></td>
+                              </tr>
                             }
                           </tbody>
                         </table>

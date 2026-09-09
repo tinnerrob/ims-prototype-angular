@@ -3,6 +3,8 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import {
+  CatalogType,
+  CATALOG_TYPES,
   Order,
   ORDER_STATUS_LABEL,
   Party,
@@ -69,7 +71,43 @@ export class OrdersComponent {
   };
   openOrderId: string | null = null;
 
+  /** Add-line booking state. */
+  addType: CatalogType = 'serialized';
+  addItemId = '';
+  addQty = 1;
+
   constructor(readonly data: DataService) {}
+
+  types() {
+    return CATALOG_TYPES;
+  }
+
+  lineCandidates() {
+    return this.data.listItems(this.addType);
+  }
+
+  lineName(type: CatalogType, refId: string): string {
+    return this.data.itemLabel(type, refId);
+  }
+
+  onTypeChange(): void {
+    this.addItemId = '';
+  }
+
+  addLine(order: Order): void {
+    if (!this.addItemId || !order) return;
+    this.data.addOrderLine(order.orderId, {
+      type: this.addType,
+      refId: this.addItemId,
+      qty: this.addQty,
+    });
+    this.addItemId = '';
+    this.addQty = 1;
+  }
+
+  removeLine(order: Order, lineId: string): void {
+    this.data.removeOrderLine(order.orderId, lineId);
+  }
 
   parties(): Party[] {
     return this.data.listParties();

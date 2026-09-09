@@ -6,6 +6,30 @@
   padding: 4px 2px;
 }
 
+.book-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+
+  .input {
+    min-width: 0;
+  }
+
+  .qty {
+    width: 72px;
+  }
+
+  .lbl {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+}
+
 .empty {
   color: var(--muted);
 }
