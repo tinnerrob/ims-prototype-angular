@@ -253,6 +253,27 @@ export class DataService {
     this.save();
   }
 
+  /** Resize an order window; clamps all its line windows to stay inside. */
+  updateOrderDates(orderId: string, startISO: string, endISO: string): void {
+    const order = this.getOrder(orderId);
+    if (!order) return;
+    const iso = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+    let s = Date.parse(startISO + 'T00:00:00');
+    let e = Date.parse(endISO + 'T00:00:00');
+    if (e < s) e = s;
+    order.startDate = iso(s);
+    order.endDate = iso(e);
+    for (const li of order.lineItems) {
+      let ls = Date.parse((li.startDate ?? order.startDate) + 'T00:00:00');
+      let le = Date.parse((li.endDate ?? order.endDate) + 'T00:00:00');
+      ls = Math.max(s, Math.min(e, ls));
+      le = Math.min(e, Math.max(ls, le));
+      li.startDate = iso(ls);
+      li.endDate = iso(le);
+    }
+    this.save();
+  }
+
   private nextLineId(order: Order): string {
     let max = 0;
     for (const l of order.lineItems) {

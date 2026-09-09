@@ -17,7 +17,7 @@ interface DayCol { start: number; label: string; sub: string; }
 interface BarGeom { left: number; width: number; }
 interface BarModel { orderId: string; liId: string | null; label: string; sub: string; color: string; conflict: boolean; geom: BarGeom; }
 interface OrderModel { order: Order; isExpanded: boolean; orderBar: BarModel | null; lines: BarModel[]; }
-interface ResizeState { orderId: string; liId: string; edge: 'l' | 'r'; track: HTMLElement; }
+interface ResizeState { orderId: string; liId: string | null; edge: 'l' | 'r'; track: HTMLElement; }
 const POOL_TYPES = CATALOG_TYPES.map((t) => ({ key: t.key, label: 'Items (' + t.label + ')' }));
 @Component({
   selector: 'ims-scheduler',
@@ -89,9 +89,15 @@ export class SchedulerComponent implements OnDestroy {
   lanes(): Item[] { return this.data.listItems(this.poolType); }
   selectOrder(id: string): void { this.selectedOrderId = this.selectedOrderId === id ? '' : id; }
   toggleExpand(orderId: string): void { if (this.expanded.has(orderId)) this.expanded.delete(orderId); else this.expanded.add(orderId); }
+  onOrderClick(orderId: string): void { this.selectOrder(orderId); this.toggleExpand(orderId); }
   lineStart(li: OrderLine, order: Order): string { return li.startDate ?? order.startDate; }
   lineEnd(li: OrderLine, order: Order): string { return li.endDate ?? order.endDate; }
   itemName(type: CatalogType, refId: string): string { return this.data.itemLabel(type, refId); }
+  dateAt(ms: number): string {
+    const d = new Date(ms);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
 
   geom(startISO: string, endISO: string): BarGeom | null {
     const N = this.colCount();
@@ -103,7 +109,7 @@ export class SchedulerComponent implements OnDestroy {
     if (eIdx < 0 || sIdx >= N) return null;
     const cs = Math.max(0, sIdx);
     const ce = Math.min(N - 1, eIdx);
-    return { left: cs * DAY_W, width: (ce - cs + 1) * DAY_W };
+    return { left: (cs / N) * 100, width: ((ce - cs + 1) / N) * 100 };
   }
 
   lineDays(li: OrderLine, order: Order): number {
@@ -178,7 +184,7 @@ export class SchedulerComponent implements OnDestroy {
     e.preventDefault();
     e.stopPropagation();
     const track = (e.target as Element).closest('.tl-track') as HTMLElement | null;
-    if (!track || !bar.liId) return;
+    if (!track) return;
     this.resizing = { orderId: bar.orderId, liId: bar.liId, edge, track };
     const move = (ev: PointerEvent) => this.onResizeMove(ev);
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); this.resizing = null; };
@@ -191,18 +197,24 @@ export class SchedulerComponent implements OnDestroy {
     if (!r) return;
     const rect = r.track.getBoundingClientRect();
     const idx = Math.floor(((ev.clientX - rect.left) / rect.width) * this.colCount());
+    const day = this.dateAt(this.viewStart() + idx * DAY_MS);
     const order = this.data.getOrder(r.orderId);
-    const li = order?.lineItems.find((l) => l.id === r.liId);
-    if (!order || !li) return;
-    const lo = new Date(order.startDate + 'T00:00:00').getTime();
-    const hi = new Date(order.endDate + 'T00:00:00').getTime();
-    const dayMs = Math.max(lo, Math.min(hi, this.viewStart() + idx * DAY_MS));
-    const day = new Date(dayMs).toISOString().slice(0, 10);
-    let ns = this.lineStart(li, order);
-    let ne = this.lineEnd(li, order);
-    if (r.edge === 'l') { ns = day; if (new Date(ns + 'T00:00:00').getTime() > new Date(ne + 'T00:00:00').getTime()) ne = ns; }
-    else { ne = day; if (new Date(ne + 'T00:00:00').getTime() < new Date(ns + 'T00:00:00').getTime()) ns = ne; }
-    this.data.updateOrderLineDates(r.orderId, r.liId, ns, ne);
+    if (!order) return;
+    if (r.liId == null) {
+      let ns = order.startDate;
+      let ne = order.endDate;
+      if (r.edge === 'l') { ns = day; if (Date.parse(ns + 'T00:00:00') > Date.parse(ne + 'T00:00:00')) ne = ns; }
+      else { ne = day; if (Date.parse(ne + 'T00:00:00') < Date.parse(ns + 'T00:00:00')) ns = ne; }
+      this.data.updateOrderDates(order.orderId, ns, ne);
+    } else {
+      const li = order.lineItems.find((l) => l.id === r.liId);
+      if (!li) return;
+      let ns = this.lineStart(li, order);
+      let ne = this.lineEnd(li, order);
+      if (r.edge === 'l') { ns = day; if (Date.parse(ns + 'T00:00:00') > Date.parse(ne + 'T00:00:00')) ne = ns; }
+      else { ne = day; if (Date.parse(ne + 'T00:00:00') < Date.parse(ns + 'T00:00:00')) ns = ne; }
+      this.data.updateOrderLineDates(r.orderId, r.liId, ns, ne);
+    }
     this.cdr.detectChanges();
   }
 

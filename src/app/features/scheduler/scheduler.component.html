@@ -71,8 +71,8 @@
       </div>
 
       <div class="tl-scroll">
-        <div class="tl" [style.width.px]="tlWidth()">
-          <div class="tl-head" [style.gridTemplateColumns]="'170px repeat(' + colCount() + ', ' + 90 + 'px)'">
+        <div class="tl">
+          <div class="tl-head" [style.gridTemplateColumns]="'170px repeat(' + colCount() + ', minmax(44px, 1fr))'">
             <div class="tl-corner">Resource</div>
             @for (c of columns(); track c.start) {
               <div class="tl-day"><div class="tl-day-name">{{ c.label }}</div><div class="tl-day-sub">{{ c.sub }}</div></div>
@@ -85,15 +85,10 @@
               [class.selected]="selectedOrderId === m.order.orderId"
               (dragover)="allowDrop($event)"
               (drop)="onDropOrder($event, m.order.orderId)"
-              (click)="selectOrder(m.order.orderId)"
+              (click)="onOrderClick(m.order.orderId)"
             >
               <div class="tl-label">
-                <div class="row-head">
-                  <button class="chev" (click)="toggleExpand(m.order.orderId); $event.stopPropagation()" title="Expand / collapse">
-                    <i class="bi" [class.bi-chevron-down]="!m.isExpanded" [class.bi-chevron-up]="m.isExpanded"></i>
-                  </button>
-                  <span class="mono strong">{{ m.order.orderId }}</span>
-                </div>
+                <div class="row-head"><span class="mono strong">{{ m.order.orderId }}</span><span class="chips-mini">{{ m.order.lineItems.length }} item(s)</span></div>
                 <div class="row-sub">{{ m.order.projectName }}</div>
                 <div class="row-dates">{{ m.order.startDate }} → {{ m.order.endDate }}</div>
               </div>
@@ -102,11 +97,13 @@
                   <div
                     class="tl-block order"
                     [class.selected]="selectedOrderId === m.order.orderId"
-                    [style.left.px]="m.orderBar.geom.left"
-                    [style.width.px]="m.orderBar.geom.width"
+                    [style.left.%]="m.orderBar.geom.left"
+                    [style.width.%]="m.orderBar.geom.width"
                   >
-                    <span class="tl-block-title">{{ m.order.projectName }}</span>
-                    <span class="tl-block-sub">{{ m.orderBar.sub }}</span>
+                    <span class="tl-block-title">{{ m.order.projectName }} · {{ m.order.orderId }}</span>
+                    <span class="tl-block-sub">{{ m.orderBar.sub }} — click to expand/collapse</span>
+                    <span class="h h-l" (pointerdown)="startResize($event, m.orderBar, 'l')" title="Drag to change order start"></span>
+                    <span class="h h-r" (pointerdown)="startResize($event, m.orderBar, 'r')" title="Drag to change order end"></span>
                   </div>
                 }
               </div>
@@ -130,8 +127,8 @@
                       class="tl-block res"
                       [class.conflict]="line.conflict"
                       [class.selected]="selectedOrderId === m.order.orderId"
-                      [style.left.px]="line.geom.left"
-                      [style.width.px]="line.geom.width"
+                      [style.left.%]="line.geom.left"
+                      [style.width.%]="line.geom.width"
                       [style.background]="line.color"
                       (click)="selectOrder(m.order.orderId)"
                     >

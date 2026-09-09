@@ -200,11 +200,21 @@
 
 .tl-label {
   padding: 7px 9px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
 }
 .row-head {
   display: flex;
   align-items: center;
   gap: 6px;
+  justify-content: flex-end;
+}
+.chips-mini {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 600;
 }
 .chev {
   border: 0;
@@ -238,16 +248,16 @@
 .tl-row.tl-order {
   background: #fafbfc;
   .tl-track {
-    height: 56px;
+    height: 88px;
   }
 }
 .tl-row.tl-res {
   .tl-track {
-    height: 36px;
+    height: 60px;
   }
 }
 .tl-row.tl-empty .tl-track {
-  height: 36px;
+  height: 60px;
 }
 .tl-row.selected {
   outline: 1.5px solid var(--accent);
@@ -275,7 +285,8 @@
 
   &.order {
     background: #334155;
-    height: 44px;
+    height: 76px;
+    top: 6px;
   }
   &.selected {
     outline: 2px solid var(--ink);
@@ -283,8 +294,8 @@
 }
 
 .tl-row.tl-res .tl-block.res {
-  height: 22px;
-  top: 6px;
+  height: 44px;
+  top: 8px;
 }
 
 .tl-block-title {
