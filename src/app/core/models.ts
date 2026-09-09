@@ -134,5 +134,23 @@ export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
   adjust: 'Adjust',
 };
 
+export type LocationType = 'yard' | 'branch' | 'warehouse' | 'bin';
+
+export interface Location {
+  id: string;
+  name: string;
+  type: LocationType;
+  address: string;
+  parentId?: string | null;
+}
+
+export const LOCATION_TYPE_LABEL: Record<LocationType, string> = {
+  yard: 'Yard',
+  branch: 'Branch',
+  warehouse: 'Warehouse',
+  bin: 'Bin',
+};
+
+
 
 

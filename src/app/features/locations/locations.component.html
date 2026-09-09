@@ -1,0 +1,73 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Locations</h1>
+      <p class="page-sub">Core location hierarchy — yards, branches, warehouses, bins.</p>
+    </div>
+    <span class="core-tag">Core · always on</span>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="toolbar">
+        <button class="btn btn-primary" (click)="openForm()">+ New Location</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>ID</th><th>Name</th><th>Type</th><th>Address</th><th>Parent</th><th class="th-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (loc of locations(); track loc.id) {
+            <tr>
+              <td class="mono strong">{{ loc.id }}</td>
+              <td>{{ loc.name }}</td>
+              <td><span class="status">{{ typeLabel[loc.type] }}</span></td>
+              <td>{{ loc.address }}</td>
+              <td>{{ parentName(loc) }}</td>
+              <td class="td-end">
+                <button class="btn btn-ghost btn-sm" (click)="openForm(loc)">Edit</button>
+                <button class="btn btn-danger-ghost btn-sm" (click)="remove(loc)">Remove</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="empty">No locations yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+@if (formOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">{{ editingId ? 'Edit Location' : 'New Location' }}</span>
+        <button class="icon-btn" (click)="closeForm()" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field"><label>Name *</label><input class="input" [(ngModel)]="form.name" /></div>
+        <div class="row2">
+          <div class="field">
+            <label>Type</label>
+            <select class="input" [(ngModel)]="form.type">
+              @for (t of types; track t) { <option [value]="t">{{ typeLabel[t] }}</option> }
+            </select>
+          </div>
+          <div class="field">
+            <label>Parent (yard/branch)</label>
+            <select class="input" [(ngModel)]="form.parentId">
+              <option value="">— none —</option>
+              @for (p of parents(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Address</label><input class="input" [(ngModel)]="form.address" /></div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="closeForm()">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="!form.name.trim()">Save</button>
+      </div>
+    </div>
+  </div>
+}

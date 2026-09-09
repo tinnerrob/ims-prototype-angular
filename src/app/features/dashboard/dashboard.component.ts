@@ -23,6 +23,7 @@ export class DashboardComponent {
     { route: '/orders', title: 'Parties & Orders', done: true, note: 'Ported (party CRUD + order headers + detail + persistence).' },
     { route: '/items', title: 'Items & Stock', done: true, note: 'Ported (typed catalog: list + CRUD per type).' },
     { route: '/handoff', title: 'Item Hand-Off & Custody', done: true, note: 'Ported (movements: issue/return + chain-of-custody log).' },
+    { route: '/locations', title: 'Locations', done: true, note: 'Ported (yard/branch/warehouse/bin CRUD).' },
     { route: '/scheduler', title: 'Allocations (module)', done: false, note: 'Industry module over core.' },
     { route: '/invoicing', title: 'Billing (module)', done: false, note: 'Industry module over core.' },
   ];

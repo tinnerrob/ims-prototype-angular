@@ -4,6 +4,7 @@ import {
   CatalogType,
   CATALOG_TYPE_KEYS,
   Item,
+  Location,
   Movement,
   MovementKind,
   Order,
@@ -31,12 +32,14 @@ export class DataService {
     orders: Order[];
     items: Record<string, Item[]>;
     movements: Movement[];
+    locations: Location[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
     orders: this.seedOrders(),
     items: this.seedItems(),
     movements: this.seedMovements(),
+    locations: this.seedLocations(),
   };
 
   constructor() {
@@ -57,6 +60,7 @@ export class DataService {
       if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
       if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
       if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
+      if (Array.isArray(snap.locations)) this.db.locations = snap.locations;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -74,6 +78,7 @@ export class DataService {
           orders: this.db.orders,
           items: this.db.items,
           movements: this.db.movements,
+          locations: this.db.locations,
         }),
       );
     } catch {
@@ -276,6 +281,44 @@ export class DataService {
 
   /* -------------------------------- seeds ------------------------------- */
 
+  /* ----------------------------- locations ------------------------------ */
+
+  listLocations(): Location[] {
+    return [...this.db.locations];
+  }
+
+  createLocation(data: Omit<Location, 'id'>): Location {
+    const rec: Location = { ...data, id: this.nextLocationId() };
+    this.db.locations.push(rec);
+    this.save();
+    return rec;
+  }
+
+  updateLocation(id: string, patch: Partial<Location>): void {
+    const loc = this.db.locations.find((l) => l.id === id);
+    if (loc) {
+      Object.assign(loc, patch);
+      this.save();
+    }
+  }
+
+  removeLocation(id: string): void {
+    const i = this.db.locations.findIndex((l) => l.id === id);
+    if (i >= 0) {
+      this.db.locations.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextLocationId(): string {
+    let max = 0;
+    for (const l of this.db.locations) {
+      const n = Number(l.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'LOC-' + String(max + 1).padStart(3, '0');
+  }
+
   /* ----------------------------- movements ------------------------------ */
 
   listMovements(): Movement[] {
@@ -419,6 +462,15 @@ export class DataService {
   private seedMovements(): Movement[] {
     return [
       { id: 'MV-0001', type: 'serialized', refId: 'EQ-102', orderId: 'CT-2026-001', party: 'Halstead Construction', kind: 'issue', qty: 1, at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), by: 'D. Reynolds', note: 'Issued to order CT-2026-001' },
+    ];
+  }
+
+  private seedLocations(): Location[] {
+    return [
+      { id: 'LOC-001', name: 'Main Yard — Buckhead Hub', type: 'yard', address: 'Buckhead, Atlanta, GA' },
+      { id: 'LOC-002', name: 'Atlanta Branch', type: 'branch', address: 'Atlanta, GA', parentId: 'LOC-001' },
+      { id: 'LOC-003', name: 'Savannah Yard', type: 'yard', address: 'Savannah, GA' },
+      { id: 'LOC-004', name: 'Parts Warehouse A', type: 'warehouse', address: 'Atlanta, GA', parentId: 'LOC-002' },
     ];
   }
 }
