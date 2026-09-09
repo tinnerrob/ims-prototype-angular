@@ -1,0 +1,31 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>IMS — Angular Port</h1>
+      <p class="page-sub">Core inventory engine first; industry modules layered on top.</p>
+    </div>
+  </div>
+
+  <div class="stat-row">
+    <div class="card stat"><span class="stat-label">Categories seeded</span><span class="stat-value">28</span></div>
+    <div class="card stat"><span class="stat-label">Parties seeded</span><span class="stat-value">{{ partyCount() }}</span></div>
+    <div class="card stat"><span class="stat-label">Port status</span><span class="stat-value">Foundations + 1 core view</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Port roadmap</div>
+    <ul class="ms-list">
+      @for (m of milestones; track m.route) {
+        <li class="ms-row">
+          <span class="ms-state" [class.done]="m.done">{{ m.done ? '✔' : '◌' }}</span>
+          @if (m.done) {
+            <a class="ms-title" routerLink="{{ m.route }}">{{ m.title }}</a>
+          } @else {
+            <span class="ms-title muted">{{ m.title }}</span>
+          }
+          <span class="ms-note">{{ m.note }}</span>
+        </li>
+      }
+    </ul>
+  </div>
+</section>

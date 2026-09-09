@@ -1,0 +1,65 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Categories &amp; Types</h1>
+      <p class="page-sub">Manage category options for each item type (core catalog).</p>
+    </div>
+    <span class="core-tag">Core · always on</span>
+  </div>
+
+  <div class="card">
+    <div class="type-tabs" role="tablist">
+      @for (t of types; track t.key) {
+        <button
+          type="button"
+          class="type-tab"
+          [class.active]="type === t.key"
+          (click)="selectType(t.key)"
+        >{{ t.label }}</button>
+      }
+    </div>
+
+    <div class="card-body">
+      <div class="add-row">
+        <input
+          class="input"
+          placeholder="New category name…"
+          [(ngModel)]="draft"
+          (keyup.enter)="add()"
+          aria-label="New category name"
+        />
+        <button class="btn btn-primary" (click)="add()" [disabled]="!draft.trim()">
+          + Add
+        </button>
+      </div>
+
+      @if (names.length === 0) {
+        <p class="empty">No categories for this type yet — add one above.</p>
+      } @else {
+        <ul class="cat-list">
+          @for (name of names; track $index) {
+            <li class="cat-row">
+              @if (editIndex === $index) {
+                <input
+                  class="input"
+                  [(ngModel)]="editValue"
+                  (keyup.enter)="saveEdit($index, name)"
+                  (keyup.esc)="cancelEdit()"
+                  (blur)="saveEdit($index, name)"
+                />
+                <button class="btn btn-ghost" (mousedown)="saveEdit($index, name)">Save</button>
+                <button class="btn btn-ghost" (mousedown)="cancelEdit()">Cancel</button>
+              } @else {
+                <span class="name">{{ name }}</span>
+                <div class="row-actions">
+                  <button class="btn btn-ghost" (click)="beginEdit($index, name)">Rename</button>
+                  <button class="btn btn-danger-ghost" (click)="remove($index, name)">Remove</button>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </div>
+</section>

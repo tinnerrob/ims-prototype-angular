@@ -1,0 +1,64 @@
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.ms-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ms-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.ms-row:last-child {
+  border-bottom: 0;
+}
+
+.ms-state.done {
+  color: var(--success);
+}
+
+.ms-title {
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  min-width: 220px;
+
+  &.muted {
+    color: var(--muted);
+  }
+}
+
+.ms-note {
+  color: var(--muted);
+  font-size: 12.5px;
+}
