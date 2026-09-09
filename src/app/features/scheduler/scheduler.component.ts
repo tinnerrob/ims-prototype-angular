@@ -1,5 +1,4 @@
 import { Component, OnDestroy } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Item, Order } from '../../core/models';
@@ -7,7 +6,6 @@ import { Item, Order } from '../../core/models';
 const DAY_MS = 86400000;
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-/** A single occupied cell in the week grid. */
 interface OccCell {
   orderId: string;
   label: string;
@@ -22,17 +20,13 @@ interface BoardRow {
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
-  imports: [FormsModule],
   templateUrl: './scheduler.component.html',
   styleUrl: './scheduler.component.scss',
 })
 export class SchedulerComponent implements OnDestroy {
   readonly dayNames = DAY_NAMES;
-  /** Week anchor = Monday 00:00 local (ms). */
   weekStart: number = this.mondayOf(new Date());
-
-  bookOrderId = '';
-  bookItemId = '';
+  draggingItemId = '';
 
   constructor(readonly data: DataService) {}
 
@@ -48,7 +42,40 @@ export class SchedulerComponent implements OnDestroy {
     return this.data.listItems('serialized');
   }
 
-  /** Rows = serialized items x 7 day cells for the shown week. */
+  /** Resource pool: serialized items currently free to book. */
+  pool(): Item[] {
+    return this.data.availableItems();
+  }
+
+  bookedIds(order: Order): string[] {
+    return order.lineItems.filter((li) => li.type === 'serialized').map((li) => li.refId);
+  }
+
+  /* ---------------------------- drag & drop ----------------------------- */
+
+  onDragStart(e: Event, itemId: string): void {
+    (e as DragEvent).dataTransfer?.setData('text/plain', itemId);
+    this.draggingItemId = itemId;
+  }
+
+  onDragEnd(): void {
+    this.draggingItemId = '';
+  }
+
+  allowDrop(e: Event): void {
+    e.preventDefault();
+  }
+
+  onDropOrder(e: Event, order: Order): void {
+    e.preventDefault();
+    const id = (e as DragEvent).dataTransfer?.getData('text/plain') ?? '';
+    this.draggingItemId = '';
+    if (!id || this.orderHasItem(order, id)) return;
+    this.data.addOrderLine(order.orderId, { type: 'serialized', refId: id, qty: 1 });
+  }
+
+  /* ------------------------------- board ------------------------------- */
+
   board(): BoardRow[] {
     const rows: BoardRow[] = [];
     for (const item of this.serialized()) {
@@ -59,11 +86,8 @@ export class SchedulerComponent implements OnDestroy {
         const occ: OccCell[] = [];
         for (const order of this.activeOrders()) {
           if (!this.orderHasItem(order, item.id)) continue;
-          if (this.overlaps(order, dayStart, dayEnd)) {
-            occ.push({ orderId: order.orderId, label: order.orderId, conflict: false });
-          }
+          if (this.overlaps(order, dayStart, dayEnd)) occ.push({ orderId: order.orderId, label: order.orderId, conflict: false });
         }
-        // conflict = more than one distinct order in this cell
         cells.push(occ.length === 0 ? null : { ...occ[0], conflict: occ.length > 1 });
       }
       rows.push({ item, cells });
@@ -71,16 +95,18 @@ export class SchedulerComponent implements OnDestroy {
     return rows;
   }
 
-  /** Human conflicts across the shown week (order vs order on the same item/day). */
   conflicts(): string[] {
     const out: string[] = [];
     for (const row of this.board()) {
       row.cells.forEach((c, i) => {
         if (c) {
-          const others = this.activeOrders().filter((o) => o.orderId !== c.orderId && this.orderHasItem(o, row.item.id) && this.overlaps(o, this.weekStart + i * DAY_MS, this.weekStart + i * DAY_MS + DAY_MS - 1));
-          if (others.length) {
-            out.push(`${this.fmtDay(i)}: ${row.item.id} booked to ${c.orderId} + ${others.map((o) => o.orderId).join(', ')}`);
-          }
+          const others = this.activeOrders().filter(
+            (o) =>
+              o.orderId !== c.orderId &&
+              this.orderHasItem(o, row.item.id) &&
+              this.overlaps(o, this.weekStart + i * DAY_MS, this.weekStart + i * DAY_MS + DAY_MS - 1),
+          );
+          if (others.length) out.push(`${this.fmtDay(i)}: ${row.item.id} booked to ${c.orderId} + ${others.map((o) => o.orderId).join(', ')}`);
         }
       });
     }
@@ -95,13 +121,6 @@ export class SchedulerComponent implements OnDestroy {
     this.weekStart += weeks * 7 * DAY_MS;
   }
 
-  /** Book an available serialized item onto the selected active order. */
-  book(): void {
-    if (!this.bookOrderId || !this.bookItemId) return;
-    this.data.addOrderLine(this.bookOrderId, { type: 'serialized', refId: this.bookItemId, qty: 1 });
-    this.bookItemId = '';
-  }
-
   private orderHasItem(order: Order, itemId: string): boolean {
     return order.lineItems.some((li) => li.type === 'serialized' && li.refId === itemId);
   }
@@ -114,14 +133,13 @@ export class SchedulerComponent implements OnDestroy {
 
   private mondayOf(d: Date): number {
     const x = new Date(d);
-    const day = (x.getDay() + 6) % 7; // 0=Mon
+    const day = (x.getDay() + 6) % 7;
     x.setDate(x.getDate() - day);
     x.setHours(0, 0, 0, 0);
     return x.getTime();
   }
 
   private fmtDay(i: number): string {
-    const d = new Date(this.weekStart + i * DAY_MS);
-    return d.toISOString().slice(0, 10);
+    return new Date(this.weekStart + i * DAY_MS).toISOString().slice(0, 10);
   }
 }

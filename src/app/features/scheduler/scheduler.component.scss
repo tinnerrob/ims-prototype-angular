@@ -1,6 +1,189 @@
+/* Allocations & Scheduling — prototype-style drag-and-drop board. */
+
+.week-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
 .week-label {
   font-weight: 700;
-  margin: 0 6px;
+  flex: 1;
+  text-align: center;
+}
+
+/* ---------- 3-column DnD board ---------- */
+.sched-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr 300px;
+  gap: 16px;
+  align-items: start;
+
+  @media (max-width: 1100px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel-col {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
+}
+
+.col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  font-size: 13px;
+
+  i {
+    color: var(--accent);
+  }
+}
+
+/* ---- resource pool (drag source) ---- */
+.pool-list {
+  padding: 10px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pool-card {
+  border: 1px solid var(--slate-200);
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: grab;
+  transition: box-shadow 0.12s ease, transform 0.12s ease, opacity 0.12s ease;
+
+  &:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+    border-color: var(--accent);
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &.dragging {
+    opacity: 0.4;
+  }
+}
+
+.pool-name {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.pool-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- active orders (drop target) ---- */
+.orders-list {
+  padding: 10px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.order-drop {
+  border: 1.5px dashed var(--slate-200);
+  border-radius: 10px;
+  padding: 10px 12px;
+  transition: border-color 0.12s ease, background 0.12s ease;
+
+  &.drop-active {
+    border-color: var(--accent);
+    background: rgba(37, 99, 235, 0.05);
+  }
+}
+
+.order-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.order-project {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.order-dates {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 2px 0 8px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  font-size: 11.5px;
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.empty-chip {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+  border: 1px dashed var(--slate-200);
+}
+
+/* ---- conflicts ---- */
+.conflict-list {
+  padding: 10px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.conflict-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.07);
+}
+
+.conflict-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ---- week timeline table ---- */
+.table-wrap {
+  overflow: auto;
 }
 
 .alloc {
@@ -38,17 +221,4 @@
     background: rgba(220, 38, 38, 0.14);
     color: #b91c1c;
   }
-}
-
-.conflict-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--danger);
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-.table-wrap {
-  overflow: auto;
 }

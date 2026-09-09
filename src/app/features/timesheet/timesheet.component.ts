@@ -1,61 +1,88 @@
 import { Component } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Timesheet } from '../../core/models';
 
-interface PunchForm {
-  empId: string;
-  date: string;
-  hours: number;
-  orderId: string; // '' = shop/overhead
-  note: string;
+interface TaskChip {
+  key: string;
+  label: string;
+  orderId?: string;
+  kind: 'order' | 'shop' | 'overhead';
 }
 
 @Component({
   selector: 'ims-timesheet',
   standalone: true,
-  imports: [FormsModule],
   templateUrl: './timesheet.component.html',
   styleUrl: './timesheet.component.scss',
 })
 export class TimesheetComponent {
-  formOpen = false;
-  form: PunchForm = this.emptyForm();
+  draggingKey = '';
 
   constructor(readonly data: DataService) {}
+
+  /** Task chips to drag onto an employee row. */
+  tasks(): TaskChip[] {
+    const orders = this.data
+      .listOrders()
+      .filter((o) => o.status === 'active')
+      .map((o): TaskChip => ({ key: 'o:' + o.orderId, label: `${o.orderId} · ${o.projectName}`, orderId: o.orderId, kind: 'order' }));
+    return [
+      ...orders,
+      { key: 'shop', label: 'Shop', kind: 'shop' },
+      { key: 'overhead', label: 'Overhead', kind: 'overhead' },
+    ];
+  }
+
+  employees() {
+    return this.data.listItems('labor');
+  }
 
   punches(): Timesheet[] {
     return this.data.listTimesheets();
   }
 
-  labor() {
-    return this.data.listItems('labor');
+  empHours(empId: string): number {
+    return this.data
+      .listTimesheets()
+      .filter((t) => t.empId === empId)
+      .reduce((s, t) => s + t.hours, 0);
   }
 
-  orders() {
-    return this.data.listOrders().filter((o) => o.status === 'active');
+  onDragStart(e: Event, chip: TaskChip): void {
+    (e as DragEvent).dataTransfer?.setData('application/x-task', chip.key);
+    (e as DragEvent).dataTransfer?.setData('text/plain', chip.key);
+    this.draggingKey = chip.key;
   }
 
-  openForm(): void {
-    this.form = this.emptyForm();
-    this.form.date = new Date().toISOString().slice(0, 10);
-    this.formOpen = true;
+  onDragEnd(): void {
+    this.draggingKey = '';
   }
 
-  save(): void {
-    const f = this.form;
-    if (!f.empId || !f.hours || f.hours <= 0) return;
-    const order = f.orderId ? this.data.getOrder(f.orderId) : null;
+  allowDrop(e: Event): void {
+    e.preventDefault();
+  }
+
+  onDropEmp(e: Event, empId: string): void {
+    e.preventDefault();
+    const key = (e as DragEvent).dataTransfer?.getData('application/x-task') || (e as DragEvent).dataTransfer?.getData('text/plain');
+    this.draggingKey = '';
+    if (!key) return;
+    const chip = this.tasks().find((t) => t.key === key);
+    if (!chip) return;
+    const order = chip.orderId ? this.data.getOrder(chip.orderId) : null;
     this.data.createTimesheet({
-      empId: f.empId,
-      date: f.date,
-      hours: f.hours,
+      empId,
+      date: new Date().toISOString().slice(0, 10),
+      hours: 8,
       orderId: order?.orderId ?? null,
-      targetLabel: order ? `${order.orderId} · ${order.projectName}` : 'Shop',
-      note: f.note,
+      targetLabel: order ? `${order.orderId} · ${order.projectName}` : chip.kind === 'shop' ? 'Shop' : 'Overhead',
+      note: 'Dropped via board',
     });
-    this.formOpen = false;
+  }
+
+  chipClass(chip: TaskChip): string {
+    return 'chip-' + chip.kind;
   }
 
   remove(p: Timesheet): void {
@@ -64,9 +91,5 @@ export class TimesheetComponent {
 
   empName(empId: string): string {
     return this.data.itemLabel('labor', empId);
-  }
-
-  private emptyForm(): PunchForm {
-    return { empId: '', date: '', hours: 8, orderId: '', note: '' };
   }
 }

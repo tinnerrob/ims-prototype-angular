@@ -1,1 +1,72 @@
-/* Labor & Timesheets — reuses shared styles. */
+.pool-tasks {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.pool-hint {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.task-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: grab;
+  border: 1px solid transparent;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  &.dragging {
+    opacity: 0.4;
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.chip-order {
+  background: rgba(37, 99, 235, 0.14);
+  color: #1d4ed8;
+}
+
+.chip-shop {
+  background: rgba(22, 163, 74, 0.14);
+  color: #15803d;
+}
+
+.chip-overhead {
+  background: rgba(124, 58, 237, 0.14);
+  color: #6d28d9;
+}
+
+.emp-row {
+  cursor: default;
+
+  &.drop-active {
+    background: rgba(37, 99, 235, 0.07);
+    outline: 1.5px dashed var(--accent);
+    outline-offset: -1.5px;
+  }
+}
+
