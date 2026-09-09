@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 import {
   CatalogType,
   CATALOG_TYPE_KEYS,
+  Item,
   Order,
   OrderLine,
   OrderStatus,
@@ -26,10 +27,12 @@ export class DataService {
     settings: { categories: Record<string, string[]> };
     parties: Party[];
     orders: Order[];
+    items: Record<string, Item[]>;
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
     orders: this.seedOrders(),
+    items: this.seedItems(),
   };
 
   constructor() {
@@ -48,6 +51,7 @@ export class DataService {
       if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
       if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
       if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
+      if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -63,6 +67,7 @@ export class DataService {
           settings: this.db.settings,
           parties: this.db.parties,
           orders: this.db.orders,
+          items: this.db.items,
         }),
       );
     } catch {
@@ -148,6 +153,65 @@ export class DataService {
     let max = 0;
     for (const o of this.db.orders) {
       const m = o.orderId.match(/-(\d+)$/);
+      if (m) {
+        const n = Number(m[1]);
+        if (n > max) max = n;
+      }
+    }
+    return prefix + String(max + 1).padStart(3, '0');
+  }
+
+  /* ------------------------------- items -------------------------------- */
+
+  private static readonly ID_PREFIX: Record<string, string> = {
+    serialized: 'EQ-',
+    bulk: 'BLK-',
+    consumable: 'CN-',
+    part: 'PRT-',
+    labor: 'EMP-',
+    kit: 'KIT-',
+    attachment: 'ACC-',
+  };
+
+  listItems(type: CatalogType): Item[] {
+    return [...(this.db.items[type] ?? [])];
+  }
+
+  getItem(type: CatalogType, id: string): Item | undefined {
+    return (this.db.items[type] ?? []).find((i) => i.id === id);
+  }
+
+  createItem(type: CatalogType, data: Omit<Item, 'type' | 'id'>): Item {
+    const rec: Item = { ...data, type, id: this.nextItemId(type) };
+    (this.db.items[type] ??= []).push(rec);
+    this.save();
+    return rec;
+  }
+
+  updateItem(type: CatalogType, id: string, patch: Partial<Item>): void {
+    const it = this.getItem(type, id);
+    if (it) {
+      Object.assign(it, patch, { type });
+      this.save();
+    }
+  }
+
+  removeItem(type: CatalogType, id: string): void {
+    const list = this.db.items[type];
+    if (!list) return;
+    const i = list.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      list.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextItemId(type: CatalogType): string {
+    const prefix = DataService.ID_PREFIX[type] ?? 'IT-';
+    const list = this.db.items[type] ?? [];
+    let max = 0;
+    for (const it of list) {
+      const m = it.id.match(/-(\d+)$/);
       if (m) {
         const n = Number(m[1]);
         if (n > max) max = n;
@@ -255,5 +319,32 @@ export class DataService {
         lineItems: [{ id: 'LI-201', type: 'serialized', refId: 'SS-204', qty: 1 }],
       },
     ];
+  }
+
+  private seedItems(): Record<string, Item[]> {
+    return {
+      serialized: [
+        { id: 'EQ-101', type: 'serialized', name: 'JLG 340AJ Boom Lift 40ft', category: 'Boom Lifts', status: 'Available', qty: 1, rateDaily: 320 },
+        { id: 'EQ-102', type: 'serialized', name: 'JLG 1930ES Scissor Lift', category: 'Scissor Lifts', status: 'On Rent', qty: 1, rateDaily: 180 },
+        { id: 'EQ-103', type: 'serialized', name: 'CAT 315 Excavator', category: 'Excavators', status: 'In Shop', qty: 1, rateDaily: 640 },
+      ],
+      bulk: [
+        { id: 'BLK-011', type: 'bulk', name: 'Crusher Run Stone', category: 'Bulk Materials', status: 'Available', qty: 200, rateDaily: 4 },
+      ],
+      consumable: [
+        { id: 'CN-020', type: 'consumable', name: 'Hydraulic Filter 40um', category: 'Filters', status: 'In Stock', qty: 24, rateDaily: 0 },
+      ],
+      part: [
+        { id: 'PRT-006', type: 'part', name: 'Track Pin & Bushing Set', category: 'Hydraulics', status: 'In Stock', qty: 8, rateDaily: 0 },
+      ],
+      labor: [
+        { id: 'EMP-001', type: 'labor', name: 'Daniel Reynolds', category: 'Operators', status: 'Active', qty: 1, rateDaily: 320, notes: 'Equipment operator' },
+        { id: 'EMP-002', type: 'labor', name: 'S. Mercer', category: 'Technicians', status: 'Active', qty: 1, rateDaily: 0 },
+      ],
+      kit: [],
+      attachment: [
+        { id: 'ACC-050', type: 'attachment', name: '48" Bucket', category: 'Buckets', status: 'Available', qty: 1, rateDaily: 60 },
+      ],
+    };
   }
 }

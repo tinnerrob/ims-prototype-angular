@@ -25,6 +25,7 @@ export class AppComponent {
       title: 'Inventory · Core',
       items: [
         { label: 'Dashboard', route: '/dashboard' },
+        { label: 'Items & Stock', route: '/items' },
         { label: 'Parties & Orders', route: '/orders' },
         { label: 'Categories & Types', route: '/categories' },
       ],
@@ -32,7 +33,6 @@ export class AppComponent {
     {
       title: 'Planned (to port)',
       items: [
-        { label: 'Items & Stock', route: '/inventory', soon: true },
         { label: 'Item Hand-Off & Custody', route: '/handoff', soon: true },
         { label: 'Allocations & Scheduling', route: '/scheduler', soon: true },
         { label: 'Billing & Invoicing', route: '/invoicing', soon: true },

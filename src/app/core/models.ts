@@ -71,3 +71,42 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   closed: 'Closed',
 };
 
+export type ItemStatus =
+  | 'Available'
+  | 'On Rent'
+  | 'In Use'
+  | 'In Shop'
+  | 'Staged'
+  | 'Active'
+  | 'Inactive'
+  | 'In Stock'
+  | 'Low'
+  | 'Committed';
+
+/** Typed catalog item (core). Common shape across types; vertical-specific
+ *  fields (meter hours, lot, …) will live in an `extended` map in a later slice. */
+export interface Item {
+  id: string;
+  type: CatalogType;
+  name: string;
+  category: string;
+  status: ItemStatus;
+  /** on-hand / owned quantity (1 for serialized & labor) */
+  qty: number;
+  /** daily retail rate (rentable types) or 0 */
+  rateDaily: number;
+  notes?: string;
+}
+
+/** Per-type statuses offered in the Items & Stock editor. */
+export const ITEM_STATUSES: Record<CatalogType, ItemStatus[]> = {
+  serialized: ['Available', 'On Rent', 'In Shop', 'Staged'],
+  bulk: ['Available', 'Committed'],
+  consumable: ['In Stock', 'Low'],
+  part: ['In Stock', 'Low'],
+  labor: ['Active', 'Inactive'],
+  kit: ['Available', 'On Rent', 'In Shop'],
+  attachment: ['Available', 'On Rent'],
+};
+
+

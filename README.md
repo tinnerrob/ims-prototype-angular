@@ -24,6 +24,7 @@ src/app/
 ├── features/
 │   ├── dashboard/       # Landing + port roadmap
 │   ├── categories/      # Categories & Types (list + add/rename/remove)
+│   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
 ├── app.routes.ts        # Core-first route map
@@ -45,7 +46,7 @@ touching feature code.
 
 - [x] Foundation: shell, typed data store + persistence, routing, Categories & Types.
 - [x] Parties & Orders (core) — parties CRUD + order headers + detail + persistence.
-- [ ] Items & Stock (core) — typed catalog + item registry + line-item booking.
+- [x] Items & Stock (core) — typed catalog: list + CRUD per item type.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [ ] Item Hand-Off & Custody (core) — movements / issue-return.
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,

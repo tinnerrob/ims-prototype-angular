@@ -1,0 +1,92 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Items &amp; Stock</h1>
+      <p class="page-sub">Core typed catalog across serialized, bulk, consumable, parts, labor, kits &amp; attachments.</p>
+    </div>
+    <span class="core-tag">Core · always on</span>
+  </div>
+
+  <div class="card">
+    <div class="type-tabs">
+      @for (t of types; track t.key) {
+        <button type="button" class="type-tab" [class.active]="type === t.key" (click)="type = t.key">
+          {{ t.label }}
+        </button>
+      }
+    </div>
+
+    <div class="card-body">
+      <div class="toolbar">
+        <span class="count">{{ items().length }} record(s)</span>
+        <button class="btn btn-primary" (click)="openForm()">+ New {{ type }}</button>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th><th>Name</th><th>Category</th><th>Status</th><th class="th-end">Qty</th><th class="th-end">Daily $</th><th class="th-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (it of items(); track it.id) {
+            <tr>
+              <td class="mono strong">{{ it.id }}</td>
+              <td>{{ it.name }}</td>
+              <td>{{ it.category }}</td>
+              <td><span class="status">{{ it.status }}</span></td>
+              <td class="td-end">{{ it.qty }}</td>
+              <td class="td-end">{{ it.rateDaily ? '$' + it.rateDaily : '—' }}</td>
+              <td class="td-end">
+                <button class="btn btn-ghost btn-sm" (click)="openForm(it)">Edit</button>
+                <button class="btn btn-danger-ghost btn-sm" (click)="remove(it)">Remove</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="empty">No {{ type }} items yet — add one above.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+@if (formOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">{{ editingId ? 'Edit ' + editingId : 'New ' + type }}</span>
+        <button class="icon-btn" (click)="closeForm()" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        @if (editingId) {
+          <div class="field"><label>ID (read-only)</label><input class="input" [value]="editingId" disabled /></div>
+        }
+        <div class="field"><label>Name *</label><input class="input" [(ngModel)]="form.name" /></div>
+        <div class="row2">
+          <div class="field">
+            <label>Category</label>
+            <select class="input" [(ngModel)]="form.category">
+              @for (c of categories(); track c) { <option [value]="c">{{ c }}</option> }
+            </select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select class="input" [(ngModel)]="form.status">
+              @for (s of statuses[type]; track s) { <option [value]="s">{{ s }}</option> }
+            </select>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Quantity</label><input class="input" type="number" min="0" [(ngModel)]="form.qty" /></div>
+          <div class="field"><label>Daily rate ($)</label><input class="input" type="number" min="0" [(ngModel)]="form.rateDaily" /></div>
+        </div>
+        <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="closeForm()">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="!form.name.trim()">Save</button>
+      </div>
+    </div>
+  </div>
+}
