@@ -250,6 +250,19 @@ export interface Dispatch {
 
 export const DISPATCH_STATUSES: DispatchStatus[] = ['Staged', 'En Route', 'Delivered', 'Pending Return'];
 
+export type InvoiceStatus = 'pending' | 'invoiced' | 'paid';
+
+export interface Invoice {
+  id: string;
+  orderId: string;
+  orderLabel: string;
+  amount: number;
+  periodStart: string;
+  periodEnd: string;
+  status: InvoiceStatus;
+}
+
+
 
 
 

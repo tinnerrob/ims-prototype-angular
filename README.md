@@ -25,6 +25,7 @@ src/app/
 │   ├── dashboard/       # Landing + port roadmap
 │   ├── categories/      # Categories & Types (list + add/rename/remove)
 │   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
+│   ├── invoicing/       # Billing & Invoicing (module: invoices from orders)
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
 │   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
 │   ├── locations/       # Locations (yards/branches/warehouses/bins)
@@ -59,8 +60,8 @@ touching feature code.
 - [x] Locations (core) — yard/branch/warehouse/bin CRUD.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
-- [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch ported.
-- [ ] Remaining modules: allocations, telemetry, billing (allocations timeline + telemetry sim are the two complex UI ones).
+- [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
+- [ ] Remaining modules: allocations + telemetry (timeline + GPS-sim UI are the two complex ones) and an Admin config view to toggle modules.
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

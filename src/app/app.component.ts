@@ -40,6 +40,7 @@ export class AppComponent {
         { label: 'Labor & Timesheets', route: '/timesheet' },
         { label: 'Logistics & Dispatch', route: '/logistics' },
         { label: 'Rentals & Sub-Rentals', route: '/rentals' },
+        { label: 'Billing & Invoicing', route: '/invoicing' },
       ],
     },
     {

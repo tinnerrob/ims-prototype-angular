@@ -17,6 +17,8 @@ import {
   DispatchStatus,
   Timesheet,
   Vehicle,
+  Invoice,
+  InvoiceStatus,
   WorkOrder,
   WorkOrderStatus,
 } from './models';
@@ -47,6 +49,7 @@ export class DataService {
     rentals: RentalSub[];
     vehicles: Vehicle[];
     dispatches: Dispatch[];
+    invoices: Invoice[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
@@ -60,6 +63,7 @@ export class DataService {
     rentals: this.seedRentals(),
     vehicles: this.seedVehicles(),
     dispatches: this.seedDispatches(),
+    invoices: [],
   };
 
   constructor() {
@@ -87,6 +91,7 @@ export class DataService {
       if (Array.isArray(snap.rentals)) this.db.rentals = snap.rentals;
       if (Array.isArray(snap.vehicles)) this.db.vehicles = snap.vehicles;
       if (Array.isArray(snap.dispatches)) this.db.dispatches = snap.dispatches;
+      if (Array.isArray(snap.invoices)) this.db.invoices = snap.invoices;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -111,6 +116,7 @@ export class DataService {
           rentals: this.db.rentals,
           vehicles: this.db.vehicles,
           dispatches: this.db.dispatches,
+          invoices: this.db.invoices,
         }),
       );
     } catch {
@@ -457,6 +463,88 @@ export class DataService {
       if (!Number.isNaN(n) && n > max) max = n;
     }
     return 'DSP-' + String(max + 1).padStart(3, '0');
+  }
+
+  /* ----------------------------- billing -------------------------------- */
+
+  listInvoices(): Invoice[] {
+    return [...this.db.invoices];
+  }
+
+  activeOrders() {
+    return this.db.orders.filter((o) => o.status === 'active');
+  }
+
+  /** Whole days spanned by an order window (inclusive). */
+  orderDays(order: Order): number {
+    const s = Date.parse(order.startDate + 'T00:00:00');
+    const e = Date.parse(order.endDate + 'T00:00:00');
+    return Math.max(1, Math.round((e - s) / 86400000) + 1);
+  }
+
+  /** Simple cycle amount: sum of rateDaily * qty * days across the order lines. */
+  orderAmount(order: Order): number {
+    const days = this.orderDays(order);
+    const total = order.lineItems.reduce((sum, li) => {
+      const item = this.getItem(li.type, li.refId);
+      const rate = item?.rateDaily ?? 0;
+      return sum + rate * li.qty * days;
+    }, 0);
+    return Math.round(total * 100) / 100;
+  }
+
+  invoiceFor(orderId: string): Invoice | undefined {
+    return this.db.invoices.find((i) => i.orderId === orderId);
+  }
+
+  /** Invoice every active order that does not yet have one. Returns count created. */
+  generateInvoices(): number {
+    let created = 0;
+    for (const o of this.activeOrders()) {
+      if (this.invoiceFor(o.orderId)) continue;
+      const amount = this.orderAmount(o);
+      this.db.invoices.push({
+        id: this.nextInvoiceId(),
+        orderId: o.orderId,
+        orderLabel: `${o.orderId} · ${o.projectName}`,
+        amount,
+        periodStart: o.startDate,
+        periodEnd: o.endDate,
+        status: 'pending',
+      });
+      created++;
+    }
+    this.save();
+    return created;
+  }
+
+  markInvoicePaid(id: string): void {
+    const inv = this.db.invoices.find((i) => i.id === id);
+    if (inv) {
+      inv.status = 'paid';
+      this.save();
+    }
+  }
+
+  removeInvoice(id: string): void {
+    const i = this.db.invoices.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.invoices.splice(i, 1);
+      this.save();
+    }
+  }
+
+  totalBilled(): number {
+    return this.db.invoices.reduce((s, i) => s + i.amount, 0);
+  }
+
+  private nextInvoiceId(): string {
+    let max = 0;
+    for (const i of this.db.invoices) {
+      const n = Number(i.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'INV-' + String(max + 1).padStart(3, '0');
   }
 
   /* ---------------------------- work orders ----------------------------- */

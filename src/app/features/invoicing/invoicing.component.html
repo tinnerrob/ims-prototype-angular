@@ -1,0 +1,49 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Billing &amp; Invoicing</h1>
+      <p class="page-sub">Industry module: invoices derived from priced orders (simple rate × qty × days).</p>
+    </div>
+    <span class="mod-tag">MODULE · billing</span>
+  </div>
+
+  <div class="stat-row">
+    <div class="card stat"><span class="stat-label">Total billed</span><span class="stat-value">${{ data.totalBilled() }}</span></div>
+    <div class="card stat"><span class="stat-label">Invoices</span><span class="stat-value">{{ invoices().length }}</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="toolbar">
+        <button class="btn btn-primary" (click)="run()">Run Invoicing</button>
+      </div>
+      @if (lastRun > 0) {
+        <p class="empty">Created {{ lastRun }} invoice(s).</p>
+      }
+      <table class="table">
+        <thead>
+          <tr><th>Invoice</th><th>Order</th><th>Period</th><th class="th-end">Amount</th><th>Status</th><th class="th-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (inv of invoices(); track inv.id) {
+            <tr>
+              <td class="mono strong">{{ inv.id }}</td>
+              <td>{{ inv.orderLabel }}</td>
+              <td>{{ inv.periodStart }} → {{ inv.periodEnd }}</td>
+              <td class="td-end strong">${{ inv.amount }}</td>
+              <td><span class="status" [class.off]="inv.status === 'paid'">{{ label[inv.status] }}</span></td>
+              <td class="td-end">
+                @if (inv.status !== 'paid') {
+                  <button class="btn btn-ghost btn-sm" (click)="markPaid(inv)">Mark paid</button>
+                }
+                <button class="btn btn-danger-ghost btn-sm" (click)="remove(inv)">Remove</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="empty">No invoices yet — run invoicing to generate them from active orders.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
