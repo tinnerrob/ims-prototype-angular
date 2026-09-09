@@ -6,6 +6,9 @@
 core with opt-in industry modules layered on top. It is being written incrementally,
 porting one feature at a time from the prototype (source of truth).
 
+> **Resuming work?** Read `docs/HANDOFF.md` — it documents the full current state,
+> the scheduler behavior/model, conventions, and known gaps.
+
 ## Run locally
 
 ```bash
