@@ -12,6 +12,8 @@ import {
   OrderLine,
   OrderStatus,
   Party,
+  WorkOrder,
+  WorkOrderStatus,
 } from './models';
 
 /**
@@ -35,6 +37,7 @@ export class DataService {
     movements: Movement[];
     locations: Location[];
     inspections: Inspection[];
+    workOrders: WorkOrder[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
@@ -43,6 +46,7 @@ export class DataService {
     movements: this.seedMovements(),
     locations: this.seedLocations(),
     inspections: this.seedInspections(),
+    workOrders: this.seedWorkOrders(),
   };
 
   constructor() {
@@ -65,6 +69,7 @@ export class DataService {
       if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
       if (Array.isArray(snap.locations)) this.db.locations = snap.locations;
       if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
+      if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -84,6 +89,7 @@ export class DataService {
           movements: this.db.movements,
           locations: this.db.locations,
           inspections: this.db.inspections,
+          workOrders: this.db.workOrders,
         }),
       );
     } catch {
@@ -311,6 +317,44 @@ export class DataService {
   }
 
   /* -------------------------------- seeds ------------------------------- */
+
+  /* ---------------------------- work orders ----------------------------- */
+
+  listWorkOrders(): WorkOrder[] {
+    return [...this.db.workOrders].sort((a, b) => (a.openedAt < b.openedAt ? 1 : -1));
+  }
+
+  createWorkOrder(data: Omit<WorkOrder, 'id' | 'status'> & { status?: WorkOrderStatus }): WorkOrder {
+    const rec: WorkOrder = { ...data, id: this.nextWorkOrderId(), status: data.status ?? 'Open' };
+    this.db.workOrders.push(rec);
+    this.save();
+    return rec;
+  }
+
+  setWorkOrderStatus(id: string, status: WorkOrderStatus): void {
+    const w = this.db.workOrders.find((x) => x.id === id);
+    if (w) {
+      w.status = status;
+      this.save();
+    }
+  }
+
+  removeWorkOrder(id: string): void {
+    const i = this.db.workOrders.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.workOrders.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextWorkOrderId(): string {
+    let max = 0;
+    for (const w of this.db.workOrders) {
+      const n = Number(w.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'WO-' + String(max + 1).padStart(3, '0');
+  }
 
   /* ---------------------------- inspections ----------------------------- */
 
@@ -547,6 +591,13 @@ export class DataService {
     return [
       { id: 'INS-001', itemId: 'EQ-101', date: new Date().toISOString().slice(0, 10), direction: 'out', meter: 2210, fuel: 85, notes: 'Issued out — clean.', status: 'Open' },
       { id: 'INS-002', itemId: 'EQ-103', date: new Date(Date.now() - 86400000).toISOString().slice(0, 10), direction: 'in', meter: 3180, fuel: 40, notes: 'Returned from shop.', status: 'Closed' },
+    ];
+  }
+
+  private seedWorkOrders(): WorkOrder[] {
+    return [
+      { id: 'WO-001', itemId: 'EQ-103', title: 'Hydraulic leak repair', serviceType: 'Repair', status: 'Open', priority: 'high', openedAt: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10), notes: 'Bucket tilt line weeping.' },
+      { id: 'WO-002', itemId: 'EQ-101', title: '50-hour service', serviceType: 'Preventive', status: 'In Progress', priority: 'normal', openedAt: new Date(Date.now() - 86400000).toISOString().slice(0, 10) },
     ];
   }
 }

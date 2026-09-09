@@ -34,7 +34,13 @@ export class AppComponent {
       ],
     },
     {
-      title: 'Planned (to port)',
+      title: 'Modules · Opt-in',
+      items: [
+        { label: 'Field Service & Maintenance', route: '/maintenance' },
+      ],
+    },
+    {
+      title: 'Modules · Planned',
       items: [
         { label: 'Allocations & Scheduling', route: '/scheduler', soon: true },
         { label: 'Billing & Invoicing', route: '/invoicing', soon: true },

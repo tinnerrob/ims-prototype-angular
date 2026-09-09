@@ -1,0 +1,90 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Field Service &amp; Maintenance</h1>
+      <p class="page-sub">Industry module: maintenance work orders against item instances (service).</p>
+    </div>
+    <span class="mod-tag">MODULE · service</span>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="toolbar">
+        <button class="btn btn-primary" (click)="openForm()">+ New Work Order</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>WO</th><th>Item</th><th>Title</th><th>Type</th><th>Priority</th><th>Status</th><th>Opened</th><th class="th-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (wo of workOrders(); track wo.id) {
+            <tr>
+              <td class="mono strong">{{ wo.id }}</td>
+              <td>{{ data.itemLabel('serialized', wo.itemId) }}</td>
+              <td>{{ wo.title }}</td>
+              <td>{{ wo.serviceType }}</td>
+              <td><span class="status prio-{{ wo.priority }}">{{ wo.priority }}</span></td>
+              <td>
+                <select class="input status-sel" [value]="wo.status" (change)="setStatus(wo, $any($event.target).value)">
+                  @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+                </select>
+              </td>
+              <td>{{ wo.openedAt }}</td>
+              <td class="td-end">
+                <button class="btn btn-danger-ghost btn-sm" (click)="remove(wo)">Remove</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="8" class="empty">No work orders yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+@if (formOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">New Work Order</span>
+        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Serialized item *</label>
+          <select class="input" [(ngModel)]="form.itemId">
+            @for (it of serialized(); track it.id) {
+              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="field"><label>Title *</label><input class="input" [(ngModel)]="form.title" /></div>
+        <div class="row2">
+          <div class="field">
+            <label>Service type</label>
+            <input class="input" [(ngModel)]="form.serviceType" list="svcTypes" />
+            <datalist id="svcTypes">
+              <option value="Repair"></option>
+              <option value="Preventive"></option>
+              <option value="Inspection"></option>
+            </datalist>
+          </div>
+          <div class="field">
+            <label>Priority</label>
+            <select class="input" [(ngModel)]="form.priority">
+              <option value="low">Low</option>
+              <option value="normal">Normal</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="!form.title.trim()">Create</button>
+      </div>
+    </div>
+  </div>
+}

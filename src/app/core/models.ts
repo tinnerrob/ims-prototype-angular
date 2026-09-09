@@ -164,6 +164,51 @@ export interface Inspection {
   status: 'Open' | 'Closed';
 }
 
+/* ------------------------- industry modules --------------------------- */
+
+export type ModuleKey =
+  | 'scheduling'
+  | 'dispatch'
+  | 'telemetry'
+  | 'labor'
+  | 'service'
+  | 'rentals'
+  | 'billing';
+
+export interface IndustryModuleDef {
+  key: ModuleKey;
+  label: string;
+  desc: string;
+}
+
+/** Industry modules layered on the IMS core (all core-only deps today). */
+export const INDUSTRY_MODULES: IndustryModuleDef[] = [
+  { key: 'scheduling', label: 'Allocations & Scheduling', desc: 'Plan availability and allocation of inventory over time.' },
+  { key: 'dispatch', label: 'Logistics & Dispatch', desc: 'Dispatch board for deliveries, pickups, and routes.' },
+  { key: 'telemetry', label: 'Fleet Telemetry', desc: 'Live fleet telemetry and geofence monitoring.' },
+  { key: 'labor', label: 'Labor & Timesheets', desc: 'Labor time records against orders and work orders.' },
+  { key: 'service', label: 'Field Service & Maintenance', desc: 'Field service and maintenance work orders on items.' },
+  { key: 'rentals', label: 'Rentals & Sub-Rentals', desc: 'Rental / sub-rental loans from third-party vendors.' },
+  { key: 'billing', label: 'Billing & Invoicing', desc: 'Invoice generation derived from priced orders.' },
+];
+
+export type WorkOrderStatus = 'Open' | 'In Progress' | 'Completed';
+export type WorkOrderPriority = 'low' | 'normal' | 'high';
+
+export interface WorkOrder {
+  id: string;
+  itemId: string; // serialized item under service
+  title: string;
+  serviceType: string;
+  status: WorkOrderStatus;
+  priority: WorkOrderPriority;
+  openedAt: string; // ISO date
+  notes?: string;
+}
+
+export const WORK_ORDER_STATUSES: WorkOrderStatus[] = ['Open', 'In Progress', 'Completed'];
+
+
 
 
 
