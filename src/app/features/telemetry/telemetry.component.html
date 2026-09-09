@@ -1,0 +1,59 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Fleet Telemetry</h1>
+      <p class="page-sub">Industry module: live GPS ping simulation with geofence monitoring (yard radius {{ radius }}m).</p>
+    </div>
+    <span class="mod-tag">MODULE · telemetry</span>
+  </div>
+
+  <div class="stat-row">
+    <div class="card stat"><span class="stat-label">Tracked</span><span class="stat-value">{{ pings.length }}</span></div>
+    <div class="card stat"><span class="stat-label">On site / out</span><span class="stat-value">{{ outCount() }}</span></div>
+    <div class="card stat"><span class="stat-label">Breaches logged</span><span class="stat-value">{{ breachCount() }}</span></div>
+  </div>
+
+  <div class="split">
+    <div class="card">
+      <div class="card-header">Live board</div>
+      <div class="card-body">
+        <table class="table">
+          <thead>
+            <tr><th>Asset</th><th>Status</th><th>Location</th><th>Signal</th><th>Battery</th><th>Last ping</th></tr>
+          </thead>
+          <tbody>
+            @for (p of pings; track p.itemId) {
+              <tr>
+                <td class="strong">{{ p.itemId }}<div class="sub">{{ p.name }}</div></td>
+                <td><span class="status" [class.off]="!p.inYard">{{ p.status }}</span></td>
+                <td>
+                  <span class="loc" [class.away]="!p.inYard">
+                    <span class="loc-dot"></span>{{ p.inYard ? 'Yard' : 'On site' }}
+                  </span>
+                </td>
+                <td>{{ p.signal }}%</td>
+                <td>{{ p.battery }}%</td>
+                <td class="mono">{{ p.lastSeen }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">Telemetry feed</div>
+      <div class="card-body feed">
+        @for (e of feed; track e.id) {
+          <div class="feed-row">
+            <span class="mono feed-time">{{ e.at }}</span>
+            <span class="feed-kind" [class.breach]="e.kind === 'breach'">{{ e.kind }}</span>
+            <span class="feed-msg">{{ e.msg }}</span>
+          </div>
+        } @empty {
+          <p class="empty">Waiting for the next ping…</p>
+        }
+      </div>
+    </div>
+  </div>
+</section>

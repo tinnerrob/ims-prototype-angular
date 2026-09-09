@@ -14,6 +14,7 @@ import { MaintenanceComponent } from './features/maintenance/maintenance.compone
 import { OrdersComponent } from './features/orders/orders.component';
 import { RentalsComponent } from './features/rentals/rentals.component';
 import { SchedulerComponent } from './features/scheduler/scheduler.component';
+import { TelemetryComponent } from './features/telemetry/telemetry.component';
 import { TimesheetComponent } from './features/timesheet/timesheet.component';
 
 /**
@@ -36,6 +37,7 @@ export const routes: Routes = [
   { path: 'orders', component: OrdersComponent },
   { path: 'rentals', component: RentalsComponent, canActivate: [requireModule('rentals')] },
   { path: 'scheduler', component: SchedulerComponent, canActivate: [requireModule('scheduling')] },
+  { path: 'telemetry', component: TelemetryComponent, canActivate: [requireModule('telemetry')] },
   { path: 'timesheet', component: TimesheetComponent, canActivate: [requireModule('labor')] },
   { path: '**', redirectTo: 'dashboard' },
 ];

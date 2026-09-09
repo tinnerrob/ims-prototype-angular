@@ -122,6 +122,18 @@ body {
   font-weight: 800;
 }
 
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- card ---------- */
 .card {
   background: var(--card);

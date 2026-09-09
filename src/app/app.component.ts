@@ -42,12 +42,7 @@ export class AppComponent {
         { label: 'Logistics & Dispatch', route: '/logistics' },
         { label: 'Rentals & Sub-Rentals', route: '/rentals' },
         { label: 'Billing & Invoicing', route: '/invoicing' },
-      ],
-    },
-    {
-      title: 'Modules · Planned',
-      items: [
-        { label: 'Fleet Telemetry', route: '/telemetry', soon: true },
+        { label: 'Fleet Telemetry', route: '/telemetry' },
       ],
     },
     {

@@ -32,7 +32,8 @@ export class DashboardComponent {
     { route: '/invoicing', title: 'Billing & Invoicing (module)', done: true, note: 'Ported (invoices from priced orders, gated).' },
     { route: '/admin', title: 'Feature Modules (admin)', done: true, note: 'Ported (toggle industry modules).' },
     { route: '/scheduler', title: 'Allocations & Scheduling (module)', done: true, note: 'Ported (week timeline + conflicts + booking).' },
-    { route: '/telemetry', title: 'Fleet Telemetry (module)', done: false, note: 'GPS sim UI — remaining.' },
+    { route: '/telemetry', title: 'Fleet Telemetry (module)', done: true, note: 'Ported (live GPS sim + geofence feed).' },
+    { route: '/scheduler', title: 'Allocations & Scheduling (module)', done: true, note: 'Ported (week timeline + conflicts + booking).' },
     { route: '/invoicing', title: 'Billing (module)', done: false, note: 'Industry module over core.' },
   ];
 

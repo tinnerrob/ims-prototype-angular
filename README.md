@@ -34,6 +34,7 @@ src/app/
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
 │   ├── scheduler/       # Allocations & Scheduling (module: week timeline + conflicts)
+│   ├── telemetry/       # Fleet Telemetry (module: GPS sim live feed)
 │   ├── timesheet/       # Labor & Timesheets (module: time records)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
@@ -65,7 +66,9 @@ touching feature code.
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
 - [x] Admin: Feature Modules toggle view.
 - [x] Allocations & Scheduling — week timeline, conflict detection, item booking.
-- [ ] Fleet Telemetry — GPS-sim live feed (the last module).
+- [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
+
+**Port coverage complete:** full core + all 6 industry modules + module gating + admin, on a single typed, persisted data store.
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 
