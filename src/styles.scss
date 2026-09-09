@@ -413,6 +413,12 @@ body {
   gap: 12px;
 }
 
+.row3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
 .detail-meta {
   display: flex;
   flex-wrap: wrap;

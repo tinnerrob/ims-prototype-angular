@@ -9,6 +9,7 @@ import { ItemsComponent } from './features/items/items.component';
 import { LocationsComponent } from './features/locations/locations.component';
 import { MaintenanceComponent } from './features/maintenance/maintenance.component';
 import { OrdersComponent } from './features/orders/orders.component';
+import { RentalsComponent } from './features/rentals/rentals.component';
 import { TimesheetComponent } from './features/timesheet/timesheet.component';
 
 /**
@@ -26,6 +27,7 @@ export const routes: Routes = [
   { path: 'locations', component: LocationsComponent },
   { path: 'maintenance', component: MaintenanceComponent, canActivate: [requireModule('service')] },
   { path: 'orders', component: OrdersComponent },
+  { path: 'rentals', component: RentalsComponent, canActivate: [requireModule('rentals')] },
   { path: 'timesheet', component: TimesheetComponent, canActivate: [requireModule('labor')] },
   { path: '**', redirectTo: 'dashboard' },
 ];

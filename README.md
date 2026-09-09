@@ -29,6 +29,7 @@ src/app/
 │   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
 │   ├── locations/       # Locations (yards/branches/warehouses/bins)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
+│   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
 │   ├── timesheet/       # Labor & Timesheets (module: time records)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
@@ -57,8 +58,8 @@ touching feature code.
 - [x] Locations (core) — yard/branch/warehouse/bin CRUD.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
-- [x] Module registry + gating (ModulesService + route guard) — Field Service & Maintenance + Labor & Timesheets ported.
-- [ ] Remaining modules: allocations, dispatch, telemetry, rentals, billing (each needs its own data tables + UI).
+- [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor & Timesheets, Rentals ported.
+- [ ] Remaining modules: allocations, dispatch, telemetry, billing (each needs its own data tables + UI).
 - [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 

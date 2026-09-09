@@ -27,6 +27,7 @@ export class DashboardComponent {
     { route: '/inspections', title: 'Receiving / Inspections', done: true, note: 'Ported (check in/out with meter/fuel log).' },
     { route: '/maintenance', title: 'Field Service & Maintenance (module)', done: true, note: 'Ported (work orders on items, gated by ModulesService).' },
     { route: '/timesheet', title: 'Labor & Timesheets (module)', done: true, note: 'Ported (time records vs orders/shop, gated).' },
+    { route: '/rentals', title: 'Rentals & Sub-Rentals (module)', done: true, note: 'Ported (vendor sub-rentals with spread, gated).' },
     { route: '/scheduler', title: 'Allocations (module)', done: false, note: 'Industry module over core.' },
     { route: '/invoicing', title: 'Billing (module)', done: false, note: 'Industry module over core.' },
   ];

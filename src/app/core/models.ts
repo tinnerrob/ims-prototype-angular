@@ -218,6 +218,18 @@ export interface Timesheet {
   note?: string;
 }
 
+export interface RentalSub {
+  id: string;
+  itemId?: string | null; // catalog item when it maps to one
+  assetName: string;
+  vendor: string;
+  vendorCost: number; // daily cost to us
+  retailRate: number; // daily billable
+  qty: number;
+  note?: string;
+}
+
+
 
 
 

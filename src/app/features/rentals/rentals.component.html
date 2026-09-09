@@ -1,0 +1,81 @@
+<section class="page">
+  <div class="page-head">
+    <div>
+      <h1>Rentals &amp; Sub-Rentals</h1>
+      <p class="page-sub">Industry module: rent equipment in from third-party vendors to cover demand.</p>
+    </div>
+    <span class="mod-tag">MODULE · rentals</span>
+  </div>
+
+  <div class="stat-row">
+    <div class="card stat"><span class="stat-label">Sub-rentals</span><span class="stat-value">{{ rentals().length }}</span></div>
+    <div class="card stat"><span class="stat-label">Net daily spread</span><span class="stat-value">${{ totalSpread() }}</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div class="toolbar">
+        <button class="btn btn-primary" (click)="openForm()">+ New Sub-Rental</button>
+      </div>
+      <table class="table">
+        <thead>
+          <tr><th>ID</th><th>Asset</th><th>Vendor</th><th class="th-end">Cost</th><th class="th-end">Retail</th><th class="th-end">Qty</th><th class="th-end">Spread</th><th>Note</th><th class="th-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (r of rentals(); track r.id) {
+            <tr>
+              <td class="mono strong">{{ r.id }}</td>
+              <td>{{ r.assetName }}</td>
+              <td>{{ r.vendor }}</td>
+              <td class="td-end">${{ r.vendorCost }}</td>
+              <td class="td-end">${{ r.retailRate }}</td>
+              <td class="td-end">{{ r.qty }}</td>
+              <td class="td-end strong">${{ data.rentalSpread(r) }}</td>
+              <td>{{ r.note || '—' }}</td>
+              <td class="td-end"><button class="btn btn-danger-ghost btn-sm" (click)="remove(r)">Remove</button></td>
+            </tr>
+          } @empty {
+            <tr><td colspan="9" class="empty">No sub-rentals yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+@if (formOpen) {
+  <div class="overlay">
+    <div class="panel">
+      <div class="panel-head">
+        <span class="panel-title">New Sub-Rental</span>
+        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
+      </div>
+      <div class="panel-body">
+        <div class="field">
+          <label>Map to catalog item (optional)</label>
+          <select class="input" [(ngModel)]="form.itemId" (ngModelChange)="onItemChange()">
+            <option value="">— no mapping / external asset —</option>
+            @for (it of catalog(); track it.id) {
+              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
+            }
+          </select>
+        </div>
+        <div class="field">
+          <label>Asset name *</label>
+          <input class="input" [(ngModel)]="form.assetName" [disabled]="form.itemId !== ''" placeholder="e.g. Generac 100 kW Generator" />
+        </div>
+        <div class="field"><label>Vendor *</label><input class="input" [(ngModel)]="form.vendor" /></div>
+        <div class="row3">
+          <div class="field"><label>Vendor cost/day</label><input class="input" type="number" min="0" [(ngModel)]="form.vendorCost" /></div>
+          <div class="field"><label>Retail/day</label><input class="input" type="number" min="0" [(ngModel)]="form.retailRate" /></div>
+          <div class="field"><label>Qty</label><input class="input" type="number" min="1" [(ngModel)]="form.qty" /></div>
+        </div>
+        <div class="field"><label>Note</label><input class="input" [(ngModel)]="form.note" /></div>
+      </div>
+      <div class="panel-foot">
+        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="!form.vendor.trim() || !(form.itemId || form.assetName.trim())">Save</button>
+      </div>
+    </div>
+  </div>
+}

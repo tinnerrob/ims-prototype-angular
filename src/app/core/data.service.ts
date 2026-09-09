@@ -12,6 +12,7 @@ import {
   OrderLine,
   OrderStatus,
   Party,
+  RentalSub,
   Timesheet,
   WorkOrder,
   WorkOrderStatus,
@@ -40,6 +41,7 @@ export class DataService {
     inspections: Inspection[];
     workOrders: WorkOrder[];
     timesheets: Timesheet[];
+    rentals: RentalSub[];
   } = {
     settings: { categories: this.seedCategories() },
     parties: this.seedParties(),
@@ -50,6 +52,7 @@ export class DataService {
     inspections: this.seedInspections(),
     workOrders: this.seedWorkOrders(),
     timesheets: this.seedTimesheets(),
+    rentals: this.seedRentals(),
   };
 
   constructor() {
@@ -74,6 +77,7 @@ export class DataService {
       if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
       if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
       if (Array.isArray(snap.timesheets)) this.db.timesheets = snap.timesheets;
+      if (Array.isArray(snap.rentals)) this.db.rentals = snap.rentals;
     } catch {
       /* corrupted storage -> keep seed */
     }
@@ -95,6 +99,7 @@ export class DataService {
           inspections: this.db.inspections,
           workOrders: this.db.workOrders,
           timesheets: this.db.timesheets,
+          rentals: this.db.rentals,
         }),
       );
     } catch {
@@ -355,6 +360,40 @@ export class DataService {
       if (!Number.isNaN(n) && n > max) max = n;
     }
     return 'TS-' + String(max + 1).padStart(4, '0');
+  }
+
+  /* ------------------------------ rentals ------------------------------- */
+
+  listRentals(): RentalSub[] {
+    return [...this.db.rentals];
+  }
+
+  createRental(data: Omit<RentalSub, 'id'>): RentalSub {
+    const rec: RentalSub = { ...data, id: this.nextRentalId() };
+    this.db.rentals.push(rec);
+    this.save();
+    return rec;
+  }
+
+  removeRental(id: string): void {
+    const i = this.db.rentals.findIndex((x) => x.id === id);
+    if (i >= 0) {
+      this.db.rentals.splice(i, 1);
+      this.save();
+    }
+  }
+
+  rentalSpread(r: RentalSub): number {
+    return (r.retailRate - r.vendorCost) * r.qty;
+  }
+
+  private nextRentalId(): string {
+    let max = 0;
+    for (const r of this.db.rentals) {
+      const n = Number(r.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'RR-' + String(max + 1).padStart(3, '0');
   }
 
   /* ---------------------------- work orders ----------------------------- */
@@ -644,6 +683,12 @@ export class DataService {
     return [
       { id: 'TS-0001', empId: 'EMP-001', date: new Date().toISOString().slice(0, 10), hours: 8, orderId: 'CT-2026-001', targetLabel: 'CT-2026-001 · Downtown Plaza', note: 'Boom operator' },
       { id: 'TS-0002', empId: 'EMP-001', date: new Date().toISOString().slice(0, 10), hours: 4, orderId: null, targetLabel: 'Shop', note: 'Maintenance support' },
+    ];
+  }
+
+  private seedRentals(): RentalSub[] {
+    return [
+      { id: 'RR-001', itemId: null, assetName: 'Generac 100 kW Generator', vendor: 'PowerGen Rentals', vendorCost: 110, retailRate: 175, qty: 1, note: 'Backfill for EQ fleet' },
     ];
   }
 }
