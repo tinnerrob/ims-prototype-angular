@@ -18,6 +18,7 @@ import {
   ViewSection,
 } from '../../shared/record-view/record-view.component';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
+import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 
 const DAY_MS = 86400000;
@@ -26,10 +27,6 @@ const DBLCLICK_MS = 250;
 const DAY_W = 90;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const TYPE_COLORS: Record<string, string> = {
-  serialized: '#16a34a', bulk: '#2563eb', consumable: '#d97706', part: '#0891b2',
-  labor: '#7c3aed', kit: '#059669', attachment: '#db2777',
-};
 
 type View = 'day' | 'week' | 'month';
 interface DayCol { start: number; label: string; sub: string; }
@@ -42,7 +39,6 @@ interface BarModel {
   /** Short label shown in the row gutter (prototype `shortItemLabel`). */
   short: string;
   sub: string;
-  color: string;
   conflict: boolean;
   geom: BarGeom;
 }
@@ -187,7 +183,11 @@ export class SchedulerComponent implements OnDestroy {
    */
   bookPrompt: { type: CatalogType; refId: string; orderId: string; qty: number } | null = null;
 
-  constructor(readonly data: DataService, private cdr: ChangeDetectorRef) {
+  constructor(
+    readonly data: DataService,
+    private cdr: ChangeDetectorRef,
+    private confirm: ConfirmService,
+  ) {
     // Anchor the calendar on the first active order's start week (prototype
     // `renderScheduler`), so the seeded orders are on screen immediately.
     const starts = this.orders()
@@ -356,6 +356,29 @@ export class SchedulerComponent implements OnDestroy {
     const qty = Math.max(1, Math.round(Number(el.value)) || 1);
     el.value = String(qty);
     if (qty !== this.lineQty(li)) this.setLineQty(order, li, qty);
+  }
+
+  /**
+   * Unbook an item — the `×` on its Order Details row, the exact inverse of the
+   * drag-to-book gesture (the item simply returns to the Assets pool). Asked, not
+   * assumed: the row is a single click target and dropping a line is not undoable,
+   * so the app-wide prompt (the same one that guards unsaved edits) names the item
+   * and the order instead of a bare "are you sure?".
+   */
+  async removeBooking(order: Order, li: OrderLine): Promise<void> {
+    const ok = await this.confirm.ask({
+      title: 'Remove this booking?',
+      message:
+        this.itemName(li.type, li.refId) +
+        ' will be unbooked from ' + order.orderId + ' and return to the Assets pool.',
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep it',
+    });
+    if (!ok) return;
+    this.data.removeOrderLine(order.orderId, li.id);
+    // Order Details, the timeline rows and the conflicts pane all read
+    // `order.lineItems` live, so dropping the line re-renders all three.
+    this.cdr.detectChanges();
   }
 
   /**
@@ -1064,7 +1087,6 @@ export class SchedulerComponent implements OnDestroy {
             label: o.orderId,
             short: o.orderId,
             sub: oSub,
-            color: '#334155',
             conflict: false,
             geom: og,
           }
@@ -1093,7 +1115,6 @@ export class SchedulerComponent implements OnDestroy {
           label: this.itemName(li.type, li.refId),
           short: this.shortItemLabel(li),
           sub: sub + (conflict ? ' - CONFLICT' : ''),
-          color: TYPE_COLORS[li.type] ?? '#334155',
           conflict,
           geom: lg,
         });

@@ -296,6 +296,19 @@
                 <div class="bl-main">
                   <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
                   <span class="bl-name">{{ itemName(li.type, li.refId) }}</span>
+                  <!-- Unbook: the row's only control, so it confirms (see
+                       `removeBooking()`) and swallows the click/double-click pair
+                       that the row reads as "open the viewer". -->
+                  <button
+                    class="bl-x"
+                    type="button"
+                    [attr.aria-label]="'Remove ' + itemName(li.type, li.refId) + ' from ' + o.orderId"
+                    title="Remove this item from the order"
+                    (click)="$event.stopPropagation(); removeBooking(o, li)"
+                    (dblclick)="$event.stopPropagation()"
+                  >
+                    <i class="bi bi-x-lg"></i>
+                  </button>
                 </div>
                 <div class="bl-when">
                   <span class="mono">{{ lineDates(li, o) }}</span>

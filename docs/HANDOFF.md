@@ -14,6 +14,13 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 
+Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
+~652 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
+(raised from 4 kB), because `scheduler.component.scss` — by far the largest component
+stylesheet, everything else lives in `styles.scss` — is ~4.4 kB minified. Builds should
+otherwise be warning-free; a new component-style warning means a component's SCSS has
+grown past that, not that the build broke.
+
 ## What is built (functionally complete port)
 
 Core (always-on) + all six industry modules, all on one typed, versioned,
@@ -134,21 +141,24 @@ detail right**, with orders as the top rows.
   dropped) the like types fall back together.
 - **Order Details line rows are three rows, led by ONE type dot** — no type badge:
 
-  ```
-  ● SS-204 · CAT 320 Excavator            ← code · name, one line (ellipsises)
-    8/20/26 → 8/24/26                     ← compact M/D/YY range, inset
-    $3,412.00                             ← what the booking bills
+  ```text
+  ● SS-204 · CAT 320 Excavator        ×      ← code · name, one line (ellipsises)
+    8/20/26 → 8/24/26                        ← compact M/D/YY range, inset
+    $3,412.00                                ← what the booking bills
   ```
 
-  The `.type-chip` is gone from these rows: the **dot carries the type**, filled
-  from the shared resource-type palette (`.tl-res-*`'s `--tint-accent`, the same
-  hue as that type's timeline bar; `--slate-400` for a type the palette doesn't
-  name). **One dot only** — on the item row — and the rows under it are inset by
+  The `.type-chip` is gone from these rows: the **dot carries the type**, painted from
+  the shared resource-type palette (`.tl-res-*`'s `--tint-accent` core with the type's
+  `--tint-bg` as a 2px halo — a miniature of that type's timeline bar, and the same hue
+  as its chip), with `--slate-400` covering a type the palette doesn't name. **One dot
+  only** — on the item row — and the rows under it are inset by
   `--bl-inset` (dot 7px + `.bl-main` gap 7px) so the date and the amount line up
-  exactly under the name and the dot reads as the bullet for the whole block.
-  Hovering the dot names the type (`typeLabel()`) — the only place the badge's
-  text survives. The "dbl-click a booking" header hint is gone (the row keeps its
-  own `title`, and double-click still opens the viewer). `lineDates()` →
+  exactly under the name and the dot reads as the bullet for the whole block. (The halo
+  is a `box-shadow`, i.e. painted *outside* the box, so it costs the row no layout width
+  and `--bl-inset` stays dot + gap.) Hovering the dot names the type (`typeLabel()`) —
+  the only place the badge's text survives. The "dbl-click a booking" header hint is
+  gone (the row keeps its own `title`, and double-click still opens the viewer).
+  `lineDates()` →
   `fmtDay()` gives the compact M/D/YY range, matching the pool cards. The amount is
   `lineRevenue()` = `data.lineTotal()`, a port of the prototype's
   `computeLineTotal()`: labor / consumable / part bill **once** (hourly billable,
@@ -171,6 +181,19 @@ detail right**, with orders as the top rows.
   1 while the DOM keeps showing what was typed (the bound value never "changed").
   Multi-unit bars also print it on the timeline (`5d · ×12`, `models()` →
   `qtySuffix()`), so a booked quantity is visible on the calendar too.
+- **Unbooking: the `×` at the right end of each booking row** (`.bl-x`, `removeBooking()`
+  in `scheduler.component.ts`) — the exact inverse of drag-to-book
+  (`data.removeOrderLine()`; the item goes back to the Assets pool). It is the row's only
+  control, so it **asks first**, through the app-wide `ConfirmService` (the same prompt
+  that guards unsaved edits, mounted once in the app shell; `scheduler` injects it),
+  naming the item and the order — the row's own click target is "double-click to view"
+  and dropping a line is not undoable. Details: the button sits at `.5` opacity rather
+  than `0`, since there is no row hover on touch and `opacity: 0` would leave a focusable
+  invisible control (it reddens on its own hover, rings on `:focus-visible`); it swallows
+  `click` **and** `dblclick` so a fast double-click doesn't also open the viewer, and a
+  second `confirm.ask()` supersedes the first, so that double-click still shows exactly
+  one prompt. Every list reads `order.lineItems` live, so Order Details, the timeline
+  rows and the conflicts pane all update the instant the line is dropped.
 - **Double-click to view (read-only):** pool cards, resource bars and Order
   Details booking rows open the shared `ims-record-view` **asset** viewer;
   order bars and queue cards open the **order/contract** viewer. The conflicts
@@ -332,24 +355,42 @@ detail right**, with orders as the top rows.
     "Calendar alignment" block at the end of the file); it is chosen to read on a white,
     banded *and* grey row. `--slate-100` (the old ring) vanished on a banded row.
   - *Lane heading:* the order/contract row (`.tl-row-order` / `.tl-row-contract`) is
-    deliberately **not** a stripe — it pins both band vars to the flat grey `--tl-base-row`
-    so label + track read as one continuous grey band, and its bar falls back to the grey
-    `--tl-base-bar` / `--tl-base-ink` / `--tl-base-accent` (it carries no `--tint-*`). The
-    pastel item rows underneath then read as that order's detail lines, and the grey row
-    is what makes "banding resets here" obvious. Keep `--tl-base-row` **light** (`#e8ecf4`):
-    it spans the full width, so a deep grey turns an unscheduled stretch into a black hole;
-    all the depth belongs to the bar.
-  - *Bar colours:* desaturated fill + dark same-hue ink, never solid saturated blocks
-    (monday-style). The recipe: **hue** per type (green 140, blue 210, orange 25, plus
-    cyan 190 / teal 175 / violet 265 / pink 330 and red for a conflict), **fill** at
-    S 25-35% / L 85-93%, **ink** a dark tone of the same hue and **accent** the mid tone
-    that draws the 3px left edge + the 40% border. Each pairing measures **≥ 7.3:1**, so
-    the 12px title *and* the 10.5px sub-line stay readable instead of leaning on the fill
-    to separate bars (`.tl-block-sub` is `opacity: .9`, still > 5.5:1). Declared once per
-    type on `.tl-res-*` (Scheduler, at the type palette in `styles.scss`) and `.ts-*`
-    (Timesheets — same values for the same kinds of bar, keeping `--tcol` as the stronger
-    hue for icons, the legend swatch and chip edges). `.tl-h` / `.ts-h` resize handles are
-    dark, not white, since the bars are light.
+    deliberately **not** a stripe — it pins both band vars to the flat **blue**
+    `--tl-base-row` so label + track read as one continuous blue band, and its bar falls
+    back to the blue `--tl-base-bar` / `--tl-base-ink` / `--tl-base-accent` (it carries no
+    `--tint-*`). The pastel item rows underneath then read as that order's detail lines,
+    and the blue row is what makes "banding resets here" obvious. Blue is the order's
+    colour everywhere — this band, the Timesheets' job bars and the active-contract
+    pickers — so the lead row announces itself before you read the id. Keep
+    `--tl-base-row` **light** (`hsl(214 40% 92%)`): it spans the full width, so a deep
+    blue turns an unscheduled stretch into a black hole; the depth belongs to the bar
+    (`hsl(214 52% 86%)`, a step deeper than the bulk pastel so the heading leads it),
+    and the label takes the same blue ink (`.tl-row-order .tl-row-label`, with its
+    `.text-muted2` party line at `hsl(214 32% 42%)`).
+  - *Bar colours:* pastel fill + dark same-hue ink, never solid saturated blocks
+    (monday-style). The recipe: **hue** per type, spaced around the wheel so no two types
+    are confused — green 148 (serialized), teal 168 (kit), cyan 192 (part), blue 214
+    (bulk), violet 264 (labor), pink 326 (attachment), amber 30 (consumable) and red 0 for
+    a conflict; **fill** at S 50-82% / L 89-92% (pastel = *tinted* and light, not grey —
+    the old S 25-35% fills read as dirty white next to the new ones), **ink** a dark tone
+    of the same hue (L 19-32) and **accent** the mid tone that draws the 3px left edge +
+    the 40% border + the Order Details dot. Each pairing measures **≥ 7.5:1** on its own
+    fill (sub-line at `opacity: .9` stays **> 5.9:1**, so the 12px title *and* the 10.5px
+    sub-line stay readable instead of leaning on the fill to separate bars) and every
+    accent stays above **3:1** on white for the dots/edges. Declared once per type on
+    `.tl-res-*` (`styles.scss`, the block commented "THE RESOURCE-TYPE PALETTE" — the
+    single source of truth), mirrored by `.ts-*` (Timesheets) and `.tc-*` (the type chips
+    in Orders / Invoicing / the conflicts pane, previously on the status tokens and
+    disagreeing with the calendar — a `bulk` chip was purple while a `bulk` bar was blue).
+    In the Timesheets `--tcol` is that type's accent, so the icons, the legend swatch,
+    the chip/punch-target edges and the summary mini-bars all match the dot and the bar
+    edge; the mini-bar itself now copies the bar recipe (type fill + accent on the left)
+    instead of a half-mixed tint. `.tl-h` / `.ts-h` resize handles are dark, not white,
+    since the bars are light. `ts-order` deliberately reuses the Scheduler's lane-heading
+    blue (fill L 86, not the lighter bulk pastel): the order is the job you clock into and
+    leads the row on both calendars. `ts-idle` (cool slate) and `ts-lunch` (warm stone,
+    S 22-24%) are the two neutrals — warm enough apart to tell apart at a glance, muted
+    enough not to be mistaken for the amber `overhead`.
   - *No selected row chrome:* clicking a calendar row sets the focus id but paints
     nothing — the work is drag/drop driven and the Order Details inspector reports the
     selection, so a blue row/ring was noise. Only the left **queue card**

@@ -65,16 +65,19 @@
   --tl-band-label-alt: #f0f4fa;
   --tl-band-track-alt: #eef3f9;
 
-  /* The lane heading — the Scheduler's order/contract row — is a flat NEUTRAL
-     GREY band (label + track share one tint) rather than another stripe, so the
-     pastel item rows beneath it read as its detail lines instead of siblings.
-     Deliberately LIGHT: it spans the whole width, so a heavier grey turns an
-     empty period into a black hole. Depth comes from its bar (`--tl-base-bar`),
-     never from how dark the band is. */
-  --tl-base-row: #e8ecf4;
-  --tl-base-bar: #dae1ea;
-  --tl-base-ink: #334155;
-  --tl-base-accent: #94a3b8;
+  /* The lane heading — the Scheduler's order/contract row — is a flat BLUE band
+     (label + track share one tint) rather than another stripe, so the pastel item
+     rows beneath it read as its detail lines instead of siblings. Blue is the
+     order's colour everywhere (its bar here, the Timesheets' job bars and the
+     active-contract pickers), so the lead row of every lane announces itself even
+     before you read the id. Still LIGHT on purpose: it spans the whole width, so a
+     heavier tone turns an empty period into a black hole — the depth is carried by
+     its bar (`--tl-base-bar`), a step deeper than the pastel item fills so the
+     heading clearly leads them. */
+  --tl-base-row: hsl(214, 40%, 92%);
+  --tl-base-bar: hsl(214, 52%, 86%);
+  --tl-base-ink: hsl(214, 76%, 24%);
+  --tl-base-accent: hsl(214, 72%, 46%);
 
   /* Table gridline. Rows sit flush (no gaps), so this is the only line between
      two rows — it has to read on a white, banded and grey row alike. */
@@ -341,8 +344,6 @@
   padding: 2px 8px;
   border-radius: 6px;
 }
-.tc-kit { background: #d1fae5; color: #047857; }
-.tc-attachment { background: #fce7f3; color: #be185d; }
 
 .totals-table { width: 100%; font-size: 13px; }
 .totals-table td { padding: 7px 4px; }
@@ -469,18 +470,24 @@
   align-items: stretch;
 }
 /* the base row of a lane (order/contract bar) is 1.5x a sub row, and is a flat
-   grey band — the accent colour lives on its bar, not on the row */
+   BLUE band — the order's colour is repeated on the label and the bar so the
+   heading of each lane reads as one line, and the pastel item rows below it look
+   like its detail lines */
 .tl-row-order,
 .tl-row-contract {
   min-height: var(--tl-row-base);
   --tl-band-label: var(--tl-base-row);
   --tl-band-track: var(--tl-base-row);
 }
-/* divider inside the grey band (slate-200 would be lighter than the band itself) */
+/* divider inside the blue band (the slate ring would vanish against it), and blue
+   ink on the label so the heading's words take the lane's colour too */
 .tl-row-order .tl-row-label,
 .tl-row-contract .tl-row-label {
-  border-right-color: #ccd5e1;
+  border-right-color: hsl(214, 32%, 80%);
+  color: var(--tl-base-ink);
 }
+.tl-row-order .tl-row-label .text-muted2,
+.tl-row-contract .tl-row-label .text-muted2 { color: hsl(214, 32%, 42%); }
 .tl-row-label {
   position: sticky;
   left: 0;
@@ -523,8 +530,7 @@
      but a calendar of soft tints is far easier on the eye (and to sit in front of
      all day) than solid saturated blocks. `--tint-*` comes from the type class;
      the lane-heading bar (the order/contract bar, which carries no type) falls
-     back to plain neutral GREY so it reads as the lane's heading rather than as
-     another resource-type bar. */
+     back to the shared BLUE `--tl-base-*` pair, so the order leads its lane. */
   background: var(--tint-bg, var(--tl-base-bar));
   color: var(--tint-ink, var(--tl-base-ink));
   border: 1px solid color-mix(in srgb, var(--tint-accent, var(--tl-base-accent)) 40%, transparent);
@@ -559,25 +565,35 @@
   justify-content: center;
   align-items: flex-end;
 }
-/* resource type palette — one soft fill + ink + accent per type.
-   Recipe: primary hues kept well apart (green 140, blue 210, orange 25, then
-   cyan 190 / teal 175 / violet 265 / pink 330 and red for a conflict), with the
-   FILL desaturated to S 25-35% at L 85-93% (a calendar of soft tints is far
-   easier to sit in front of all day than solid saturated blocks) and the INK
-   driven DARK in the same hue — every pairing below measures >= 7.3:1 contrast
-   on its own fill, so the label and its sub-line stay legible at 10.5-12px
-   instead of relying on the fill to separate the bars. The accent is the mid
-   tone: the 3px left edge plus the 40% border mix in `.tl-block`. */
-.tl-res-serialized { --tint-bg: hsl(140, 32%, 90%); --tint-ink: hsl(140, 62%, 20%); --tint-accent: hsl(140, 45%, 36%); }
-.tl-res-bulk { --tint-bg: hsl(210, 35%, 90%); --tint-ink: hsl(210, 68%, 24%); --tint-accent: hsl(210, 58%, 42%); }
-.tl-res-consumable { --tint-bg: hsl(25, 34%, 90%); --tint-ink: hsl(25, 70%, 22%); --tint-accent: hsl(25, 62%, 40%); }
-.tl-res-labor { --tint-bg: hsl(265, 30%, 92%); --tint-ink: hsl(265, 52%, 29%); --tint-accent: hsl(265, 50%, 48%); }
-.tl-res-part { --tint-bg: hsl(190, 32%, 90%); --tint-ink: hsl(190, 68%, 20%); --tint-accent: hsl(190, 58%, 34%); }
-.tl-res-kit { --tint-bg: hsl(175, 30%, 90%); --tint-ink: hsl(175, 64%, 20%); --tint-accent: hsl(175, 50%, 32%); }
-.tl-res-attachment { --tint-bg: hsl(330, 32%, 92%); --tint-ink: hsl(330, 58%, 30%); --tint-accent: hsl(330, 52%, 46%); }
-/* Conflict keeps the same recipe but is pulled a step darker (L 88) so the bar
+/* ---------------------------------------------------------------------------
+   THE RESOURCE-TYPE PALETTE — the single source of truth for a type's colour.
+   Consumed by the timeline bars (`.tl-block.tl-res-*`), the Order Details dots
+   (`.type-dot.tl-res-*`), the Timesheet bars/legend (`.ts-*`) and the type chips
+   (`.tc-*`) — so a type keeps one hue wherever it appears.
+
+   Recipe: hues spaced around the wheel so no two types are confused — green 148,
+   teal 168, cyan 192, blue 214 (bulk) with violet 264, pink 326, amber 30 and red
+   0 for a conflict. FILL is a true pastel (S 50-82% at L 89-92: tinted enough to
+   carry the hue, light enough to read as a calendar), INK is the same hue driven
+   dark (L 19-32) and ACCENT is the mid tone that paints the 3px left edge, the
+   40% border and the dots. Every ink:fill pair measures 7.5:1 or better and the
+   sub-line (opacity .9) stays above 5.9:1, so the labels are readable rather than
+   decorative; the accents stay above 3:1 on white for the dots and edges.
+
+   (`--tint-bg` / `--tint-ink` / `--tint-accent` are the hooks `.tl-block`,
+   `.ts-block` and `.type-dot` read; classes that only need the hue — icons, chip
+   edges, the Timesheets' `--tcol` — point at the accent.) */
+.tl-res-serialized { --tint-bg: hsl(148, 50%, 92%); --tint-ink: hsl(148, 70%, 19%); --tint-accent: hsl(148, 64%, 34%); }
+.tl-res-bulk { --tint-bg: hsl(214, 58%, 92%); --tint-ink: hsl(214, 74%, 26%); --tint-accent: hsl(214, 72%, 46%); }
+.tl-res-consumable { --tint-bg: hsl(30, 74%, 91%); --tint-ink: hsl(30, 82%, 23%); --tint-accent: hsl(30, 82%, 42%); }
+.tl-res-part { --tint-bg: hsl(192, 56%, 91%); --tint-ink: hsl(192, 78%, 21%); --tint-accent: hsl(192, 72%, 36%); }
+.tl-res-kit { --tint-bg: hsl(168, 52%, 91%); --tint-ink: hsl(168, 76%, 19%); --tint-accent: hsl(168, 66%, 32%); }
+.tl-res-labor { --tint-bg: hsl(264, 54%, 92%); --tint-ink: hsl(264, 60%, 32%); --tint-accent: hsl(264, 56%, 50%); }
+.tl-res-attachment { --tint-bg: hsl(326, 58%, 92%); --tint-ink: hsl(326, 64%, 30%); --tint-accent: hsl(326, 62%, 46%); }
+/* Conflict keeps the same recipe but is pulled a step darker (L 89) so the bar
    still separates from the `#fff5f5` wash of its own row. */
-.tl-res.conflict { --tint-bg: hsl(0, 35%, 88%); --tint-ink: hsl(0, 66%, 28%); --tint-accent: hsl(0, 62%, 42%); }
+.tl-res.conflict { --tint-bg: hsl(0, 62%, 89%); --tint-ink: hsl(0, 70%, 28%); --tint-accent: hsl(0, 68%, 45%); }
+
 /* the conflicted ROW keeps a lighter red wash than the conflicted BAR, so the
    bar (its own red fill + the red edge) still stands out against its own row */
 .tl-row.conflict .tl-row-track { background: #fff5f5; border-color: #fecaca; }
@@ -604,7 +620,7 @@
   display: block;
   font-size: 10.5px;
   /* Sits one step lighter than the title but stays well clear of the fill: at the
-     palette's inks this is still > 5.5:1, so the sub-line is readable rather than
+     palette's inks this is still > 5.9:1, so the sub-line is readable rather than
      decorative. */
   opacity: .9;
   white-space: nowrap;
@@ -988,16 +1004,18 @@
 .lab-nowline { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc2626; opacity: .55; pointer-events: none; }
 
 /* target colours (bars, icons, mini-bars, punch chips).
-   `--tcol` is the saturated hue (small icons, legend swatch, chip borders);
-   `--tint-*` is the matching soft fill the calendar bars actually use — same
-   25-35% / 85-93% recipe as the scheduler's palette, so a bar keeps its hue
-   whichever calendar it appears on (`--tcol` is left as-is: it drives icons and
-   chip edges, which want the stronger tone). */
-.ts-order { --tcol: #2563eb; --tint-bg: hsl(210, 35%, 90%); --tint-ink: hsl(210, 68%, 24%); --tint-accent: hsl(210, 58%, 42%); }
-.ts-wo { --tcol: #0d9488; --tint-bg: hsl(175, 30%, 90%); --tint-ink: hsl(175, 64%, 20%); --tint-accent: hsl(175, 50%, 32%); }
-.ts-shop { --tcol: #7c3aed; --tint-bg: hsl(265, 30%, 92%); --tint-ink: hsl(265, 52%, 29%); --tint-accent: hsl(265, 50%, 48%); }
-.ts-overhead { --tcol: #d97706; --tint-bg: hsl(25, 34%, 90%); --tint-ink: hsl(25, 70%, 22%); --tint-accent: hsl(25, 62%, 40%); }
-.ts-idle { --tcol: #94a3b8; --tint-bg: hsl(215, 25%, 92%); --tint-ink: hsl(215, 30%, 30%); --tint-accent: hsl(215, 25%, 55%); }
+   Same recipe and hues as the scheduler's palette above, so a job is the same blue
+   on both calendars: `--tint-*` is the soft fill + dark same-hue ink the bars use,
+   `--tcol` is that type's accent (the stronger tone), which paints the icons, the
+   legend swatches, the chip and punch-target edges and the summary bars.
+   `ts-order` deliberately takes the Scheduler's lane-heading blue (`--tl-base-*`,
+   fill L 86) rather than the lighter bulk pastel: on both calendars the order is
+   the job you clock into, and it should lead the row it sits on. */
+.ts-order { --tcol: hsl(214, 72%, 46%); --tint-bg: hsl(214, 52%, 86%); --tint-ink: hsl(214, 76%, 24%); --tint-accent: hsl(214, 72%, 46%); }
+.ts-wo { --tcol: hsl(168, 66%, 32%); --tint-bg: hsl(168, 52%, 91%); --tint-ink: hsl(168, 76%, 19%); --tint-accent: hsl(168, 66%, 32%); }
+.ts-shop { --tcol: hsl(264, 56%, 50%); --tint-bg: hsl(264, 54%, 92%); --tint-ink: hsl(264, 60%, 32%); --tint-accent: hsl(264, 56%, 50%); }
+.ts-overhead { --tcol: hsl(30, 82%, 42%); --tint-bg: hsl(30, 74%, 91%); --tint-ink: hsl(30, 82%, 23%); --tint-accent: hsl(30, 82%, 42%); }
+.ts-idle { --tcol: hsl(215, 22%, 52%); --tint-bg: hsl(215, 20%, 92%); --tint-ink: hsl(215, 32%, 29%); --tint-accent: hsl(215, 22%, 52%); }
 
 .ts-block {
   position: absolute; border-radius: 4px; font-size: 10px; font-weight: 700;
@@ -1006,7 +1024,7 @@
   /* same pastel treatment as the scheduler bars */
   background: var(--tint-bg, var(--slate-100));
   color: var(--tint-ink, var(--ink-2));
-  border: 1px solid color-mix(in srgb, var(--tint-accent, var(--slate-400)) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tint-accent, var(--slate-400)) 40%, transparent);
   border-left: 3px solid var(--tint-accent, var(--slate-400));
   box-shadow: 0 1px 2px rgba(15,23,42,.08); z-index: 1;
 }
@@ -1032,7 +1050,8 @@ i.ts-idle { color: var(--tcol); }
 .lab-legend-bottom { padding: 8px 2px 0; display: flex; gap: 14px; flex-wrap: wrap; }
 .lab-legend-item { font-size: 11px; color: var(--slate-600); display: inline-flex; align-items: center; gap: 5px; }
 .mini-bar { display: inline-flex; width: 70px; height: 8px; border-radius: 4px; background: var(--slate-200); overflow: hidden; vertical-align: middle; margin-right: 6px; }
-.mini-bar > span { display: block; height: 100%; background: color-mix(in srgb, var(--tcol) 45%, #fff); min-width: 1px; }
+/* a miniature of the bar it summarises: soft type fill with the accent on the left */
+.mini-bar > span { display: block; height: 100%; background: var(--tint-bg, color-mix(in srgb, var(--tcol) 45%, #fff)); box-shadow: inset 2px 0 0 var(--tint-accent, var(--tcol)); min-width: 1px; }
 .lab-summary { background: var(--card); border: 1px solid var(--slate-200); border-radius: var(--radius); margin-top: 14px; padding: 14px; }
 .lab-sum-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
 .lab-sum-body { display: grid; grid-template-columns: 1fr 270px; gap: 20px; }
@@ -1058,7 +1077,7 @@ i.ts-idle { color: var(--tcol); }
 #tsViewToggle .btn-ims-outline:hover { background: var(--slate-300); color: var(--slate-700); }
 .ts-block { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 2px 6px; }
 .ts-block-title { display: block; max-width: 100%; font-size: 10.5px; font-weight: 700; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ts-block-sub { display: block; max-width: 100%; font-size: 9px; opacity: .8; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ts-block-sub { display: block; max-width: 100%; font-size: 9px; opacity: .9; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 /* NOTE: clicking a calendar row deliberately selects nothing. Row focus is
    event-driven (drag/drop + the inspector), so highlight chrome would only add
    noise; the left pickers still mark the focused order. */
@@ -1084,7 +1103,10 @@ i.ts-idle { color: var(--tcol); }
 .lab-chip.ts-idle { border-left-color: var(--tcol); }
 .ts-hint { font-size: 11px; color: var(--slate-500); margin: -2px 0 8px; line-height: 1.4; }
 .tl-row.drop-hi .tl-row-track { outline: 2px dashed var(--accent); outline-offset: -2px; background: #f0f9ff; }
-.ts-lunch { --tcol: #9ca3af; --tint-bg: hsl(215, 25%, 92%); --tint-ink: hsl(215, 30%, 30%); --tint-accent: hsl(215, 25%, 55%); }
+/* Lunch is a NEUTRAL like idle, but warmed a touch so the two greys are told
+   apart at a glance (idle cool slate, lunch warm stone) without borrowing the
+   overhead amber. */
+.ts-lunch { --tcol: hsl(30, 24%, 50%); --tint-bg: hsl(30, 22%, 92%); --tint-ink: hsl(30, 35%, 26%); --tint-accent: hsl(30, 24%, 50%); }
 i.ts-lunch { color: var(--tcol); }
 @media (max-width: 1100px) { .ts-page { grid-template-columns: 250px 1fr; } }
 @media (max-width: 860px) { .ts-page { grid-template-columns: 1fr; height: auto; overflow: visible; } .ts-page .sched-timeline { min-height: 72vh; } }
@@ -1100,7 +1122,7 @@ i.ts-lunch { color: var(--tcol); }
 .ts-order-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
 .lab-poolrow { cursor: grab; }
 .lab-poolrow:active { cursor: grabbing; }
-.lab-poolrow.ts-order { border-left: 4px solid #2563eb; }
+.lab-poolrow.ts-order { border-left: 4px solid var(--tcol); }
 .lab-prow-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .lab-prow-name { font-size: 11px; color: var(--slate-700); margin: 1px 0; line-height: 1.2; }
 
@@ -1619,13 +1641,19 @@ a { color: var(--brand); }
 .st-out { background: var(--danger-soft); color: #b91c1c; border-color: rgba(220,38,38,.15); }
 .badge-status.st-on, .st-on { background: var(--info-soft); color: #0e7490; border-color: rgba(8,145,178,.16); }
 
-/* tc-* used by orders */
-.tc-serialized, .tc-bulk, .tc-consumable, .tc-labor, .tc-part { border-radius: 999px; padding: 2px 8px; font-size: 10.5px; font-weight: 700; }
-.tc-serialized { background: var(--info-soft); color: #0e7490; }
-.tc-bulk { background: var(--purple-soft); color: #6d28d9; }
-.tc-consumable { background: var(--success-soft); color: #15803d; }
-.tc-labor { background: var(--warning-soft); color: #b45309; }
-.tc-part { background: var(--slate-200); color: var(--ink-2); }
+/* tc-* — the catalog-type chip (Orders, Invoicing, the conflicts pane). One hue
+   per type, off the SAME palette as the calendar bars and the Order Details dots
+   (see "THE RESOURCE-TYPE PALETTE" above): soft fill + dark same-hue ink, so the
+   chip in a conflict list matches the bar it is complaining about. */
+.tc-serialized, .tc-bulk, .tc-consumable, .tc-labor, .tc-part,
+.tc-kit, .tc-attachment { border-radius: 999px; padding: 2px 8px; font-size: 10.5px; font-weight: 700; }
+.tc-serialized { background: hsl(148, 50%, 92%); color: hsl(148, 70%, 19%); }
+.tc-bulk { background: hsl(214, 58%, 92%); color: hsl(214, 74%, 26%); }
+.tc-consumable { background: hsl(30, 74%, 91%); color: hsl(30, 82%, 23%); }
+.tc-part { background: hsl(192, 56%, 91%); color: hsl(192, 78%, 21%); }
+.tc-kit { background: hsl(168, 52%, 91%); color: hsl(168, 76%, 19%); }
+.tc-labor { background: hsl(264, 54%, 92%); color: hsl(264, 60%, 32%); }
+.tc-attachment { background: hsl(326, 58%, 92%); color: hsl(326, 64%, 30%); }
 
 /* ---- 10. Lists / feeds ---- */
 .list-line {
