@@ -1,6 +1,5 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
 
 import { DataService } from '../../core/data.service';
 import { Location } from '../../core/models';
@@ -26,18 +25,18 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 };
 
 /**
- * Locations (core) — the location hierarchy as a table.
+ * Locations (Administration → Locations) — the location hierarchy as a table.
  *
  * Port of the prototype's `renderBranches` (js/pages/branches.js), extended to
  * a *ragged hierarchy*: each location has one optional parent and any number
  * of children, and any node may itself be a parent at any depth (an
  * adjacency-list / self-referencing `parent_id`). The location-type vocabulary
- * is managed under Administration → Location Types.
+ * is managed in the sibling section Administration → Location Types.
  */
 @Component({
   selector: 'ims-locations',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule],
   templateUrl: './locations.component.html',
   styleUrl: './locations.component.scss',
 })

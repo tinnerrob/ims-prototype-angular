@@ -50,14 +50,6 @@ export const VIEWS: ViewDef[] = [
     icon: 'bi-box-seam',
     group: 'inventory',
   },
-  {
-    id: 'locations',
-    title: 'Locations',
-    desc: 'Core: location hierarchy (yards, branches, warehouses, bins) — types managed in Admin.',
-    nav: 'Locations',
-    icon: 'bi-buildings',
-    group: 'inventory',
-  },
 
   /* ---- Movement & Custody · Core ---- */
   {
@@ -160,7 +152,7 @@ export const VIEWS: ViewDef[] = [
   {
     id: 'admin',
     title: 'Administration',
-    desc: 'Administration: feature modules, item categories & types, and location types.',
+    desc: 'Administration: locations & their types, item categories & types, and feature modules.',
     nav: 'Admin',
     icon: 'bi-gear',
     group: 'admin',

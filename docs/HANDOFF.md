@@ -23,11 +23,11 @@ persisted data store. Module views are gated by `ModulesService` + a route guard
 | Area | Path | Notes |
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
-| **Administration** | `features/admin` | submenu shell: Feature Modules · Categories & Types · Location Types |
+| **Administration** | `features/admin` | submenu shell: Locations · Location Types · Categories & Types · Feature Modules |
+| Locations | `features/locations` | ragged location hierarchy (Admin submenu) |
 | Categories & Types | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
 | Items & Stock | `features/items` | typed catalog: list/CRUD per type |
-| Locations | `features/locations` | ragged location hierarchy (types managed in Admin) |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log |
 | **Allocations & Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |
@@ -38,9 +38,10 @@ persisted data store. Module views are gated by `ModulesService` + a route guard
 | Billing & Invoicing | `features/invoicing` | invoices from priced orders |
 | Fleet Telemetry | `features/telemetry` | live GPS sim + geofence feed |
 
-Routes: `/admin` redirects to `/admin/modules`; the other Admin submenu entries are
-`/admin/categories` and `/admin/location-types`. The old `/categories` deep link
-redirects into the Admin section.
+Routes: `/admin` redirects to `/admin/modules`; the Admin submenu entries are
+`/admin/locations`, `/admin/location-types`, `/admin/categories` and
+`/admin/modules`. The old `/categories` and `/locations` deep links redirect into
+the Admin section.
 
 ## Scheduler (the most complex view) — current behavior
 
