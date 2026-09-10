@@ -3,7 +3,8 @@
 <div class="card mb-3">
   <div class="card-header">
     <span class="card-title"><i class="bi bi-arrow-left-right"></i> Item Hand-Off &amp; Custody</span>
-    <div class="d-flex align-items-center gap-2">
+    <!-- day stepper stays on the left, next to the title (`me-auto`) -->
+    <div class="d-flex align-items-center gap-2 me-auto">
       <div class="btn-group">
         <button class="btn btn-sm2" type="button" (click)="moveDay(-1)"><i class="bi bi-chevron-left"></i></button>
         <span class="tl-range">{{ dayLabel() }}</span>

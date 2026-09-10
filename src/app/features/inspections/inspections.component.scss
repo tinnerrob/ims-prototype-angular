@@ -2,7 +2,13 @@
    prototype CSS. Component styles are scoped, so rules here would out-rank those
    globals — the markup uses the prototype class names directly. */
 
-/* ---- inspection-log period filter (card header) ---- */
+/* ---- inspection-log period filter (card header) ----
+   Header order is `[‹ date ›] [All/Day/Week/Month chips] [Log Inspection]`:
+   the global `.period-pager` takes the slack and packs left, so the navigator
+   (only rendered with a Day/Week/Month filter) sits at the far left of the
+   table while `margin-left: auto` on `.log-filter` — a no-op when the pager is
+   present — still pushes the chips + button to the right end with the default
+   `All` filter. */
 .log-filter {
   display: flex;
   align-items: center;
@@ -10,13 +16,9 @@
   margin-left: auto;
   min-width: 0;
 }
-/* The pager is a header control here, not the centered scheduler banner. */
-.log-filter .period-pager {
-  flex: 0 0 auto;
-  justify-content: flex-start;
-}
-.log-filter .tl-range {
+/* The log's label keeps its full width (the pager owns the slack here, so the
+   global 46% cap isn't needed) and inherits the shared pill size. */
+.log-pager .tl-range {
   max-width: none;
-  font-size: 12.5px;
 }
 

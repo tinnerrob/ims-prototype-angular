@@ -78,7 +78,7 @@ touching feature code.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
 - [x] Locations — ragged location hierarchy (parent/child adjacency list) + location type vocabulary, as two tabs under Admin.
-- [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log; the log filters by All / Day / Week / Month with ‹ › paging and a Today reset, and clicking a logged inspection opens the inspection editor (no read-only step, no pencil column).
+- [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log; the log's ‹ › date navigator leads the card header (at the far left of the table, shown once a Day/Week/Month filter is picked) with the All / Day / Week / Month chips and the **Log Inspection** button against the right end; clicking a logged inspection opens the inspection editor (no read-only step, no pencil column), and **Log Inspection** opens that same editor on a new record (the old side pane is gone).
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
 - [x] Admin — Administration shell with submenus: Locations, Categories, Feature Modules.

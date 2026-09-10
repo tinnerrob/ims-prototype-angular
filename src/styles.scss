@@ -1805,13 +1805,20 @@ a { color: var(--brand); }
   transform: translateY(-1px);
 }
 
-/* ---- 2. Centered period pager (scheduler + timesheet headers) ---- */
+/* ---- 2. Period pager (scheduler + timesheet + inspection log headers) ----
+   The date navigator — range label between ‹ › arrows — sits at the LEFT of its
+   bar/header: it takes up the free space and packs its content against its start,
+   so any control after it (the Day/Week/Month toggle in the timeline navs, the
+   log's filter chips + Log Inspection button) ends up at the right end. The label
+   is one shared pill (`.tl-range`, wording from `periodLabel()` in
+   core/data.service.ts) so every navigator reads the same. */
 .period-pager {
+  /* Grows over the slack, content packed left; shrinks (label ellipsis) when tight. */
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
 }
 .period-pager .btn {
@@ -1837,11 +1844,11 @@ a { color: var(--brand); }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 5px 13px;
+  padding: 7px 16px;
   border-radius: 999px;
   background: rgba(15, 23, 42, .05);
   color: var(--ink);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: -.1px;
   line-height: 1.2;
@@ -1870,6 +1877,17 @@ a { color: var(--brand); }
 .btn-group .btn:hover {
   background: rgba(255, 255, 255, .85);
   color: var(--ink);
+}
+/* Hand-Off's day stepper keeps its label inside the segmented control (no pill of
+   its own) — match the pager label's size/weight so every navigator reads alike. */
+.btn-group .tl-range {
+  padding: 3px 9px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.1px;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 .btn-group .btn-ims,
 .btn-group .btn-ims:hover {

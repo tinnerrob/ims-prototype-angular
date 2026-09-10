@@ -62,6 +62,38 @@ export function dISO(d: Date): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
+/** Period a date navigator can page through (Scheduler / Labor & Timesheets / inspection log). */
+export type PeriodView = 'day' | 'week' | 'month';
+
+/**
+ * Label for a period in the date navigators, anchored on its first day — one
+ * wording for every pager in the app: "Monday, Aug 17, 2026", "Week of Aug 17, 2026"
+ * or "Month of August 2026". Week/month name the period and its first day only
+ * (no end date).
+ */
+export function periodLabel(view: PeriodView, date: Date): string {
+  if (view === 'month') return 'Month of ' + date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  if (view === 'week') {
+    return 'Week of ' + date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+/**
+ * Sentence form of `periodLabel` for prose ("free for the week of Aug 17, 2026"):
+ * the week/month labels are lower-cased and take an article, a day label is
+ * already a date so it is returned as-is.
+ */
+export function periodPhrase(view: PeriodView, date: Date): string {
+  const label = periodLabel(view, date);
+  return view === 'day' ? label : `the ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
+}
+
 
 /** Calendar days spanned by [a, b], minimum 1 (prototype `daysBetween`). */
 function daysBetween(a: string, b: string): number {

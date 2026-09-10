@@ -1,160 +1,76 @@
 <div class="page-head"></div>
 
-<div class="split-layout">
-  <!-- inspection form -->
-  <div>
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title"><i class="bi bi-clipboard-check"></i> Asset In / Out Inspection</span>
-        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="logInspection()">
-          <i class="bi bi-check2-square"></i> Log Inspection
+<div class="card">
+  <div class="card-header">
+    <!-- date navigator: far left, only with a Day/Week/Month filter -->
+    @if (logFiltered()) {
+      <div class="period-pager log-pager">
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shiftLog(-1)">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <span class="tl-range">{{ logRangeLabel() }}</span>
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shiftLog(1)">
+          <i class="bi bi-chevron-right"></i>
         </button>
       </div>
-      <div class="card-body">
-        <div class="row g-2">
-          <div class="col-md-6 field-group">
-            <label class="form-label">Asset</label>
-            <select class="form-select" [(ngModel)]="itemId">
-              <option value="" disabled>Choose an asset…</option>
-              @for (a of serialized(); track a.id) {
-                <option [value]="a.id">{{ a.id }} — {{ data.mkName(a) }}</option>
-              }
-            </select>
-          </div>
-          <div class="col-md-6 field-group">
-            <label class="form-label">Contract</label>
-            <select class="form-select" [(ngModel)]="orderId">
-              <option value="">— none —</option>
-              @for (o of orders(); track o.orderId) {
-                <option [value]="o.orderId">{{ o.orderId }} — {{ o.projectName }}</option>
-              }
-            </select>
-          </div>
-          <div class="col-md-6 field-group">
-            <label class="form-label">Direction</label>
-            <select class="form-select" [(ngModel)]="direction">
-              <option value="Check-Out">Check-Out</option>
-              <option value="Check-In">Check-In</option>
-            </select>
-          </div>
-          <div class="col-md-6 field-group">
-            <label class="form-label">Date</label>
-            <input class="form-control" type="date" [(ngModel)]="date" />
-          </div>
-        </div>
-
-        <div class="strong mb-2">Telemetry Verification</div>
-        <div class="row g-2 mb-2">
-          @for (k of checkKeys; track k) {
-            <div class="col-md-6">
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" [id]="'i-' + k" [(ngModel)]="checks[k]" />
-                <label class="form-check-label" [for]="'i-' + k">{{ checkLabel[k] }}</label>
-              </div>
-            </div>
-          }
-        </div>
-
-        <div class="row g-2">
-          <div class="col-md-6 field-group">
-            <label class="form-label">Current Meter Hours</label>
-            <input class="form-control" type="number" [(ngModel)]="meter" />
-          </div>
-          <div class="col-md-6 field-group">
-            <label class="form-label">Fuel Level %</label>
-            <input class="form-control" type="number" min="0" max="100" [(ngModel)]="fuel" />
-          </div>
-        </div>
-
-        @if (overage(); as o) {
-          @if (o.overage > 0) {
-            <div class="alert-line breach mt-2">
-              <span class="ts">LIVE</span>
-              <span>
-                <strong>Overage Fees Apply:</strong> {{ data.int(o.overage) }} Hours Overage Detected
-                ({{ data.int(o.used) }} used vs {{ data.int(o.allowed) }} allowed)
-              </span>
-            </div>
-          } @else {
-            <div class="alert-line info mt-2">
-              <span class="ts">LIVE</span>
-              <span>
-                Within limit — {{ data.int(o.allowed - o.used) }} hrs remaining
-                ({{ data.int(o.used) }} of {{ data.int(o.allowed) }} allowed)
-              </span>
-            </div>
-          }
+    }
+    <div class="log-filter">
+      <div class="btn-group">
+        @for (v of logRanges; track v) {
+          <button
+            class="btn btn-sm2"
+            type="button"
+            [class.btn-ims]="logRange === v"
+            [class.btn-ims-outline]="logRange !== v"
+            (click)="setLogRange(v)"
+          >
+            {{ logRangeLabelOf(v) }}
+          </button>
         }
       </div>
     </div>
+    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="newInspection()">
+      <i class="bi bi-check2-square"></i> Log Inspection
+    </button>
   </div>
-
-  <!-- inspection log -->
-  <div>
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title"><i class="bi bi-journal-check"></i> Inspection Log</span>
-        <div class="log-filter">
-          <div class="btn-group">
-            @for (v of logRanges; track v) {
-              <button
-                class="btn btn-sm2"
-                type="button"
-                [class.btn-ims]="logRange === v"
-                [class.btn-ims-outline]="logRange !== v"
-                (click)="setLogRange(v)"
-              >
-                {{ logRangeLabelOf(v) }}
-              </button>
-            }
-          </div>
-          @if (logFiltered()) {
-            <div class="period-pager log-pager">
-              <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shiftLog(-1)">
-                <i class="bi bi-chevron-left"></i>
-              </button>
-              <span class="tl-range">{{ logRangeLabel() }}</span>
-              <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shiftLog(1)">
-                <i class="bi bi-chevron-right"></i>
-              </button>
-            </div>
-            <button class="btn btn-ims-outline btn-sm2" type="button" title="Jump to today" (click)="logToday()">
-              Today
-            </button>
-          }
-        </div>
-        <span class="badge-status st-on">{{ logCountLabel() }}</span>
-      </div>
-      <div class="card-body table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
-              <th class="num">Meter Out</th><th class="num">Meter In</th>
-              <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (r of logEntries(); track r.id) {
-              <!-- Row click opens the editor, as in the prototype (`inspectionModal`). -->
-              <tr class="row-open" (click)="openEdit(r)">
-                <td class="strong mono">{{ r.id }}</td>
-                <td class="strong">{{ r.itemId }}</td>
-                <td>{{ r.direction }}</td>
-                <td class="mono text-muted2">{{ data.fmtDate(r.date) }}</td>
-                <td class="num">{{ r.meterOut ?? '—' }}</td>
-                <td class="num">{{ r.meterIn ?? '—' }}</td>
-                <td class="num">{{ r.fuelOut ?? '—' }}</td>
-                <td class="num">{{ r.fuelIn ?? '—' }}</td>
-                <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
-              </tr>
-            } @empty {
-              <tr><td colspan="9" class="text-center text-muted2 py-4">{{ logEmptyLabel() }}</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </div>
+  <div class="card-body table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
+          <th class="num">Meter Out</th><th class="num">Meter In</th>
+          <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th><th>Overage</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of logEntries(); track r.id) {
+          <!-- Row click opens the editor, as in the prototype (`inspectionModal`). -->
+          <tr class="row-open" (click)="openEdit(r)">
+            <td class="strong mono">{{ r.id }}</td>
+            <td class="strong">{{ r.itemId }}</td>
+            <td>{{ r.direction }}</td>
+            <td class="mono text-muted2">{{ data.fmtDate(r.date) }}</td>
+            <td class="num">{{ r.meterOut ?? '—' }}</td>
+            <td class="num">{{ r.meterIn ?? '—' }}</td>
+            <td class="num">{{ r.fuelOut ?? '—' }}</td>
+            <td class="num">{{ r.fuelIn ?? '—' }}</td>
+            <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
+            <td>
+              <!-- Meter overage: the check-in side of the yard math (prototype `meterOverage`). -->
+              @if (overageOf(r); as o) {
+                <span class="badge-status st-reorder">
+                  <i class="bi bi-exclamation-triangle"></i>{{ data.int(o.overage) }} hr
+                </span>
+              } @else {
+                <span class="text-muted2">—</span>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="10" class="text-center text-muted2 py-4">{{ logEmptyLabel() }}</td></tr>
+        }
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -171,7 +87,10 @@
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-clipboard-check"></i>Edit Inspection {{ r.id }}</h5>
+          <h5 class="modal-title">
+            <i class="bi bi-clipboard-check"></i>
+            {{ isNew() ? 'Log Inspection' : 'Edit Inspection ' + r.id }}
+          </h5>
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -179,12 +98,26 @@
           <div class="field-group">
             <label class="form-label">Asset</label>
             <select class="form-select" [(ngModel)]="editRecord.itemId">
+              <option value="" disabled>Choose an asset…</option>
               @for (a of serialized(); track a.id) {
                 <option [value]="a.id">{{ a.id }} — {{ data.mkName(a) }}</option>
               }
             </select>
           </div>
           <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Contract</label>
+              <select class="form-select" [(ngModel)]="editRecord.orderId">
+                <option value="">— none —</option>
+                @for (o of orders(); track o.orderId) {
+                  <option [value]="o.orderId">{{ o.orderId }} — {{ o.projectName }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Date</label>
+              <input class="form-control" type="date" [(ngModel)]="editRecord.date" />
+            </div>
             <div class="col-md-6 field-group">
               <label class="form-label">Direction</label>
               <select class="form-select" [(ngModel)]="editRecord.direction">
@@ -220,6 +153,26 @@
               <input class="form-control" type="number" [(ngModel)]="editRecord.fuelIn" />
             </div>
           </div>
+          <!-- live overage preview (prototype `updateOveragePreview`) -->
+          @if (editOverage(); as o) {
+            @if (o.overage > 0) {
+              <div class="alert-line breach mt-2">
+                <span class="ts">LIVE</span>
+                <span>
+                  <strong>Overage Fees Apply:</strong> {{ data.int(o.overage) }} Hours Overage Detected
+                  ({{ data.int(o.used) }} used vs {{ data.int(o.allowed) }} allowed)
+                </span>
+              </div>
+            } @else {
+              <div class="alert-line info mt-2">
+                <span class="ts">LIVE</span>
+                <span>
+                  Within limit — {{ data.int(o.allowed - o.used) }} hrs remaining
+                  ({{ data.int(o.used) }} of {{ data.int(o.allowed) }} allowed)
+                </span>
+              </div>
+            }
+          }
           <div class="divider"></div>
           <div class="strong mb-2">Condition Checks</div>
           @for (k of checkKeys; track k) {
@@ -230,7 +183,9 @@
           }
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims" (click)="saveEdit()"><i class="bi bi-check2"></i> Save Record</button>
+          <button type="button" class="btn btn-ims" (click)="saveEdit()">
+            <i class="bi bi-check2"></i> {{ isNew() ? 'Log Inspection' : 'Save Record' }}
+          </button>
         </div>
       </div>
     </div>

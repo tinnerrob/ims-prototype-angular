@@ -1,13 +1,12 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { DataService, PeriodView, periodLabel, periodPhrase } from '../../core/data.service';
 import {
   Inspection,
   InspectionCheckKey,
   INSPECTION_CHECKS,
   INSPECTION_CHECK_LABEL,
-  InspectionDirection,
   statusClass,
 } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
@@ -25,15 +24,22 @@ const LOG_RANGE_LABEL: Record<LogRange, string> = {
   month: 'Month',
 };
 
+/** Meter readings against the contract allowance (prototype `meterOverage`). */
+interface Overage {
+  used: number;
+  allowed: number;
+  overage: number;
+}
+
 /**
  * Receiving / Inspections (core) — port of the prototype's `renderYard`
- * (js/pages/yard.js): the asset in/out inspection form (telemetry verification
- * switches, meter + fuel) with the live overage preview, plus the inspection log.
+ * (js/pages/yard.js): the inspection log, and the one editor it is worked from.
  *
  * The log narrows to a day / week / month around a cursor date (the scheduler's
  * period pattern: Monday-based weeks, ‹ › paging, "Today" reset), and clicking a
- * logged inspection opens the editor directly — the prototype's
- * `inspectionModal` on the `data-edit` row — so a record is one click from edit.
+ * logged row opens the editor directly — the prototype's `inspectionModal` on the
+ * `data-edit` row. The header's "Log Inspection" button opens that same editor on
+ * a blank draft, so a new record is captured with the fields an edit exposes.
  */
 @Component({
   selector: 'ims-inspections',
@@ -48,19 +54,12 @@ export class InspectionsComponent {
   readonly logRanges = LOG_RANGES;
   readonly logRangeLabelOf = (v: LogRange): string => LOG_RANGE_LABEL[v];
 
-  direction: InspectionDirection = 'Check-Out';
-  itemId = '';
-  orderId = '';
-  date = new Date().toISOString().slice(0, 10);
-  meter = 0;
-  fuel = 100;
-  checks: Record<InspectionCheckKey, boolean> = this.allChecks(true);
-
   /** Log period filter + the cursor date the day/week/month window is built on. */
   logRange: LogRange = 'all';
   logAnchor = new Date();
 
   editOpen = false;
+  /** The record in the editor: a logged row, or a draft while logging a new one. */
   editRecord: Inspection | null = null;
   /** Editor values as they were when it opened (drives the discard prompt). */
   private editSnap = '';
@@ -83,49 +82,6 @@ export class InspectionsComponent {
     return 'badge-status st-' + statusClass(status);
   }
 
-  /** Live meter-overage preview for a Check-In (prototype `updateOveragePreview`). */
-  overage(): { used: number; allowed: number; overage: number } | null {
-    if (this.direction !== 'Check-In') return null;
-    const meterIn = Number(this.meter) || 0;
-    const meterOut = this.data.lastMeter(this.itemId);
-    const allowed = this.data.allowedHours(this.orderId ? this.data.getOrder(this.orderId) : undefined);
-    const used = meterIn - meterOut;
-    const over = used - allowed;
-    return { used, allowed, overage: over > 0 ? over : 0 };
-  }
-
-  /** Log the in/out inspection (prototype `#inspSave`). */
-  logInspection(): void {
-    if (!this.itemId) return;
-    const isOut = this.direction === 'Check-Out';
-    const meter = Number(this.meter) || 0;
-    const fuel = Number(this.fuel) || 0;
-    const rec = this.data.createInspection({
-      itemId: this.itemId,
-      orderId: this.orderId || null,
-      direction: this.direction,
-      date: this.date,
-      meterOut: isOut ? meter : this.data.lastMeter(this.itemId),
-      meterIn: isOut ? null : meter,
-      fuelOut: isOut ? fuel : null,
-      fuelIn: isOut ? null : fuel,
-      checks: { ...this.checks },
-      photos: 0,
-      status: 'Open',
-    });
-    // A check-out puts the unit on rent; a check-in frees it (prototype side-effect).
-    if (isOut) {
-      this.data.updateItem('serialized', this.itemId, { status: 'On Rent', orderId: this.orderId || null });
-    } else {
-      this.data.updateItem('serialized', this.itemId, { status: 'Available', orderId: null });
-    }
-    // Follow the new record, so a narrowed log never hides what was just logged.
-    this.logAnchor = new Date(rec.date + 'T00:00:00');
-    this.meter = 0;
-    this.fuel = 100;
-    this.checks = this.allChecks(true);
-  }
-
   /* --------------------------- inspection log --------------------------- */
 
   /** The period filter is narrowing the log. */
@@ -140,34 +96,22 @@ export class InspectionsComponent {
     return this.inspections().filter((r) => r.date >= b.start && r.date <= b.end);
   }
 
-  /** Visible count, plus the total while a filter is narrowing the log. */
-  logCountLabel(): string {
-    const shown = this.logEntries().length;
-    return this.logFiltered() ? `${shown} / ${this.inspections().length}` : String(shown);
-  }
-
   logEmptyLabel(): string {
     if (!this.logFiltered()) return 'No inspections logged.';
-    return `No inspections logged for ${this.logRangeLabel()}.`;
+    const w = this.logWindow();
+    return `No inspections logged for ${periodPhrase(w.view, w.date)}.`;
   }
 
   /** Human label for the window the pager is paging through. */
   logRangeLabel(): string {
-    if (this.logRange === 'month') {
-      return new Date(this.logBounds().start + 'T00:00:00').toLocaleDateString('en-US', {
-        month: 'long',
-        year: 'numeric',
-      });
-    }
-    if (this.logRange === 'week') {
-      const b = this.logBounds();
-      return 'Week of ' + this.span(b.start) + ' – ' + this.span(b.end);
-    }
-    return new Date(this.logBounds().start + 'T00:00:00').toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+    const w = this.logWindow();
+    return periodLabel(w.view, w.date);
+  }
+
+  /** View + first day of the window the log is showing (`all` has no pager, so it reads as a day). */
+  private logWindow(): { view: PeriodView; date: Date } {
+    const view: PeriodView = this.logRange === 'all' ? 'day' : this.logRange;
+    return { view, date: new Date(this.logBounds().start + 'T00:00:00') };
   }
 
   /** Switch the log period, keeping the cursor date inside the new window. */
@@ -175,10 +119,6 @@ export class InspectionsComponent {
     this.logRange = v;
     if (v === 'month') this.logAnchor = new Date(this.logAnchor.getFullYear(), this.logAnchor.getMonth(), 1);
     else if (v === 'week') this.logAnchor = this.mondayOf(this.logAnchor);
-  }
-
-  logToday(): void {
-    this.logAnchor = new Date();
   }
 
   /** Page the log cursor one day / week / month (scheduler `shift`). */
@@ -190,11 +130,38 @@ export class InspectionsComponent {
 
   /* ------------------------------- editor ------------------------------- */
 
-  /** Log row click → the same editor the Edit action opens (prototype `inspectionModal`). */
+  /** The "Log Inspection" button: the editor opens on a blank draft. */
+  newInspection(): void {
+    this.openEditor({
+      id: '',
+      itemId: '',
+      orderId: null,
+      direction: 'Check-Out',
+      date: new Date().toISOString().slice(0, 10),
+      meterOut: null,
+      meterIn: null,
+      fuelOut: null,
+      fuelIn: null,
+      checks: this.allChecks(true),
+      photos: 0,
+      status: 'Open',
+    });
+  }
+
+  /** Log row click → the same editor the Log button opens (prototype `inspectionModal`). */
   openEdit(r: Inspection): void {
     // Edit a copy: the stored record only changes on Save.
-    this.editRecord = { ...r, checks: { ...r.checks } };
-    this.editSnap = snapshotForm(this.editRecord);
+    this.openEditor({ ...r, checks: { ...r.checks } });
+  }
+
+  /** True while the editor holds a draft that Save will create. */
+  isNew(): boolean {
+    return this.editRecord?.id === '';
+  }
+
+  private openEditor(r: Inspection): void {
+    this.editRecord = r;
+    this.editSnap = snapshotForm(r);
     this.editOpen = true;
   }
 
@@ -203,19 +170,44 @@ export class InspectionsComponent {
     return formChanged(this.editRecord, this.editSnap);
   }
 
+  /** Save the editor: create the draft, or patch the row it was opened on. */
   saveEdit(): void {
     const r = this.editRecord;
     if (!r) return;
-    this.data.updateInspection(r.id, {
-      itemId: r.itemId,
-      direction: r.direction,
-      status: r.status,
-      meterOut: r.meterOut,
-      meterIn: r.meterIn,
-      fuelOut: r.fuelOut,
-      fuelIn: r.fuelIn,
-      checks: { ...r.checks },
-    });
+    if (this.isNew()) {
+      if (!r.itemId) return; // a new inspection needs an asset
+      const rec = this.data.createInspection({
+        itemId: r.itemId,
+        orderId: r.orderId || null,
+        direction: r.direction,
+        date: r.date || new Date().toISOString().slice(0, 10),
+        ...this.directionReadings(r),
+        checks: { ...r.checks },
+        photos: r.photos ?? 0,
+        status: r.status,
+      });
+      // A check-out puts the unit on rent; a check-in frees it (prototype side-effect).
+      if (rec.direction === 'Check-Out') {
+        this.data.updateItem('serialized', rec.itemId, { status: 'On Rent', orderId: rec.orderId ?? null });
+      } else {
+        this.data.updateItem('serialized', rec.itemId, { status: 'Available', orderId: null });
+      }
+      // Follow the new record, so a narrowed log never hides what was just logged.
+      this.logAnchor = new Date(rec.date + 'T00:00:00');
+    } else {
+      this.data.updateInspection(r.id, {
+        itemId: r.itemId,
+        orderId: r.orderId || null,
+        direction: r.direction,
+        date: r.date,
+        status: r.status,
+        meterOut: r.meterOut ?? null,
+        meterIn: r.meterIn ?? null,
+        fuelOut: r.fuelOut ?? null,
+        fuelIn: r.fuelIn ?? null,
+        checks: { ...r.checks },
+      });
+    }
     this.closeEdit();
   }
 
@@ -223,6 +215,45 @@ export class InspectionsComponent {
     this.editOpen = false;
     this.editRecord = null;
     this.editSnap = '';
+  }
+
+  /* --------------------------- meter overage ---------------------------- */
+
+  /** Overage badge for a logged row — only when it exceeds the allowance. */
+  overageOf(r: Inspection): Overage | null {
+    const o = this.reading(r);
+    return o && o.overage > 0 ? o : null;
+  }
+
+  /** Live preview inside the editor (prototype `updateOveragePreview`). */
+  editOverage(): Overage | null {
+    return this.editRecord ? this.reading(this.editRecord) : null;
+  }
+
+  /** Used / allowed / overage for a Check-In that carries a meter-in reading. */
+  private reading(r: Inspection): Overage | null {
+    if (r.direction !== 'Check-In' || r.meterIn == null) return null;
+    const allowed = this.data.allowedHours(r.orderId ? this.data.getOrder(r.orderId) : undefined);
+    const used = Number(r.meterIn) - this.meterOutOf(r);
+    return { used, allowed, overage: used - allowed };
+  }
+
+  /** The check-out side of the pair: the record's reading, else the asset's last one. */
+  private meterOutOf(r: Inspection): number {
+    return r.meterOut != null ? Number(r.meterOut) : this.data.lastMeter(r.itemId);
+  }
+
+  /** Readings a new record stores: only the side its direction captures. */
+  private directionReadings(
+    r: Inspection,
+  ): Pick<Inspection, 'meterOut' | 'meterIn' | 'fuelOut' | 'fuelIn'> {
+    const out = r.direction === 'Check-Out';
+    return {
+      meterOut: out ? r.meterOut ?? null : this.meterOutOf(r),
+      meterIn: out ? null : r.meterIn ?? null,
+      fuelOut: out ? r.fuelOut ?? null : null,
+      fuelIn: out ? null : r.fuelIn ?? null,
+    };
   }
 
   /* ------------------------------ utilities ----------------------------- */
@@ -257,11 +288,6 @@ export class InspectionsComponent {
   private iso(d: Date): string {
     const p = (n: number) => String(n).padStart(2, '0');
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-  }
-
-  /** 'Sep 7' — short date for the week-range label. */
-  private span(iso: string): string {
-    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   private allChecks(v: boolean): Record<InspectionCheckKey, boolean> {

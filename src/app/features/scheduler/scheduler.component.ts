@@ -1,6 +1,6 @@
 import { Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DataService, hmMin } from '../../core/data.service';
+import { DataService, hmMin, periodLabel, periodPhrase } from '../../core/data.service';
 import {
   CatalogType,
   CATALOG_TYPES,
@@ -208,17 +208,19 @@ export class SchedulerComponent implements OnDestroy {
   viewStart(): number { return this.columns()[0].start; }
   tlWidth(): number { return 170 + this.colCount() * DAY_W; }
 
+  /** Pager label for the visible period ("Week of Sep 7" / "Month of September"). */
   rangeLabel(): string {
-    if (this.view === 'day') {
-      return (
-        new Date(this.anchor).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) + ' · 24h'
-      );
-    }
-    const c = this.columns();
-    const a = new Date(c[0].start);
-    if (this.view === 'month') return a.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    const b = new Date(c[c.length - 1].start);
-    return 'Week of ' + a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' - ' + b.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return periodLabel(this.view, this.periodStart());
+  }
+
+  /** Sentence form of `rangeLabel()` for prose ("free for the week of Sep 7"). */
+  rangePhrase(): string {
+    return periodPhrase(this.view, this.periodStart());
+  }
+
+  /** First day of the visible period — the one the pager label is anchored on. */
+  private periodStart(): Date {
+    return this.view === 'day' ? new Date(this.anchor) : new Date(this.columns()[0].start);
   }
 
   shift(dir: number): void {
@@ -420,7 +422,7 @@ export class SchedulerComponent implements OnDestroy {
         key: 'partial',
         blocked: false,
         badge: ('On site · ' + (out.orderId ?? '')).trim(),
-        note: 'Out now on ' + where + ' — free for ' + this.rangeLabel() + '.',
+        note: 'Out now on ' + where + ' — free for ' + this.rangePhrase() + '.',
       };
     }
     if (item.status === 'In Shop') {

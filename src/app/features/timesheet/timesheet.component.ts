@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, dISO, hmMin, minHM, snap15 } from '../../core/data.service';
+import { DataService, dISO, hmMin, minHM, periodLabel, snap15 } from '../../core/data.service';
 import { Item, Timesheet, TIMESHEET_KIND, TimesheetTarget } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -171,15 +171,9 @@ export class TimesheetComponent implements OnDestroy {
     return dISO(d) === dISO(new Date());
   }
 
+  /** Pager label for the visible period ("Week of Sep 7" / "Month of September"). */
   rangeLabel(): string {
-    const days = this.days();
-    if (this.view === 'month') {
-      return days[0].toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    }
-    if (this.view === 'week') {
-      return 'Week of ' + days[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-    return days[0].toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    return periodLabel(this.view, this.days()[0]);
   }
 
   nav(delta: number): void {

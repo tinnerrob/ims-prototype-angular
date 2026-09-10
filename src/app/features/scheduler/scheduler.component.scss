@@ -181,11 +181,8 @@
 }
 
 /* ------------------------------------------------------------------
-   Calendar period navigation (date range + arrows) sits on the RIGHT of
-   the timeline header instead of being centered. This scoped rule wins over
-   the global `.period-pager { justify-content: center }` in styles.scss.
+   The calendar period pager (date range + arrows) sits on the LEFT of the
+   timeline header, as the first control in the nav — it takes the slack and
+   packs left, pushing the Day/Week/Month toggle to the right end
+   (see `.period-pager` in styles.scss).
    ------------------------------------------------------------------ */
-.tl-nav .period-pager {
-  flex: 1 1 auto;
-  justify-content: flex-end;
-}

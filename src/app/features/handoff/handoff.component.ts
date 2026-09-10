@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { DataService } from '../../core/data.service';
+import { DataService, periodLabel } from '../../core/data.service';
 import { Item, Movement, MOVEMENT_KIND_LABEL, statusClass } from '../../core/models';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -42,12 +42,7 @@ export class HandoffComponent {
   constructor(readonly data: DataService) {}
 
   dayLabel(): string {
-    return this.data.parseDT(this.day).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+    return periodLabel('day', this.data.parseDT(this.day));
   }
 
   moveDay(n: number): void {

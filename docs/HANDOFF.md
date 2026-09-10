@@ -167,13 +167,36 @@ detail right**, with orders as the top rows.
   the component's close method directly, which never asks. Editor modals also work on a
   **copy** of the record (`openEdit(r) { this.editRecord = { ...r, … } }`) so Save is the
   only write — otherwise "discard" would have nothing to discard.
-- **Inspection log:** the Receiving / Inspections log filters by period — `All` (default)
-  / Day / Week / Month around a cursor date, with the scheduler's ‹ › pager (Monday-based
-  weeks) and a **Today** reset; the badge counts visible / total. A log row click opens
-  the **inspection editor** (the prototype's `inspectionModal` on the `data-edit` row)
-  rather than the read-only viewer — the redundant pencil column is gone, and logging a
-  new inspection re-anchors the log on the record it just created so a narrowed log can't
-  hide it.
+- **Inspection log:** the Receiving / Inspections page is just the log — the prototype's
+  left-hand *Asset In / Out Inspection* pane is gone, and the log card's header is a bare
+  control strip (**no title, no count badge, no Today reset**): the `All` / Day / Week /
+  Month chips then the **Log Inspection** button against the right end, with the date
+  navigator (the scheduler's ‹ › pager, Monday-based weeks) leading the header on the LEFT
+  and only rendered once a Day/Week/Month filter is active (`.log-filter` / `.log-pager`).
+  A log row click opens the **inspection editor** (the prototype's `inspectionModal` on the
+  `data-edit` row) rather than the read-only viewer — the redundant pencil column is gone.
+  **Log Inspection opens that same editor on a blank draft** (`newInspection()`): `isNew()`
+  (`id === ''`) makes Save call `createInspection()` instead of `updateInspection()` and run
+  the prototype's side-effects (check-out → asset *On Rent*, check-in → *Available*), and a
+  new record re-anchors the log so a narrowed period can't hide it. The editor carries the
+  fields the old pane had (Contract, Date) plus the live overage preview
+  (`editOverage()`), and the log's **Overage** column badges any check-in over its meter
+  allowance (prototype `meterOverage`).
+- **Date navigators sit on the left:** every period pager — the range label between ‹ ›
+  arrows — sits at the left of its bar/header: it takes up the free space and packs its
+  content against its start, so the Scheduler and Timesheet timeline navs read
+  `‹ range › … [Day|Week|Month]` (the toggle keeps the right end), Hand-Off's day stepper +
+  Today button sit right after the card title (`me-auto`), and the Inspection log's
+  navigator (`.log-pager`, only rendered with a Day/Week/Month filter) leads that header
+  before the chips + **Log Inspection** button. See `.period-pager` in `styles.scss`.
+- **One label wording for every navigator** (`periodLabel()` in `core/data.service.ts`, used
+  by the Scheduler, Labor & Timesheets, the inspection log and Hand-Off): `Monday, Aug 17, 2026`
+  for a day, `Week of Aug 17, 2026` for a Monday-anchored week (first day only — no end date)
+  and `Month of August 2026` for a month. `periodPhrase()` is the sentence form for prose
+  (`free for the week of Aug 17, 2026`, `No inspections logged for the month of August 2026.`)
+  used by the Scheduler's availability line/note and the log's empty state. The label is one
+  shared pill — `.period-pager .tl-range` in `styles.scss` (Hand-Off's stepper, whose label
+  sits inside its `.btn-group`, matches it via `.btn-group .tl-range`).
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler
