@@ -111,8 +111,8 @@ export class SchedulerComponent implements OnDestroy {
     } else if (this.view === 'week') {
       const base = this.mondayOf(this.anchor);
       for (let i = 0; i < 7; i++) {
-        const c = new Date(base + i * DAY_MS);
-        out.push({ start: c.getTime(), label: DAY_NAMES[c.getDay()], sub: MONTHS[c.getMonth()] + ' ' + c.getDate() });
+        const c = this.dayAt(base, i);
+        out.push({ start: c, label: DAY_NAMES[new Date(c).getDay()], sub: MONTHS[new Date(c).getMonth()] + ' ' + new Date(c).getDate() });
       }
     } else {
       // Day view: 24 one-hour segments (00:00 .. 23:00)
@@ -145,7 +145,7 @@ export class SchedulerComponent implements OnDestroy {
       const d = new Date(this.anchor);
       this.anchor = this.startOfDay(new Date(d.getFullYear(), d.getMonth() + dir, 1));
     } else {
-      this.anchor += dir * (this.view === 'week' ? 7 : 1) * DAY_MS;
+      this.anchor = this.startOfDay(new Date(this.dayAt(this.anchor, dir * (this.view === 'week' ? 7 : 1))));
     }
     this.expanded.clear();
     this.selectedOrderId = '';
@@ -390,6 +390,12 @@ export class SchedulerComponent implements OnDestroy {
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
   }
 
+  /** Local midnight `i` days after the local midnight at `base` (DST-safe). */
+  dayAt(base: number, i: number): number {
+    const d = new Date(base);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + i).getTime();
+  }
+
   private pad2(n: number): string {
     return n < 10 ? '0' + n : String(n);
   }
@@ -423,10 +429,12 @@ export class SchedulerComponent implements OnDestroy {
   geom(startISO: string, endISO: string): BarGeom | null {
     const N = this.colCount();
     const view = this.viewStart();
-    const s0 = Math.floor(new Date(startISO + 'T00:00:00').getTime() / DAY_MS) * DAY_MS;
-    const e0 = Math.floor((new Date(endISO + 'T00:00:00').getTime() + DAY_MS - 1) / DAY_MS) * DAY_MS;
-    const sIdx = (s0 - view) / DAY_MS;
-    const eIdx = (e0 - view) / DAY_MS;
+    // Day index from LOCAL midnights (never floor raw epoch — that is UTC and
+    // would make indices fractional in non-UTC timezones, mis-sizing the bars).
+    const dayIndex = (iso: string): number =>
+      Math.round((new Date(iso + 'T00:00:00').getTime() - view) / DAY_MS);
+    const sIdx = dayIndex(startISO);
+    const eIdx = dayIndex(endISO);
     if (eIdx < 0 || sIdx >= N) return null;
     const cs = Math.max(0, sIdx);
     const ce = Math.min(N - 1, eIdx);
@@ -604,8 +612,8 @@ export class SchedulerComponent implements OnDestroy {
     }
 
     // Week / Month: day-granular date snapping.
-    const idx = Math.floor(((ev.clientX - rect.left) / rect.width) * this.colCount());
-    const day = this.dateAt(this.viewStart() + idx * DAY_MS);
+    const idx = Math.min(this.colCount() - 1, Math.max(0, Math.floor(((ev.clientX - rect.left) / rect.width) * this.colCount())));
+    const day = this.dateAt(this.dayAt(this.viewStart(), idx));
     if (r.liId == null) {
       let ns = order.startDate;
       let ne = order.endDate;
