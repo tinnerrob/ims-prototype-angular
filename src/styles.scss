@@ -2229,3 +2229,21 @@ a { color: var(--brand); }
   cursor: not-allowed;
 }
 
+/* Icon colour follows the action, so a row reads at a glance without labels:
+   remove = red (--danger), view = blue (--accent), edit = green (--success).
+   Keyed off the icon class inside the shared icon-button pattern, so every
+   page (and any new one) picks it up without extra markup. */
+.btn-ims-outline.btn-sm2 > .bi-x-lg,
+.btn-ims-outline.btn-sm2 > .bi-trash,
+.btn-ims-outline.btn-sm2 > .bi-trash3 { color: var(--danger); }
+.btn-ims-outline.btn-sm2 > .bi-eye { color: var(--accent); }
+.btn-ims-outline.btn-sm2 > .bi-pencil { color: var(--success); }
+
+/* ------------------------------------------------------------------
+   Clickable table rows — a row that opens the read-only record viewer
+   (see `shared/record-view`). Pairs with `(click)="showView($event, …)"`,
+   which ignores clicks that land on the row's own action buttons.
+   ------------------------------------------------------------------ */
+.table tbody tr.row-open { cursor: pointer; }
+.table tbody tr.row-open:hover { background: rgba(37, 99, 235, .05); }
+

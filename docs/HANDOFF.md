@@ -30,7 +30,7 @@ persisted data store. Module views are gated by `ModulesService` + a route guard
 | Items & Stock | `features/items` | typed catalog: list/CRUD per type |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log |
-| **Allocations & Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |
+| **Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |
 | Field Service & Maintenance | `features/maintenance` | work orders on items |
 | Labor & Timesheets | `features/timesheet` | task-chip → employee drag to clock in |
 | Logistics & Dispatch | `features/logistics` | trucks + dispatch status board |
@@ -53,6 +53,14 @@ detail right**, with orders as the top rows.
   expanding reveals one row per booked inventory item nested under it.
 - **Drag-to-book:** drag a resource card from the left Inventory Pool onto an order
   (queue card or its timeline row) to book it at that order's window. Auto-expands.
+  **Overbooking is allowed** — an item already booked for the visible period can be
+  dropped again (the conflict pane flags it); only a *retired* item (`active: false`)
+  is refused.
+- **Range-aware pool:** each pool card's badge is computed from the **visible period**
+  (`availability()` → `bookingsInRange()`), not from a fixed/lifetime state, and
+  re-evaluates when the Day/Week/Month view, the period pager or the bookings change:
+  `n booked` (booked somewhere in the range), `On site · ORD-…` (out on custody now),
+  `In Shop`, `Inactive`. `rangeLabel()` is shown above the pool for context.
 - **Resize (day-granular in Week/Month; 15-min in Day):** every order and each
   inventory bar has edge handles. Dragging snaps to a day (Week/Month) or to
   15 minutes (Day). Line bars are clamped inside their order window; resizing an
@@ -81,6 +89,8 @@ detail right**, with orders as the top rows.
   `HttpClient` later without touching features.
 - `src/app/core/modules.service.ts` + `module.guard.ts` — module gating.
 - `src/app/features/*` — one folder per view (component.ts/html/scss).
+- `src/app/shared/record-view/*` — shared read-only record viewer (opened by a table
+  row click) + the `isInteractiveTarget()` row-click guard.
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
 - `src/app/app.routes.ts` — route map (module routes are guarded).
 - `src/styles.scss` — token-driven global theme; `index.html` loads Bootstrap Icons CDN.
@@ -96,6 +106,16 @@ detail right**, with orders as the top rows.
   `bi-eye` (view). The label lives in a `title` tooltip, cells are
   `class="text-end text-nowrap"`, and a still-in-use row is `[disabled]` (global
   `.btn:disabled { cursor: not-allowed; }` in `src/styles.scss`).
+  The icon carries the action's colour (global rules in `src/styles.scss`):
+  **remove = red (`--danger`), view = blue (`--accent`), edit = green (`--success`)**.
+- **Clickable table rows** open the shared read-only viewer
+  (`src/app/shared/record-view`): `<tr class="row-open" (click)="showView($event, rec)">`
+  plus `<ims-record-view [view]="viewer" …>` in the template. `showView()` bails out
+  via `isInteractiveTarget(e)` when the click landed on a row control, so the row's
+  own icon buttons keep working. `ViewModel` = title/subtitle/icon/badge + sections of
+  label/value fields; `[editable]="true"` adds a footer **Edit** that reopens the
+  page's own editor (`editFromViewer()`). Pages with an existing read-only detail
+  modal (Orders → contract, Invoicing) route the row click into it instead.
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler

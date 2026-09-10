@@ -47,7 +47,7 @@
 /* the two cards split the column height exactly in half.
    NOTE: basis MUST be 0 (not `auto`) — with `auto` each card grows with its
    own content, so the long Inventory Pool list made it far taller than the
-   Orders & Allocations list. */
+   Orders & Scheduling list. */
 .sched-side .sched-queue > .card {
   flex: 1 1 0;
   min-height: 170px;

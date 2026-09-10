@@ -108,7 +108,7 @@
           </thead>
           <tbody>
             @for (r of inspections(); track r.id) {
-              <tr>
+              <tr class="row-open" (click)="showView($event, r)">
                 <td class="strong mono">{{ r.id }}</td>
                 <td class="strong">{{ r.itemId }}</td>
                 <td>{{ r.direction }}</td>
@@ -208,3 +208,12 @@
     </div>
   </div>
 </div>
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view
+  [view]="viewer"
+  [editable]="true"
+  (closed)="closeViewer()"
+  (edit)="editFromViewer()"
+></ims-record-view>
+

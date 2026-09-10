@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
 import { Invoice, InvoiceStatus, INVOICE_STATUS_LABEL } from '../../core/models';
+import { isInteractiveTarget } from '../../shared/record-view/record-view.component';
 
 /**
  * Billing & Invoicing (module) — port of the prototype's `renderInvoicing`
@@ -84,6 +85,12 @@ export class InvoicingComponent {
 
   openDetail(inv: Invoice): void {
     this.detail = inv;
+  }
+
+  /** Row click → the page's existing read-only invoice detail modal. */
+  showInvoiceView(e: Event, inv: Invoice): void {
+    if (isInteractiveTarget(e)) return;
+    this.openDetail(inv);
   }
 
   closeDetail(): void {

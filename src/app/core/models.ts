@@ -345,7 +345,7 @@ export interface IndustryModuleDef {
 
 /** Industry modules layered on the IMS core (all core-only deps today). */
 export const INDUSTRY_MODULES: IndustryModuleDef[] = [
-  { key: 'scheduling', label: 'Allocations & Scheduling', desc: 'Plan availability and allocation of inventory over time.' },
+  { key: 'scheduling', label: 'Scheduling', desc: 'Plan availability and scheduling of inventory over time.' },
   { key: 'dispatch', label: 'Logistics & Dispatch', desc: 'Dispatch board for deliveries, pickups, and routes.' },
   { key: 'telemetry', label: 'Fleet Telemetry', desc: 'Live fleet telemetry and geofence monitoring.' },
   { key: 'labor', label: 'Labor & Timesheets', desc: 'Labor time records against orders and work orders.' },

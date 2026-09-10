@@ -68,7 +68,7 @@
           </thead>
           <tbody>
             @for (row of activeOrders(); track row.order.orderId) {
-              <tr>
+              <tr class="row-open" (click)="showView($event, row)">
                 <td class="strong mono">{{ row.order.orderId }}</td>
                 <td>
                   {{ row.order.projectName }}
@@ -160,3 +160,7 @@
     </div>
   </div>
 </div>
+
+<!-- ===== Read-only record viewer (margin table row click) ===== -->
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>
+

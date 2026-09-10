@@ -21,7 +21,7 @@
         </thead>
         <tbody>
           @for (r of outbound(); track r.itemId) {
-            <tr>
+            <tr class="row-open" (click)="showBoardView($event, r)">
               <td class="strong mono">{{ r.itemId }}</td>
               <td class="mono">{{ r.orderId }}</td>
               <td class="text-muted2">{{ r.model }}</td>
@@ -55,7 +55,7 @@
         </thead>
         <tbody>
           @for (r of incoming(); track r.itemId) {
-            <tr>
+            <tr class="row-open" (click)="showBoardView($event, r)">
               <td class="strong mono">{{ r.itemId }}</td>
               <td class="mono">{{ r.orderId }}</td>
               <td class="text-muted2">{{ r.model }}</td>
@@ -116,7 +116,7 @@
           <thead><tr><th>ID</th><th>Kind</th><th>Item</th><th>Order / party</th><th>When</th><th>Note</th></tr></thead>
           <tbody>
             @for (m of movements(); track m.id) {
-              <tr>
+              <tr class="row-open" (click)="showMovementView($event, m)">
                 <td class="mono">{{ m.id }}</td>
                 <td>
                   <span [class]="m.kind === 'issue' ? 'badge-status st-out' : 'badge-status st-available'">
@@ -147,3 +147,7 @@
     </div>
   </div>
 </div>
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>
+

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Location, LocationType } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /** A location plus its depth in the ragged hierarchy (drives table indentation). */
 interface LocationRow {
@@ -40,7 +41,7 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 @Component({
   selector: 'ims-locations',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './locations.component.html',
   styleUrl: './locations.component.scss',
 })
@@ -61,6 +62,11 @@ export class LocationsComponent {
   formTypeName = '';
   formTypeActive = true;
 
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
+  /** Record behind the open viewer, so the footer Edit can reopen the editor. */
+  private viewing: { kind: 'location' | 'type'; id: string } | null = null;
+
   constructor(readonly data: DataService) {}
 
   /** Switch sub-table — closing any open editor so a stale modal can't linger. */
@@ -68,6 +74,7 @@ export class LocationsComponent {
     this.tab = t;
     this.closeForm();
     this.closeType();
+    this.closeViewer();
   }
 
   /* ------------------------------- queries ------------------------------ */
@@ -230,5 +237,81 @@ export class LocationsComponent {
     this.renameTypeFrom = null;
     this.formTypeName = '';
     this.formTypeActive = true;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /**
+   * Row click → read-only viewer. A click that lands on a row action (the
+   * `+` / edit / remove icon buttons) is ignored so those keep working.
+   */
+  showLocationView(e: Event, loc: Location): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = { kind: 'location', id: loc.id };
+    this.viewer = {
+      title: loc.name,
+      subtitle: loc.id,
+      icon: 'bi-diagram-3',
+      sections: [
+        {
+          title: 'Hierarchy',
+          fields: [
+            { label: 'Location ID', value: loc.id, mono: true },
+            { label: 'Type', value: loc.type || '—' },
+            { label: 'Parent', value: this.parentName(loc) },
+            { label: 'Children', value: String(this.childCount(loc.id)) },
+          ],
+        },
+        {
+          title: 'Address & Contact',
+          fields: [
+            { label: 'Address', value: loc.address || '—' },
+            { label: 'Phone', value: loc.phone || '—' },
+            { label: 'Time Zone', value: loc.tz },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Location-type row click → read-only viewer. */
+  showTypeView(e: Event, t: LocationType): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = { kind: 'type', id: t.name };
+    this.viewer = {
+      title: t.name,
+      subtitle: 'Location Type',
+      icon: 'bi-tags',
+      badge: t.active !== false ? 'Active' : 'Inactive',
+      badgeClass: t.active !== false ? 'st-active' : 'st-out',
+      sections: [
+        {
+          fields: [
+            { label: 'Type Name', value: t.name },
+            { label: 'Locations Using It', value: String(this.typeCount(t.name)) },
+            { label: 'Available In Editor', value: t.active !== false ? 'Yes' : 'No' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+    this.viewing = null;
+  }
+
+  /** Viewer footer Edit → reopen this page's own editor for the shown record. */
+  editFromViewer(): void {
+    const v = this.viewing;
+    this.closeViewer();
+    if (!v) return;
+    if (v.kind === 'type') {
+      const t = this.typeRecords().find((x) => x.name === v.id);
+      if (t) this.openTypeRename(t);
+      return;
+    }
+    const loc = this.locations().find((l) => l.id === v.id);
+    if (loc) this.openForm(loc);
   }
 }

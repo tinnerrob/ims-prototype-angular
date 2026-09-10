@@ -26,7 +26,7 @@
             </thead>
             <tbody>
               @for (t of rows(); track t.item.id) {
-                <tr>
+                <tr class="row-open" (click)="showView($event, t)">
                   <td class="strong mono">{{ t.item.id }}</td>
                   <td>
                     <span [class]="badge(t.item.status)"><i class="bi bi-circle-fill"></i>{{ t.item.status }}</span>
@@ -110,3 +110,7 @@
     <div class="map-scale"><i class="bi bi-rulers"></i> ~1.5 km grid</div>
   </div>
 </div>
+
+<!-- ===== Read-only record viewer (fleet row click) ===== -->
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>
+

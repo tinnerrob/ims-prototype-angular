@@ -10,6 +10,7 @@ import {
   WorkOrderPart,
   WorkOrderStatus,
 } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
  * Data-free blank work-order form. Class field initializers run *before* the
@@ -39,7 +40,7 @@ const BLANK_WO_FORM = {
 @Component({
   selector: 'ims-maintenance',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './maintenance.component.html',
   styleUrl: './maintenance.component.scss',
 })
@@ -50,6 +51,9 @@ export class MaintenanceComponent {
   filter: 'all' | WorkOrderStatus = 'all';
   modalOpen = false;
   form = { ...BLANK_WO_FORM };
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -133,6 +137,56 @@ export class MaintenanceComponent {
 
   closeForm(): void {
     this.modalOpen = false;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /**
+   * Work-order row click → read-only viewer. The page's New Work Order modal can
+   * only create, so the viewer is read-only (status changes stay in the grid).
+   */
+  showView(e: Event, w: WorkOrder): void {
+    if (isInteractiveTarget(e)) return;
+    const c = this.cost(w);
+    this.viewer = {
+      title: `Work Order ${w.id}`,
+      subtitle: `${this.assetLabel(w)} · ${w.type}`,
+      icon: 'bi-tools',
+      badge: w.status,
+      badgeClass: 'st-' + statusClass(w.status),
+      sections: [
+        {
+          title: 'Work Order',
+          fields: [
+            { label: 'WO #', value: w.id, mono: true },
+            { label: 'Asset', value: this.assetLabel(w) },
+            { label: 'Service Type', value: w.type },
+            { label: 'Meter Reading', value: this.data.int(w.meterReading) },
+            { label: 'Status', value: w.status },
+            { label: 'Date', value: this.data.fmtDate(w.date), mono: true },
+          ],
+        },
+        {
+          title: 'Parts & Labor',
+          fields: [
+            { label: 'Parts Used', value: w.parts.length ? w.parts.map((p) => this.partLabel(p)).join(', ') : '—' },
+            { label: 'Parts Cost', value: this.data.money(c.partsCost) },
+            { label: 'Labor Hours', value: String(w.laborHours) },
+            { label: 'Labor Rate / hr', value: this.data.money(c.laborRate) },
+            { label: 'Labor Cost', value: this.data.money(c.laborCost) },
+            { label: 'Total Cost', value: this.data.money(c.total) },
+          ],
+        },
+        {
+          title: 'Notes',
+          fields: [{ label: 'Notes', value: w.notes || '—' }],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
   }
 
   private emptyForm() {

@@ -3,8 +3,18 @@ import { Router } from '@angular/router';
 
 import { DataService } from '../../core/data.service';
 import { ModulesService } from '../../core/modules.service';
-import { CatalogType, statusClass } from '../../core/models';
+import { CatalogType, Order, statusClass } from '../../core/models';
 import { TelemetryService } from '../../core/telemetry.service';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+
+/** One row of the dashboard's active-order margin table. */
+interface OrderTotalRow {
+  order: Order;
+  days: number;
+  gross: number;
+  net: number;
+  margin: number;
+}
 
 /**
  * Operations Dashboard — port of the prototype's `renderDashboard`
@@ -14,11 +24,15 @@ import { TelemetryService } from '../../core/telemetry.service';
 @Component({
   selector: 'ims-dashboard',
   standalone: true,
+  imports: [RecordViewComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent {
   readonly fleetStatusOrder = ['Available', 'On Rent', 'In Shop', 'Staged'];
+
+  /** Read-only record viewer (opened by clicking the margin table's rows). */
+  viewer: ViewModel | null = null;
 
   constructor(
     readonly data: DataService,
@@ -72,5 +86,46 @@ export class DashboardComponent {
 
   openView(id: string): void {
     this.router.navigate(['/' + id]);
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /** Margin-table row click → read-only viewer for that active contract. */
+  showView(e: Event, row: OrderTotalRow): void {
+    if (isInteractiveTarget(e)) return;
+    const o = row.order;
+    this.viewer = {
+      title: o.orderId,
+      subtitle: `${o.projectName} · ${o.party}`,
+      icon: 'bi-briefcase',
+      badge: o.status === 'active' ? 'Active' : 'Closed',
+      badgeClass: 'st-' + statusClass(o.status),
+      sections: [
+        {
+          title: 'Contract',
+          fields: [
+            { label: 'Contract', value: o.orderId, mono: true },
+            { label: 'Customer', value: this.data.partyName(o.partyId) },
+            { label: 'Project', value: o.projectName },
+            { label: 'Job Site', value: o.jobSite || '—' },
+            { label: 'Window', value: `${this.data.fmtDate(o.startDate)} → ${this.data.fmtDate(o.endDate)}`, mono: true },
+            { label: 'Days', value: String(row.days) },
+            { label: 'Lines', value: String(o.lineItems.length) },
+          ],
+        },
+        {
+          title: 'Margin',
+          fields: [
+            { label: 'Gross', value: this.data.money(row.gross) },
+            { label: 'Net', value: this.data.money(row.net) },
+            { label: 'Margin', value: this.data.pct(row.margin) },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
   }
 }

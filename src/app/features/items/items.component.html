@@ -35,7 +35,7 @@
         </thead>
         <tbody>
           @for (item of rows(); track item.id) {
-            <tr>
+            <tr class="row-open" (click)="showView($event, item)">
               @for (c of columns(); track c[0]) {
                 <td [class.num]="c[2] === 'num'">
                   @if (isStatus(c[0])) {
@@ -217,4 +217,13 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view
+  [view]="viewer"
+  [editable]="true"
+  (closed)="closeViewer()"
+  (edit)="editFromViewer()"
+></ims-record-view>
 

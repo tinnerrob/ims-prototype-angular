@@ -36,10 +36,12 @@ src/app/
 │   ├── logistics/       # Logistics & Dispatch (module: truck dispatch)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
-│   ├── scheduler/       # Allocations & Scheduling (module: week timeline + conflicts)
+│   ├── scheduler/       # Scheduling (module: week timeline + conflicts)
 │   ├── telemetry/       # Fleet Telemetry (module: GPS sim live feed)
 │   ├── timesheet/       # Labor & Timesheets (module: time records)
 │   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
+├── shared/
+│   └── record-view/     # shared read-only record viewer (click a table row)
 ├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
 ├── app.routes.ts        # Core-first route map
 └── app.config.ts
@@ -55,7 +57,14 @@ src/app/
 Table row actions follow one shared pattern (Admin → Locations is the reference):
 `class="btn btn-ims-outline btn-sm2"` with a single icon and no label text —
 `bi-plus-lg` add, `bi-pencil` edit, `bi-x-lg` remove, `bi-eye` view — labelled by a
-`title` tooltip inside a `text-end text-nowrap` cell.
+`title` tooltip inside a `text-end text-nowrap` cell. The icon carries the action's
+colour: remove = red, view = blue, edit = green (global rules in `src/styles.scss`).
+
+Clicking a **table row** opens the shared read-only record viewer
+(`src/app/shared/record-view`): `class="row-open"` + `(click)="showView($event, rec)"`
+on the `<tr>`, and `<ims-record-view [view]="viewer" …>` in the template. The
+handler ignores clicks on the row's own buttons, and `[editable]="true"` adds a
+footer **Edit** that reopens the page's editor.
 
 The `DataService` mirrors the prototype's `IMS.store`; a future `HttpClient`
 adapter replaces its synchronous methods (the `apiAdapter` contract) without
@@ -73,11 +82,11 @@ touching feature code.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
 - [x] Admin — Administration shell with submenus: Locations, Categories, Feature Modules.
-- [x] Allocations & Scheduling — week timeline, conflict detection, item booking.
+- [x] Scheduling — week timeline, conflict detection, item booking (overbooking allowed).
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 
 **Port coverage complete:** full core + all 6 industry modules + module gating + admin, on a single typed, persisted data store.
-- [ ] Industry modules (allocations, dispatch, telemetry, labor, service, rentals,
+- [ ] Industry modules (scheduling, dispatch, telemetry, labor, service, rentals,
       billing) as lazy-loaded guarded routes once the module registry is ported.
 
 Design tokens, modal, and column-profile specs live in the prototype repo under

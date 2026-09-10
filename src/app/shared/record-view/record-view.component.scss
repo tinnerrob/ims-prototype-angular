@@ -1,0 +1,7 @@
+/* The viewer only carries markup — the modal shell, `.list-line` grid and
+   badge styles all come from the shared design system (src/styles.scss).
+   `display: contents` keeps the host from introducing a layout box around the
+   fixed-position modal. */
+:host {
+  display: contents;
+}

@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 interface InvTab {
   key: CatalogType;
@@ -108,7 +109,7 @@ const BLANK_ITEM_FORM = {
 @Component({
   selector: 'ims-items',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './items.component.html',
   styleUrl: './items.component.scss',
 })
@@ -119,6 +120,11 @@ export class ItemsComponent {
   modalOpen = false;
   editingId: string | null = null;
   form = { ...BLANK_ITEM_FORM };
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
+  /** Record behind the open viewer, so the footer Edit can reopen the editor. */
+  private viewing: Item | null = null;
 
   constructor(private readonly data: DataService) {}
 
@@ -156,6 +162,7 @@ export class ItemsComponent {
   selectType(t: CatalogType): void {
     this.type = t;
     this.search = '';
+    this.closeViewer();
   }
 
   /** Cell text for a column (template stays branch-free). */
@@ -264,6 +271,47 @@ export class ItemsComponent {
   closeForm(): void {
     this.modalOpen = false;
     this.editingId = null;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /**
+   * Row click → read-only viewer. The fields mirror the table's per-type column
+   * set, so the viewer shows exactly what the row showed (plus the low-stock
+   * warning) without duplicating the formatting rules.
+   */
+  showView(e: Event, item: Item): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = item;
+    this.viewer = {
+      title: item.name,
+      subtitle: `${item.id} · ${item.category}`,
+      icon: this.activeTab()?.icon ?? 'bi-box-seam',
+      badge: item.status,
+      badgeClass: 'st-' + statusClass(item.status),
+      sections: [
+        {
+          title: this.activeTab()?.label ?? 'Record',
+          fields: this.columns().map((c) => ({
+            label: c[1],
+            value: this.cell(item, c[0]),
+            mono: c[0] === 'id',
+          })),
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+    this.viewing = null;
+  }
+
+  /** Viewer footer Edit → reopen the item editor for the shown record. */
+  editFromViewer(): void {
+    const item = this.viewing;
+    this.closeViewer();
+    if (item) this.openForm(item);
   }
 
   private emptyForm() {

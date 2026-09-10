@@ -80,9 +80,9 @@ export const VIEWS: ViewDef[] = [
   /* ---- Modules · Opt-in (gated by ModulesService) ---- */
   {
     id: 'scheduler',
-    title: 'Allocations',
-    desc: 'Module: planned availability and allocation of inventory over time.',
-    nav: 'Allocations & Scheduling',
+    title: 'Scheduling',
+    desc: 'Module: planned availability and scheduling of inventory over time.',
+    nav: 'Scheduling',
     icon: 'bi-calendar3',
     group: 'module',
     module: 'scheduling',

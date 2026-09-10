@@ -11,6 +11,7 @@ import {
   TaxSchedule,
   WEEKEND_POLICIES,
 } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
  * Pricing & Policies (administration) — port of the prototype's `renderPricing`
@@ -20,7 +21,7 @@ import {
 @Component({
   selector: 'ims-pricing',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './pricing.component.html',
   styleUrl: './pricing.component.scss',
 })
@@ -49,6 +50,11 @@ export class PricingComponent {
   taxOpen = false;
   taxEditingCode: string | null = null;
   taxForm: TaxSchedule = this.emptyTax();
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
+  /** Record behind the open viewer, so the footer Edit can reopen the editor. */
+  private viewing: { kind: 'overhead' | 'tax'; id: string } | null = null;
 
   constructor(readonly data: DataService) {
     this.form = { ...data.pricing, riskPremiums: { ...data.pricing.riskPremiums } };
@@ -147,6 +153,84 @@ export class PricingComponent {
   closeTax(): void {
     this.taxOpen = false;
     this.taxEditingCode = null;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /** Overhead / service-fee row click → read-only viewer. */
+  showOverheadView(e: Event, o: Overhead): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = { kind: 'overhead', id: o.id };
+    this.viewer = {
+      title: o.name,
+      subtitle: o.id,
+      icon: 'bi-receipt',
+      badge: o.locked ? 'Auto-inject' : 'Optional',
+      badgeClass: o.locked ? 'st-active' : 'st-closed',
+      sections: [
+        {
+          title: 'Fee',
+          fields: [
+            { label: 'Fee ID', value: o.id, mono: true },
+            { label: 'Name', value: o.name },
+            { label: 'Category', value: o.category },
+            { label: 'Charge Type', value: o.chargeType },
+            { label: 'Percent Of Equipment Total', value: o.pct + '%' },
+          ],
+        },
+        {
+          title: 'Defaults',
+          fields: [
+            { label: 'Default Cost', value: this.data.money(o.cost) },
+            { label: 'Default Retail', value: this.data.money(o.retail) },
+            { label: 'Applied To New Orders', value: o.locked ? 'Automatically' : 'On request' },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Sales-tax row click → read-only viewer. */
+  showTaxView(e: Event, t: TaxSchedule): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = { kind: 'tax', id: t.code };
+    this.viewer = {
+      title: t.code,
+      subtitle: [t.city, t.county, t.state].filter(Boolean).join(', ') || 'Sales tax jurisdiction',
+      icon: 'bi-percent',
+      sections: [
+        {
+          title: 'Jurisdiction',
+          fields: [
+            { label: 'Code', value: t.code, mono: true },
+            { label: 'State', value: t.state || '—' },
+            { label: 'County', value: t.county || '—' },
+            { label: 'City', value: t.city || '—' },
+            { label: 'Rate', value: (t.rate * 100).toFixed(3) + '%' },
+            { label: 'Note', value: t.note || '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+    this.viewing = null;
+  }
+
+  /** Viewer footer Edit → reopen the matching editor for the shown record. */
+  editFromViewer(): void {
+    const v = this.viewing;
+    this.closeViewer();
+    if (!v) return;
+    if (v.kind === 'tax') {
+      const t = this.taxes().find((x) => x.code === v.id);
+      if (t) this.openTax(t);
+      return;
+    }
+    const o = this.overheads().find((x) => x.id === v.id);
+    if (o) this.openOverhead(o);
   }
 
   private emptyOverhead(): Omit<Overhead, 'id'> & { id: string } {

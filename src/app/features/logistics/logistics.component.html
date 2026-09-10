@@ -47,7 +47,7 @@
           </thead>
           <tbody>
             @for (d of dispatches(); track d.id) {
-              <tr>
+              <tr class="row-open" (click)="showView($event, d)">
                 <td class="num">{{ d.routeSeq }}</td>
                 <td class="strong mono">{{ d.id }}</td>
                 <td class="strong">{{ d.assetId }}</td>
@@ -136,3 +136,7 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>
+

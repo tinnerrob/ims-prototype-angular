@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { CatalogType, CategoryOption } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 interface CategoryTab {
   key: CatalogType;
@@ -27,7 +28,7 @@ const CAT_TYPES: CategoryTab[] = [
 @Component({
   selector: 'ims-categories',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './categories.component.html',
   styleUrl: './categories.component.scss',
 })
@@ -41,6 +42,11 @@ export class CategoriesComponent {
   renameFrom: string | null = null;
   formName = '';
   formActive = true;
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
+  /** Record behind the open viewer, so the footer Edit can reopen the editor. */
+  private viewing: CategoryOption | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -59,6 +65,7 @@ export class CategoriesComponent {
   selectType(t: CatalogType): void {
     this.type = t;
     this.close();
+    this.closeViewer();
   }
 
   itemsIn(name: string): number {
@@ -99,5 +106,42 @@ export class CategoriesComponent {
     this.renameFrom = null;
     this.formName = '';
     this.formActive = true;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /** Row click → read-only viewer (row actions keep their own click). */
+  showView(e: Event, c: CategoryOption): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = c;
+    this.viewer = {
+      title: c.name,
+      subtitle: this.label(),
+      icon: this.tabs.find((t) => t.key === this.type)?.icon ?? 'bi-tags',
+      badge: c.active !== false ? 'Active' : 'Inactive',
+      badgeClass: c.active !== false ? 'st-active' : 'st-out',
+      sections: [
+        {
+          fields: [
+            { label: 'Category', value: c.name },
+            { label: 'Item Type', value: this.label() },
+            { label: 'Items Using It', value: String(this.itemsIn(c.name)) },
+            { label: 'Available In Editors', value: c.active !== false ? 'Yes' : 'No' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+    this.viewing = null;
+  }
+
+  /** Viewer footer Edit → reopen the rename editor for the shown category. */
+  editFromViewer(): void {
+    const c = this.viewing;
+    this.closeViewer();
+    if (c) this.openRename(c);
   }
 }

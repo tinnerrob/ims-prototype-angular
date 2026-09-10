@@ -73,7 +73,7 @@
             </thead>
             <tbody>
               @for (o of overheads(); track o.id) {
-                <tr>
+                <tr class="row-open" (click)="showOverheadView($event, o)">
                   <td class="strong">{{ o.name }}</td>
                   <td>{{ o.category }}</td>
                   <td>
@@ -127,7 +127,7 @@
             </thead>
             <tbody>
               @for (t of taxes(); track t.code) {
-                <tr>
+                <tr class="row-open" (click)="showTaxView($event, t)">
                   <td class="strong mono">{{ t.code }}</td>
                   <td>{{ t.state || '—' }}</td>
                   <td>{{ t.county || '—' }}</td>
@@ -269,4 +269,13 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view
+  [view]="viewer"
+  [editable]="true"
+  (closed)="closeViewer()"
+  (edit)="editFromViewer()"
+></ims-record-view>
 

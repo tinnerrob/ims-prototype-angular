@@ -51,7 +51,7 @@
           </thead>
           <tbody>
             @for (r of rows(); track r.loc.id) {
-              <tr>
+              <tr class="row-open" (click)="showLocationView($event, r.loc)">
                 <td>
                   <div class="loc-cell" [style.paddingLeft.px]="indent(r)">
                     <i class="bi {{ r.depth === 0 ? 'bi-diagram-3' : 'bi-arrow-return-right' }} loc-glyph"
@@ -101,7 +101,7 @@
           </thead>
           <tbody>
             @for (t of typeRecords(); track t.name) {
-              <tr>
+              <tr class="row-open" (click)="showTypeView($event, t)">
                 <td class="strong">{{ t.name }}</td>
                 <td>
                   @if (t.active !== false) {
@@ -243,5 +243,13 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view
+  [view]="viewer"
+  [editable]="true"
+  (closed)="closeViewer()"
+  (edit)="editFromViewer()"
+></ims-record-view>
 
 

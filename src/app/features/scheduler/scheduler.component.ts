@@ -29,7 +29,11 @@ interface BarModel {
 }
 interface OrderModel { order: Order; isExpanded: boolean; orderBar: BarModel | null; lines: BarModel[]; }
 interface ResizeState { orderId: string; liId: string | null; edge: 'l' | 'r'; track: HTMLElement; }
-/** Pool-card availability state (prototype `resCard` `avail.key`). */
+/** A booking (order line) of one pool item, with its effective window. */
+interface BookingRef { orderId: string; start: string; end: string }
+/** Pool-card availability state (prototype `resCard` `avail.key`).
+ *  Evaluated against the **visible period**, so the badge follows the selected
+ *  range; `blocked` only means "not schedulable at all" (a retired item). */
 interface Availability { key: 'free' | 'partial' | 'busy' | 'inactive'; blocked: boolean; badge: string; note: string; }
 
 const POOL_TYPES = CATALOG_TYPES.map((t) => ({ key: t.key, label: 'Items (' + t.label + ')' }));
@@ -213,35 +217,84 @@ export class SchedulerComponent implements OnDestroy {
 
   /* ---------------------------- pool cards ------------------------------ */
 
-  /** Availability of a pool resource for the visible period (prototype `capAvailUI`). */
+  /**
+   * The visible period as inclusive local-midnight millisecond bounds.
+   * Day view = the anchor day; Week/Month = the first..last column.
+   */
+  private rangeBounds(): { start: number; end: number } {
+    const cols = this.columns();
+    const start = this.view === 'day' ? this.anchor : cols[0].start;
+    const last = this.view === 'day' ? this.anchor : cols[cols.length - 1].start;
+    return { start, end: this.dayAt(last, 1) - 1 };
+  }
+
+  /**
+   * Active-order bookings of a pool item that **overlap the visible period**
+   * (prototype's `capAvailUI` recomputed per render instead of a fixed state).
+   * This is what makes the pool reflect the range selected in the calendar.
+   */
+  bookingsInRange(item: Item): BookingRef[] {
+    const r = this.rangeBounds();
+    const out: BookingRef[] = [];
+    for (const o of this.orders()) {
+      for (const li of o.lineItems) {
+        if (li.type !== item.type || li.refId !== item.id) continue;
+        const start = this.lineStart(li, o);
+        const end = this.lineEnd(li, o);
+        const s = new Date(start + 'T00:00:00').getTime();
+        const e = new Date(end + 'T00:00:00').getTime() + DAY_MS - 1;
+        if (s <= r.end && r.start <= e) out.push({ orderId: o.orderId, start, end });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Availability of a pool resource **for the visible period** — the badge/colour
+   * update as the Day/Week/Month view, the period pager or the bookings change.
+   * A booked item stays schedulable (overbooking is allowed and flagged in the
+   * conflicts pane); only a retired unit is refused.
+   */
   availability(item: Item): Availability {
-    // Custody wins: a serialized unit that is out on order is not bookable.
+    if (item.active === false) {
+      return { key: 'inactive', blocked: true, badge: 'Inactive', note: 'Retired — activate it to schedule.' };
+    }
+    const booked = this.bookingsInRange(item);
+    if (booked.length) {
+      const orders = [...new Set(booked.map((b) => b.orderId))];
+      const detail =
+        orders.length === 1
+          ? `${orders[0]} (${this.data.fmtDate(booked[0].start)} → ${this.data.fmtDate(booked[0].end)})`
+          : orders.join(', ');
+      return {
+        key: 'busy',
+        blocked: false,
+        badge: booked.length + ' booked',
+        note: 'Booked on ' + detail + ' — drop to overbook.',
+      };
+    }
     const out = this.data.outInfo(item.id);
     if (out) {
-      return { key: 'busy', blocked: true, badge: ('On site · ' + (out.orderId ?? '')).trim(), note: '' };
+      const where = out.orderId ?? out.party;
+      return {
+        key: 'partial',
+        blocked: false,
+        badge: ('On site · ' + (out.orderId ?? '')).trim(),
+        note: 'Out now on ' + where + ' — free for ' + this.rangeLabel() + '.',
+      };
     }
     if (item.status === 'In Shop') {
-      return { key: 'inactive', blocked: true, badge: 'In Shop', note: '' };
-    }
-    if (item.active === false) {
-      return { key: 'inactive', blocked: true, badge: 'Inactive', note: '' };
-    }
-    const booked = this.bookedCount(item);
-    if (booked > 0) {
-      return { key: 'partial', blocked: false, badge: booked + ' booked', note: '' };
+      return { key: 'partial', blocked: false, badge: 'In Shop', note: 'In the shop — free to schedule later.' };
     }
     return { key: 'free', blocked: false, badge: '', note: '' };
   }
 
-  /** How many active orders already book this resource. */
-  private bookedCount(item: Item): number {
-    let n = 0;
-    for (const o of this.orders()) {
-      for (const li of o.lineItems) {
-        if (li.type === item.type && li.refId === item.id) n++;
-      }
-    }
-    return n;
+  /** Badge colour for a pool card's range-aware availability state. */
+  poolBadgeClass(a: Availability): string {
+    if (a.key === 'busy') return 'st-onrent';
+    if (a.key === 'partial') return a.badge.startsWith('On site') ? 'st-out' : 'st-inshop';
+    if (a.key === 'inactive') return 'st-closed';
+    return 'st-available';
   }
 
   /** Jump the calendar to an order's start period and expand it (prototype `focusOrder`). */
@@ -557,10 +610,10 @@ export class SchedulerComponent implements OnDestroy {
     const t = type as CatalogType;
     const order = this.data.getOrder(orderId);
     if (!order) return;
-    // Blocked resources (out on order, in the shop, inactive) can't be booked.
+    // Only a retired item is refused — an item that is already booked (or out on
+    // custody) can still be scheduled; the conflicts pane flags the overbook.
     const item = this.data.getItem(t, refId);
     if (item && this.availability(item).blocked) return;
-    if (order.lineItems.some((li) => li.type === t && li.refId === refId)) return;
     this.data.addOrderLine(order.orderId, { type: t, refId, qty: 1 });
     this.selectedOrderId = order.orderId;
     this.expanded.add(order.orderId);

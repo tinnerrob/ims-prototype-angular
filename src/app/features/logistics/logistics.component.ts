@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
  * Logistics & Dispatch (module) — port of the prototype's `renderLogistics`
@@ -12,7 +13,7 @@ import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../
 @Component({
   selector: 'ims-logistics',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './logistics.component.html',
   styleUrl: './logistics.component.scss',
 })
@@ -21,6 +22,9 @@ export class LogisticsComponent {
 
   modalOpen = false;
   form = this.emptyForm();
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
 
   /** Staged (uncommitted) edits from the assignment grid, keyed by dispatch id. */
   private draft: Record<string, { driverId: string; vehicleId: string; status: DispatchStatus }> = {};
@@ -145,6 +149,54 @@ export class LogisticsComponent {
 
   closeForm(): void {
     this.modalOpen = false;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /**
+   * Dispatch row click → read-only viewer. The grid's selects keep their own
+   * click (the row handler ignores interactive targets); the viewer shows the
+   * *staged* assignment values, i.e. what the grid currently displays.
+   */
+  showView(e: Event, d: Dispatch): void {
+    if (isInteractiveTarget(e)) return;
+    const driverId = this.driverValue(d);
+    const vehicleId = this.vehicleValue(d);
+    const driver = this.drivers().find((x) => x.id === driverId);
+    const vehicle = this.vehicles().find((x) => x.id === vehicleId);
+    this.viewer = {
+      title: `Dispatch ${d.id}`,
+      subtitle: `${this.siteOf(d) || d.orderId} · route ${d.routeSeq}`,
+      icon: 'bi-truck',
+      badge: this.statusValue(d),
+      badgeClass: 'st-' + statusClass(this.statusValue(d)),
+      sections: [
+        {
+          title: 'Route',
+          fields: [
+            { label: 'Dispatch ID', value: d.id, mono: true },
+            { label: 'Route Sequence', value: String(d.routeSeq) },
+            { label: 'Asset', value: d.assetId || '—', mono: true },
+            { label: 'Contract', value: d.orderId, mono: true },
+            { label: 'Site', value: this.siteOf(d) || '—' },
+            { label: 'Job Site', value: this.jobSiteOf(d) || '—' },
+            { label: 'Coordinates', value: this.coords(d) || '—', mono: true },
+          ],
+        },
+        {
+          title: 'Assignment',
+          fields: [
+            { label: 'Driver (CDL)', value: driver ? `${driver.id} — ${driver.name}` : '— none —' },
+            { label: 'Truck', value: vehicle ? `${vehicle.id} — ${vehicle.name}` : '— none —' },
+            { label: 'Status', value: this.statusValue(d) },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
   }
 
   private emptyForm() {

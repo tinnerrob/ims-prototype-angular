@@ -28,7 +28,7 @@
       </thead>
       <tbody>
         @for (w of workOrders(); track w.id) {
-          <tr>
+          <tr class="row-open" (click)="showView($event, w)">
             <td class="strong mono">{{ w.id }}</td>
             <td class="strong">{{ assetLabel(w) }}</td>
             <td>{{ w.type }}</td>
@@ -158,4 +158,8 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>
 

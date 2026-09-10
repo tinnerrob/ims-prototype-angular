@@ -1,7 +1,8 @@
 import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
-import { Item, MOVEMENT_KIND_LABEL, statusClass } from '../../core/models';
+import { Item, Movement, MOVEMENT_KIND_LABEL, statusClass } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /** One row on the hand-off day board. */
 interface BoardRow {
@@ -25,6 +26,7 @@ interface BoardRow {
 @Component({
   selector: 'ims-handoff',
   standalone: true,
+  imports: [RecordViewComponent],
   templateUrl: './handoff.component.html',
   styleUrl: './handoff.component.scss',
 })
@@ -33,6 +35,9 @@ export class HandoffComponent {
 
   /** Selected board day (ISO), defaults to today. */
   day = new Date().toISOString().slice(0, 10);
+
+  /** Read-only record viewer (opened by clicking a board / log row). */
+  viewer: ViewModel | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -138,5 +143,88 @@ export class HandoffComponent {
   outFor(item: Item): string {
     const info = this.data.outInfo(item.id);
     return info?.orderId ?? info?.party ?? '—';
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /**
+   * Board row click → read-only viewer for one unit's hand-off (the Check Out /
+   * Check In buttons keep their own click).
+   */
+  showBoardView(e: Event, r: BoardRow): void {
+    if (isInteractiveTarget(e)) return;
+    const item = this.data.getItem('serialized', r.itemId);
+    const out = this.data.outInfo(r.itemId);
+    this.viewer = {
+      title: r.itemId,
+      subtitle: `${r.model} · ${r.orderId}`,
+      icon: r.kind === 'out' ? 'bi-box-arrow-up-right' : 'bi-box-arrow-in-down',
+      badge: r.kind === 'out' ? (r.overdue ? 'Go out (overdue)' : 'Pick-up today') : r.overdue ? 'Overdue return' : 'Due back today',
+      badgeClass: r.overdue ? 'st-reorder' : 'st-out',
+      sections: [
+        {
+          title: 'Hand-Off',
+          fields: [
+            { label: 'Asset', value: r.itemId, mono: true },
+            { label: 'Model', value: r.model || '—' },
+            { label: 'Direction', value: r.kind === 'out' ? 'Check-Out' : 'Check-In' },
+            { label: 'Board Day', value: this.data.fmtDate(this.day), mono: true },
+            { label: 'Overdue', value: r.overdue ? 'Yes' : 'No' },
+          ],
+        },
+        {
+          title: 'Contract',
+          fields: [
+            { label: 'Contract', value: r.orderId, mono: true },
+            { label: 'Project', value: r.project || '—' },
+            { label: 'Custodian', value: r.custodian || '—' },
+            { label: 'Rental Window', value: `${this.data.fmtDate(r.start)} → ${this.data.fmtDate(r.end)}`, mono: true },
+            { label: 'Out Since', value: r.outAt ? this.data.fmtDT(r.outAt) : '—', mono: true },
+          ],
+        },
+        {
+          title: 'Asset Status',
+          fields: [
+            { label: 'Catalog Name', value: item ? this.data.mkName(item) || item.name : '—' },
+            { label: 'Service Status', value: item ? item.status : '—' },
+            { label: 'Current Custody', value: out?.orderId ?? out?.party ?? 'In yard' },
+            { label: 'Meter Hours', value: item ? this.data.int(item.meterHours ?? 0) : '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Chain-of-custody log row click → read-only viewer for that movement. */
+  showMovementView(e: Event, m: Movement): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewer = {
+      title: `Movement ${m.id}`,
+      subtitle: `${this.kindLabel[m.kind]} · ${m.refId}`,
+      icon: 'bi-journal-text',
+      badge: this.kindLabel[m.kind],
+      badgeClass: m.kind === 'issue' ? 'st-out' : 'st-available',
+      sections: [
+        {
+          fields: [
+            { label: 'Movement ID', value: m.id, mono: true },
+            { label: 'Kind', value: this.kindLabel[m.kind] },
+            { label: 'Item Type', value: m.type },
+            { label: 'Item', value: m.refId, mono: true },
+            { label: 'Quantity', value: String(m.qty) },
+            { label: 'Contract', value: m.orderId || '—', mono: true },
+            { label: 'Party', value: m.party || '—' },
+            { label: 'Location', value: m.location || '—' },
+            { label: 'Recorded At', value: this.data.fmtDT(m.at), mono: true },
+            { label: 'Recorded By', value: m.by || '—' },
+            { label: 'Note', value: m.note || '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
   }
 }

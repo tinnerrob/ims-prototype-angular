@@ -9,10 +9,10 @@
   </div>
   <div class="card-body">
     <div class="subtabs">
-      <button class="subtab" type="button" [class.active]="tab === 'customers'" (click)="tab = 'customers'">
+      <button class="subtab" type="button" [class.active]="tab === 'customers'" (click)="setTab('customers')">
         <i class="bi bi-people"></i>Customers<span class="count-pill">{{ parties().length }}</span>
       </button>
-      <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="tab = 'orders'">
+      <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="setTab('orders')">
         <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ data.listOrders().length }}</span>
       </button>
     </div>
@@ -28,7 +28,7 @@
           </thead>
           <tbody>
             @for (p of parties(); track p.id) {
-              <tr>
+              <tr class="row-open" (click)="showView($event, p)">
                 <td>
                   <span class="strong">{{ p.name }}</span>
                   @if (p.active === false) {
@@ -77,7 +77,7 @@
           </thead>
           <tbody>
             @for (o of orders(); track o.orderId) {
-              <tr>
+              <tr class="row-open" (click)="showContractView($event, o)">
                 <td class="strong mono">{{ o.orderId }}</td>
                 <td>{{ o.party }}</td>
                 <td>{{ o.projectName }}</td>
@@ -276,4 +276,13 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+
+<!-- ===== Read-only record viewer (customer row click) ===== -->
+<ims-record-view
+  [view]="viewer"
+  [editable]="true"
+  (closed)="closeViewer()"
+  (edit)="editFromViewer()"
+></ims-record-view>
 

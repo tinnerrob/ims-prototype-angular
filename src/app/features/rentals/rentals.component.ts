@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { RentalSub } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
  * Data-free blank sub-rental form. Class field initializers run *before* the
@@ -28,13 +29,16 @@ const BLANK_RENT_FORM = {
 @Component({
   selector: 'ims-rentals',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './rentals.component.html',
   styleUrl: './rentals.component.scss',
 })
 export class RentalsComponent {
   modalOpen = false;
   form = { ...BLANK_RENT_FORM };
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -95,6 +99,47 @@ export class RentalsComponent {
 
   closeForm(): void {
     this.modalOpen = false;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /**
+   * Row click → read-only viewer. Sub-rentals have no editor (only Remove), so
+   * the viewer is read-only.
+   */
+  showView(e: Event, r: RentalSub): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewer = {
+      title: r.assetName,
+      subtitle: r.itemId ? `Sub-rental · ${r.itemId}` : 'Sub-rental',
+      icon: 'bi-box-arrow-in-down-left',
+      sections: [
+        {
+          title: 'Asset',
+          fields: [
+            { label: 'Sub-Rental ID', value: r.id, mono: true },
+            { label: 'Asset', value: r.assetName },
+            { label: 'Catalog Item', value: r.itemId || '—', mono: true },
+            { label: 'Contract', value: r.orderId || '—', mono: true },
+            { label: 'Vendor Source', value: r.vendor },
+            { label: 'Quantity', value: String(r.qty) },
+          ],
+        },
+        {
+          title: 'Commercials',
+          fields: [
+            { label: 'Vendor Cost / day', value: this.data.money(r.vendorCost) },
+            { label: 'Retail Rate / day', value: this.data.money(r.retailRate) },
+            { label: 'Net Spread', value: this.data.money(this.data.rentalSpread(r)) },
+            { label: 'Note', value: r.note || '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
   }
 
   private emptyForm() {

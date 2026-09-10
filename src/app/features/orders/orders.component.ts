@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Order, ORDER_STATUS_LABEL, Party, statusClass } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
 
@@ -14,7 +15,7 @@ const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
 @Component({
   selector: 'ims-orders',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './orders.component.html',
   styleUrl: './orders.component.scss',
 })
@@ -38,6 +39,11 @@ export class OrdersComponent {
     endDate: '',
   };
   detail: Order | null = null;
+
+  /** Read-only record viewer (customer rows; contract rows reuse `detail`). */
+  viewer: ViewModel | null = null;
+  /** Customer behind the open viewer, so the footer Edit can reopen the editor. */
+  private viewing: Party | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -137,6 +143,67 @@ export class OrdersComponent {
 
   closeDetail(): void {
     this.detail = null;
+  }
+
+  /** Switch sub-tab — closing any open viewer/detail so a stale modal can't linger. */
+  setTab(t: 'customers' | 'orders'): void {
+    this.tab = t;
+    this.closeViewer();
+    this.closeDetail();
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /** Customer row click → read-only viewer (row actions keep their own click). */
+  showView(e: Event, p: Party): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = p;
+    this.viewer = {
+      title: p.name,
+      subtitle: p.id,
+      icon: 'bi-person-badge',
+      badge: p.active === false ? 'Inactive' : 'Active',
+      badgeClass: p.active === false ? 'st-out' : 'st-active',
+      sections: [
+        {
+          title: 'Contact',
+          fields: [
+            { label: 'Customer ID', value: p.id, mono: true },
+            { label: 'Contact', value: p.contact || '—' },
+            { label: 'Phone', value: p.phone || '—' },
+            { label: 'Email', value: p.email || '—' },
+          ],
+        },
+        {
+          title: 'Commercial',
+          fields: [
+            { label: 'Billing Address', value: p.billingAddress || '—' },
+            { label: 'Billing Cycle', value: p.billingCycle },
+            { label: 'Contracts', value: String(this.data.orderCount(p.id)) },
+            { label: 'Active Contracts', value: String(this.data.activeOrderCount(p.id)) },
+            { label: 'Notes', value: p.notes || '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Contract row click → the page's existing read-only contract detail modal. */
+  showContractView(e: Event, o: Order): void {
+    if (isInteractiveTarget(e)) return;
+    this.openDetail(o);
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+    this.viewing = null;
+  }
+
+  /** Viewer footer Edit → reopen the customer editor for the shown record. */
+  editFromViewer(): void {
+    const p = this.viewing;
+    this.closeViewer();
+    if (p) this.openCustomer(p);
   }
 
   gross(o: Order): number {

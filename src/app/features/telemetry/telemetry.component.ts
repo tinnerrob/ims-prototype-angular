@@ -5,6 +5,7 @@ import { ActivatedRoute } from '@angular/router';
 import { DataService } from '../../core/data.service';
 import { Item, statusClass } from '../../core/models';
 import { GEO_BOUNDS, TrackedPosition, TelemetryService } from '../../core/telemetry.service';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 interface Pin {
   id: string;
@@ -36,12 +37,15 @@ const MAP_WIDTH_M = LNG_SPAN_DEG * 111320 * Math.cos((33.735 * Math.PI) / 180);
 @Component({
   selector: 'ims-telemetry',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './telemetry.component.html',
   styleUrl: './telemetry.component.scss',
 })
 export class TelemetryComponent {
   filter = '';
+
+  /** Read-only record viewer (opened by clicking a fleet row). */
+  viewer: ViewModel | null = null;
 
   constructor(
     readonly data: DataService,
@@ -103,6 +107,49 @@ export class TelemetryComponent {
 
   clearAlerts(): void {
     this.telemetry.clearAlerts();
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /** Fleet row click → read-only viewer for that tracked asset. */
+  showView(e: Event, t: TrackedPosition): void {
+    if (isInteractiveTarget(e)) return;
+    const item = t.item;
+    const loc = this.telemetry.locationLabel(item);
+    this.viewer = {
+      title: item.id,
+      subtitle: this.data.mkName(item),
+      icon: 'bi-broadcast-pin',
+      badge: t.breached ? 'Geofence breach' : item.status,
+      badgeClass: t.breached ? 'st-out' : 'st-' + statusClass(item.status),
+      sections: [
+        {
+          title: 'Fleet',
+          fields: [
+            { label: 'Asset ID', value: item.id, mono: true },
+            { label: 'Name / Model', value: this.data.mkName(item) },
+            { label: 'Serial / VIN', value: item.serial || '—', mono: true },
+            { label: 'Status', value: item.status },
+            { label: 'Category', value: item.category },
+          ],
+        },
+        {
+          title: 'Telemetry',
+          fields: [
+            { label: 'Last Reported', value: this.reported(item), mono: true },
+            { label: 'Battery', value: item.battery == null ? '—' : item.battery + '%' },
+            { label: 'Meter Hours', value: this.data.int(this.meterHours(item)) },
+            { label: 'Position', value: `${t.lat.toFixed(4)}, ${t.lng.toFixed(4)}`, mono: true },
+            { label: 'Location', value: loc.label },
+            { label: 'Geofence', value: t.breached ? 'Breach — outside the site fence' : 'Inside the fence' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
   }
 
   /* -------------------------------- map --------------------------------- */

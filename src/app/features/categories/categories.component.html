@@ -30,7 +30,7 @@
         </thead>
         <tbody>
           @for (c of records(); track c.name) {
-            <tr>
+            <tr class="row-open" (click)="showView($event, c)">
               <td class="strong">{{ c.name }}</td>
               <td>
                 @if (c.active !== false) {
@@ -96,3 +96,11 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+<!-- ===== Read-only record viewer (row click) ===== -->
+<ims-record-view
+  [view]="viewer"
+  [editable]="true"
+  (closed)="closeViewer()"
+  (edit)="editFromViewer()"
+></ims-record-view>

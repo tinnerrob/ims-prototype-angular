@@ -10,6 +10,7 @@ import {
   InspectionDirection,
   statusClass,
 } from '../../core/models';
+import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
  * Receiving / Inspections (core) — port of the prototype's `renderYard`
@@ -19,7 +20,7 @@ import {
 @Component({
   selector: 'ims-inspections',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './inspections.component.html',
   styleUrl: './inspections.component.scss',
 })
@@ -37,6 +38,11 @@ export class InspectionsComponent {
 
   editOpen = false;
   editRecord: Inspection | null = null;
+
+  /** Read-only record viewer (opened by clicking a table row). */
+  viewer: ViewModel | null = null;
+  /** Record behind the open viewer, so the footer Edit can reopen the editor. */
+  private viewing: Inspection | null = null;
 
   constructor(readonly data: DataService) {}
 
@@ -121,6 +127,72 @@ export class InspectionsComponent {
   closeEdit(): void {
     this.editOpen = false;
     this.editRecord = null;
+  }
+
+  /* --------------------------- record viewer ---------------------------- */
+
+  /** Row click → read-only viewer (row actions keep their own click). */
+  showView(e: Event, r: Inspection): void {
+    if (isInteractiveTarget(e)) return;
+    this.viewing = r;
+    const done = this.checkKeys.filter((k) => r.checks[k]);
+    const failed = this.checkKeys.filter((k) => !r.checks[k]);
+    this.viewer = {
+      title: `Inspection ${r.id}`,
+      subtitle: `${r.itemId} · ${r.direction}`,
+      icon: 'bi-clipboard-check',
+      badge: r.status,
+      badgeClass: 'st-' + statusClass(r.status),
+      sections: [
+        {
+          title: 'Routing',
+          fields: [
+            { label: 'Inspection ID', value: r.id, mono: true },
+            { label: 'Asset', value: r.itemId, mono: true },
+            { label: 'Contract', value: r.orderId || '—', mono: true },
+            { label: 'Direction', value: r.direction },
+            { label: 'Date', value: this.data.fmtDate(r.date), mono: true },
+          ],
+        },
+        {
+          title: 'Readings',
+          fields: [
+            { label: 'Meter Out', value: r.meterOut == null ? '—' : String(r.meterOut) },
+            { label: 'Meter In', value: r.meterIn == null ? '—' : String(r.meterIn) },
+            { label: 'Fuel Out', value: r.fuelOut == null ? '—' : r.fuelOut + '%' },
+            { label: 'Fuel In', value: r.fuelIn == null ? '—' : r.fuelIn + '%' },
+          ],
+        },
+        {
+          title: 'Condition Checks',
+          fields: this.checkKeys.map((k) => ({
+            label: this.checkLabel[k],
+            value: r.checks[k] ? 'Pass' : 'Fail',
+          })),
+        },
+        {
+          title: 'Summary',
+          fields: [
+            { label: 'Checks Passed', value: `${done.length} of ${this.checkKeys.length}` },
+            { label: 'Failed', value: failed.length ? failed.map((k) => this.checkLabel[k]).join(', ') : '—' },
+            { label: 'Photos', value: String(r.photos ?? 0) },
+            { label: 'Notes', value: r.notes || '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+    this.viewing = null;
+  }
+
+  /** Viewer footer Edit → reopen the inspection editor for the shown record. */
+  editFromViewer(): void {
+    const r = this.viewing;
+    this.closeViewer();
+    if (r) this.openEdit(r);
   }
 
   private allChecks(v: boolean): Record<InspectionCheckKey, boolean> {
