@@ -133,7 +133,6 @@
             <div class="tl-lane" [class.expanded]="m.isExpanded">
               <div
                 class="tl-row tl-row-order"
-                [class.selected]="selectedOrderId === m.order.orderId"
                 (dragover)="allowDrop($event)"
                 (drop)="onDropOrder($event, m.order.orderId)"
                 (click)="onRowClick(m.order.orderId)"
@@ -146,7 +145,6 @@
                   @if (m.orderBar) {
                     <div
                       class="tl-block"
-                      [class.selected]="selectedOrderId === m.order.orderId"
                       [class.tl-moving]="isMoving(m.order.orderId, null)"
                       [style.left.%]="m.orderBar.geom.left"
                       [style.width.%]="m.orderBar.geom.width"
@@ -181,8 +179,8 @@
                     </div>
                   </div>
                 }
-                @for (line of m.lines; track line.liId) {
-                  <div class="tl-row" [class.conflict]="line.conflict">
+                @for (line of m.lines; track line.liId; let i = $index) {
+                  <div class="tl-row" [class.band]="i % 2 === 1" [class.conflict]="line.conflict">
                     <div class="tl-row-label res">
                       {{ typeLabel(line.type) }}
                       <div class="text-muted2 text-10">{{ line.short }}</div>

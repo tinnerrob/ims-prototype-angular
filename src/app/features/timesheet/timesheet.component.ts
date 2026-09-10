@@ -70,7 +70,6 @@ export class TimesheetComponent implements OnDestroy {
 
   view: LabView = 'week';
   anchor = new Date();
-  selectedEmp = 'EMP-001';
 
   /** Chip currently being dragged from the left pane. */
   dragging: { type: TimesheetTarget; id: string | null } | null = null;
@@ -362,7 +361,6 @@ export class TimesheetComponent implements OnDestroy {
     }
     if (!type) return;
     this.data.clockInto(empId, type, id);
-    this.selectedEmp = empId;
     this.cdr.detectChanges();
   }
 
@@ -608,7 +606,6 @@ export class TimesheetComponent implements OnDestroy {
   /** Pick a target: close the current segment, start a new one at the keyed time. */
   punchTo(type: TimesheetTarget, id: string | null): void {
     this.data.punchIn(this.punchEmpId, type, id, hmMin(this.punchTime), this.punchDate);
-    this.selectedEmp = this.punchEmpId;
     this.closePunch();
   }
 

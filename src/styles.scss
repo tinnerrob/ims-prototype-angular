@@ -54,13 +54,25 @@
   --tl-row-plain: 42px;                             /* lane row with no bar     */
   --tl-track-plain: 36px;
 
-  /* Banded rows: adjacent lanes/rows alternate between these two tints (the
-     band covers both the sticky label column and the bar track, so a striped
-     row reads as one continuous line). */
+  /* Banded rows: adjacent rows alternate between these two tints (the band
+     covers both the sticky label column and the bar track, so a striped row
+     reads as one continuous line).
+     In the Scheduler the stripe RESTARTS at every order (see `.tl-row.band`),
+     so an order's items always stripe the same way; Labor & Timesheets has no
+     grouping to reset at, so its employee rows just alternate. */
   --tl-band-label: var(--card);
-  --tl-band-track: #f8fafc;
-  --tl-band-label-alt: #f5f8fc;
-  --tl-band-track-alt: #edf2fa;
+  --tl-band-track: #fafbfd;
+  --tl-band-label-alt: #e9eef7;
+  --tl-band-track-alt: #e8eef7;
+
+  /* The lane heading — the Scheduler's order/contract row — is a flat NEUTRAL
+     GREY band (label + track share one tint) rather than another stripe, so the
+     pastel item rows beneath it read as its detail lines instead of siblings.
+     Its bar is the one grey bar in the calendar (`--tl-base-bar`). */
+  --tl-base-row: #dde3ec;
+  --tl-base-bar: #ccd5e1;
+  --tl-base-ink: #313d50;
+  --tl-base-accent: #8f9cb0;
 
   /* Table rows band the same way (low alpha so a row still reads as a row). */
   --row-band: rgba(15, 23, 42, .032);
@@ -428,12 +440,14 @@
 .tl-day-hours > div:first-child { border-left: none; }
 .tl-body { display: flex; flex-direction: column; gap: 6px; }
 .tl-lane { display: flex; flex-direction: column; gap: 4px; }
-/* Banded rows: alternate lanes (Scheduler) / rows (Labor & Timesheets) between
-   the two tints, so a long calendar is easy to scan across — the band runs
-   through the sticky label column as well as the bar track, so each row reads
-   as one continuous stripe. */
-.tl-body > .tl-lane:nth-child(even),
-.tl-body > .tl-row:nth-child(even) {
+/* Banded rows.
+   - Labor & Timesheets: plain alternation (its rows are employees — nothing to
+     group them by).
+   - Scheduler: parity is NOT taken from `:nth-child`; the template puts
+     `[class.band]` on every other booked item so the stripes restart at each
+     order instead of running on down the whole calendar. */
+.tl-body > .tl-row:nth-child(even),
+.tl-row.band {
   --tl-band-label: var(--tl-band-label-alt);
   --tl-band-track: var(--tl-band-track-alt);
 }
@@ -444,8 +458,19 @@
   min-height: var(--tl-row-plain);
   align-items: stretch;
 }
-/* the base row of a lane (order/contract bar) is 1.5x a sub row */
-.tl-row-order { min-height: var(--tl-row-base); }
+/* the base row of a lane (order/contract bar) is 1.5x a sub row, and is a flat
+   grey band — the accent colour lives on its bar, not on the row */
+.tl-row-order,
+.tl-row-contract {
+  min-height: var(--tl-row-base);
+  --tl-band-label: var(--tl-base-row);
+  --tl-band-track: var(--tl-base-row);
+}
+/* divider inside the grey band (slate-200 would be lighter than the band itself) */
+.tl-row-order .tl-row-label,
+.tl-row-contract .tl-row-label {
+  border-right-color: #c7d0dd;
+}
 .tl-row-label {
   position: sticky;
   left: 0;
@@ -467,6 +492,8 @@
   font-weight: 600;
   text-align: right;
 }
+/* the second label line is 10px on a tinted row — `--muted` is too light there */
+.tl-row-label .text-muted2 { color: #475569; }
 .tl-row-track {
   position: relative;
   background: var(--tl-band-track);
@@ -483,13 +510,13 @@
   /* Pastel fill + saturated ink. The type hues still separate the bars at a
      glance, but a calendar of soft tints is far easier on the eye (and to sit
      in front of all day) than solid saturated blocks. `--tint-*` comes from the
-     type class below; the base order/contract bar falls back to the brand tint
-     (deliberately NOT the accent blue, so it never collides with the `bulk`
-     resource type it usually heads). */
-  background: var(--tint-bg, var(--brand-soft));
-  color: var(--tint-ink, var(--brand-deep));
-  border: 1px solid color-mix(in srgb, var(--tint-accent, var(--brand)) 26%, transparent);
-  border-left: 3px solid var(--tint-accent, var(--brand));
+     type class; the lane-heading bar (the order/contract bar, which carries no
+     type) falls back to plain neutral GREY so it reads as the lane's heading
+     rather than as another resource-type bar. */
+  background: var(--tint-bg, var(--tl-base-bar));
+  color: var(--tint-ink, var(--tl-base-ink));
+  border: 1px solid color-mix(in srgb, var(--tint-accent, var(--tl-base-accent)) 40%, transparent);
+  border-left: 3px solid var(--tint-accent, var(--tl-base-accent));
   padding: 5px 10px;
   /* the block body drags the whole window (see `startMove`) — the edge handles
      resize it instead */
@@ -1004,8 +1031,9 @@ i.ts-idle { color: var(--tcol); }
 .ts-block { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 2px 6px; }
 .ts-block-title { display: block; max-width: 100%; font-size: 10.5px; font-weight: 700; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ts-block-sub { display: block; max-width: 100%; font-size: 9px; opacity: .8; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.tl-row.lab-row.active .tl-row-label { background: #eff6ff; border-right-color: var(--accent); }
-.tl-row.lab-row.active .tl-row-track { box-shadow: inset 0 0 0 1px var(--accent); }
+/* NOTE: clicking a calendar row deliberately selects nothing. Row focus is
+   event-driven (drag/drop + the inspector), so highlight chrome would only add
+   noise; the left pickers still mark the focused order. */
 
 /* ---- timesheet 2-col page, task pool + lunch ---- */
 .ts-page { display: grid; grid-template-columns: 330px 1fr; gap: 14px; align-items: stretch; height: calc(100vh - 200px); overflow: hidden; }
@@ -1067,7 +1095,7 @@ i.ts-lunch { color: var(--tcol); }
 
 /* timesheet: right-hand clock gutter (shrinks calendar) */
 .tl-row.lab-row { grid-template-columns: 120px minmax(0,1fr) 40px; }
-.lab-row-clock { display: flex; align-items: center; justify-content: flex-end; }
+.lab-row-clock { display: flex; align-items: center; justify-content: flex-end; background: var(--tl-band-label); }
 .lab-row-clock .btn { padding: 2px 5px; font-size: 11px; line-height: 1.2; }
 .tl-gutter { background: var(--card); border-left: 1px solid var(--slate-100); }
 .lab-lbl { padding-right: 2px; }

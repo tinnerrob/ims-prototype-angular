@@ -205,19 +205,30 @@ detail right**, with orders as the top rows.
     books, so the primary task leads. `.tl-row-track` stretches to the row height and
     `.tl-block` is inset 4px top/bottom, so the visible bar is `row − 8px` — the sizing
     maths is expressed on the bar and the row follows. Re-size in **one** place: `--tl-bar`.
-  - *Banded rows:* `.tl-body > .tl-lane:nth-child(even)` (Scheduler lanes) and
-    `.tl-body > .tl-row:nth-child(even)` (Timesheet employee rows) swap the
-    `--tl-band-label` / `--tl-band-track` pair for its `…-alt` twin. The band covers the
-    sticky label column *and* the bar track, so a striped row reads as one line. Data
-    tables band the same way via `--row-band` on `.table tbody tr:nth-child(even)`
-    (declared **before** the hover rule so hover still wins).
+  - *Banded rows:* a striped row swaps the `--tl-band-label` / `--tl-band-track` pair
+    for its `…-alt` twin; the band covers the sticky label column *and* the bar track, so
+    a stripe reads as one line. **Who gets striped differs by page:** Labor & Timesheets
+    has nothing to group its rows by, so it simply alternates
+    (`.tl-body > .tl-row:nth-child(even)`); the Scheduler takes parity from the *template*
+    instead — `[class.band]="i % 2 === 1"` on the booked-item `@for` — so **the stripes
+    restart at every order** rather than running on down the whole calendar. Data tables
+    band the same way via `--row-band` on `.table tbody tr:nth-child(even)` (declared
+    **before** the hover rule so hover still wins).
+  - *Lane heading:* the order/contract row (`.tl-row-order` / `.tl-row-contract`) is
+    deliberately **not** a stripe — it pins both band vars to the flat grey `--tl-base-row`
+    so label + track read as one continuous grey band, and its bar falls back to the grey
+    `--tl-base-bar` / `--tl-base-ink` / `--tl-base-accent` (it carries no `--tint-*`). The
+    pastel item rows underneath then read as that order's detail lines, and the grey row
+    is what makes "banding resets here" obvious.
   - *Bar colours:* pastel fill + saturated ink, never solid saturated blocks (monday-style).
     Each type sets `--tint-bg` / `--tint-ink` / `--tint-accent` from the soft tokens in
     `:root`: `.tl-res-*` for the Scheduler, `.ts-*` for the Timesheets (which keep `--tcol`
-    as the saturated hue for icons, the legend swatch and chip edges). A bar with no type
-    falls back to the brand tint (`--brand-soft`), so the base order bar never collides with
-    the accent-blue `bulk` type it heads. `.tl-h` / `.ts-h` resize handles are dark, not
-    white, since the bars are light now.
+    as the saturated hue for icons, the legend swatch and chip edges). `.tl-h` / `.ts-h`
+    resize handles are dark, not white, since the bars are light now.
+  - *No selected row chrome:* clicking a calendar row sets the focus id but paints
+    nothing — the work is drag/drop driven and the Order Details inspector reports the
+    selection, so a blue row/ring was noise. Only the left **queue card**
+    (`.queue-order.active`) and the inspector mark the focused order.
 - **Right-hand inspector cards sit straight on the page:** `.sched-inspector` is a bare
   flex column (no background/border/padding of its own), so Scheduling Conflicts +
   Order Details read like the `.sched-side` panels — a card, not a card-on-a-card.
