@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Location, LocationType } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -56,12 +57,16 @@ export class LocationsComponent {
   modalOpen = false;
   editingId: string | null = null;
   form = { ...BLANK_LOCATION_FORM };
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private formSnap = '';
 
   /** Location-type editor (the `types` sub-table). */
   typeModalOpen = false;
   renameTypeFrom: string | null = null;
   formTypeName = '';
   formTypeActive = true;
+  /** Type-editor values as they were when it opened. */
+  private typeSnap = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -158,6 +163,7 @@ export class LocationsComponent {
     this.form = loc
       ? { id: loc.id, name: loc.name, type: loc.type, parentId: loc.parentId ?? null, address: loc.address, phone: loc.phone, tz: loc.tz }
       : this.emptyForm();
+    this.formSnap = snapshotForm(this.form);
     this.modalOpen = true;
   }
 
@@ -165,6 +171,8 @@ export class LocationsComponent {
   openChild(parent: Location): void {
     this.openForm();
     this.form = { ...this.form, parentId: parent.id };
+    // Pre-filling the parent is the starting point, not a user edit.
+    this.formSnap = snapshotForm(this.form);
   }
 
   save(): void {
@@ -187,9 +195,15 @@ export class LocationsComponent {
     this.data.removeLocation(loc.id);
   }
 
+  /** True when the location editor holds edits that Save has not written yet. */
+  formDirty(): boolean {
+    return formChanged(this.form, this.formSnap);
+  }
+
   closeForm(): void {
     this.modalOpen = false;
     this.editingId = null;
+    this.formSnap = '';
   }
 
   private emptyForm() {
@@ -211,6 +225,7 @@ export class LocationsComponent {
     this.renameTypeFrom = null;
     this.formTypeName = '';
     this.formTypeActive = true;
+    this.typeSnap = snapshotForm(this.typeValues());
     this.typeModalOpen = true;
   }
 
@@ -218,7 +233,18 @@ export class LocationsComponent {
     this.renameTypeFrom = t.name;
     this.formTypeName = t.name;
     this.formTypeActive = t.active !== false;
+    this.typeSnap = snapshotForm(this.typeValues());
     this.typeModalOpen = true;
+  }
+
+  /** True when the type editor holds edits that Save has not written yet. */
+  typeDirty(): boolean {
+    return formChanged(this.typeValues(), this.typeSnap);
+  }
+
+  /** The type editor's values, as compared against the open-time snapshot. */
+  private typeValues(): { name: string; active: boolean } {
+    return { name: this.formTypeName, active: this.formTypeActive };
   }
 
   saveType(): void {
@@ -238,6 +264,7 @@ export class LocationsComponent {
     this.renameTypeFrom = null;
     this.formTypeName = '';
     this.formTypeActive = true;
+    this.typeSnap = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

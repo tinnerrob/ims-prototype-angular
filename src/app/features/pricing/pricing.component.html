@@ -155,14 +155,14 @@
 
 <!-- overhead / service fee modal -->
 @if (overheadOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeOverhead()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="overheadDirty()" (dismiss)="closeOverhead()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">
             <i class="bi bi-layers"></i>{{ overheadEditingId ? 'Edit' : 'New' }} Overhead / Service Fee
           </h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeOverhead()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="field-group">
@@ -208,7 +208,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeOverhead()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!overheadForm.name.trim()" (click)="saveOverhead()">
             <i class="bi bi-check2"></i> Save Record
           </button>
@@ -221,14 +220,14 @@
 
 <!-- tax schedule modal -->
 @if (taxOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeTax()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="taxDirty()" (dismiss)="closeTax()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">
             <i class="bi bi-percent"></i>{{ taxEditingCode ? 'Edit' : 'New' }} Tax Schedule
           </h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeTax()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="field-group">
@@ -259,7 +258,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeTax()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!taxForm.code.trim()" (click)="saveTax()">
             <i class="bi bi-check2"></i> Save Record
           </button>

@@ -10,6 +10,7 @@ import {
   WorkOrderPart,
   WorkOrderStatus,
 } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -52,6 +53,8 @@ export class MaintenanceComponent {
   filter: 'all' | WorkOrderStatus = 'all';
   modalOpen = false;
   form = { ...BLANK_WO_FORM };
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private formSnap = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -103,6 +106,7 @@ export class MaintenanceComponent {
 
   openForm(): void {
     this.form = this.emptyForm();
+    this.formSnap = snapshotForm(this.form);
     this.modalOpen = true;
   }
 
@@ -136,8 +140,14 @@ export class MaintenanceComponent {
     this.data.removeWorkOrder(w.id);
   }
 
+  /** True when the editor holds edits that Save has not written yet. */
+  formDirty(): boolean {
+    return formChanged(this.form, this.formSnap);
+  }
+
   closeForm(): void {
     this.modalOpen = false;
+    this.formSnap = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

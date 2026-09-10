@@ -6,7 +6,7 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title"><i class="bi bi-clipboard-check"></i> Asset In / Out Inspection</span>
-        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="log()">
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="logInspection()">
           <i class="bi bi-check2-square"></i> Log Inspection
         </button>
       </div>
@@ -94,7 +94,36 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title"><i class="bi bi-journal-check"></i> Inspection Log</span>
-        <span class="badge-status st-on">{{ inspections().length }}</span>
+        <div class="log-filter">
+          <div class="btn-group">
+            @for (v of logRanges; track v) {
+              <button
+                class="btn btn-sm2"
+                type="button"
+                [class.btn-ims]="logRange === v"
+                [class.btn-ims-outline]="logRange !== v"
+                (click)="setLogRange(v)"
+              >
+                {{ logRangeLabelOf(v) }}
+              </button>
+            }
+          </div>
+          @if (logFiltered()) {
+            <div class="period-pager log-pager">
+              <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shiftLog(-1)">
+                <i class="bi bi-chevron-left"></i>
+              </button>
+              <span class="tl-range">{{ logRangeLabel() }}</span>
+              <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shiftLog(1)">
+                <i class="bi bi-chevron-right"></i>
+              </button>
+            </div>
+            <button class="btn btn-ims-outline btn-sm2" type="button" title="Jump to today" (click)="logToday()">
+              Today
+            </button>
+          }
+        </div>
+        <span class="badge-status st-on">{{ logCountLabel() }}</span>
       </div>
       <div class="card-body table-wrap">
         <table class="table">
@@ -103,12 +132,12 @@
               <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
               <th class="num">Meter Out</th><th class="num">Meter In</th>
               <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th>
-              <th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
-            @for (r of inspections(); track r.id) {
-              <tr class="row-open" (click)="showView($event, r)">
+            @for (r of logEntries(); track r.id) {
+              <!-- Row click opens the editor, as in the prototype (`inspectionModal`). -->
+              <tr class="row-open" (click)="openEdit(r)">
                 <td class="strong mono">{{ r.id }}</td>
                 <td class="strong">{{ r.itemId }}</td>
                 <td>{{ r.direction }}</td>
@@ -118,21 +147,32 @@
                 <td class="num">{{ r.fuelOut ?? '—' }}</td>
                 <td class="num">{{ r.fuelIn ?? '—' }}</td>
                 <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
-                <td class="text-end text-nowrap">
-                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openEdit(r)">
-                    <i class="bi bi-pencil"></i>
-                  </button>
-                </td>
               </tr>
+            } @empty {
+              <tr><td colspan="9" class="text-center text-muted2 py-4">{{ logEmptyLabel() }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- edit inspection modal (prototype `inspectionModal`) -->
 @if (editOpen && editRecord; as r) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeEdit()">
+  <div
+    class="modal show d-block"
+    tabindex="-1"
+    role="dialog"
+    imsModalDismiss
+    [imsDirty]="editDirty()"
+    (dismiss)="closeEdit()"
+  >
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-clipboard-check"></i>Edit Inspection {{ r.id }}</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeEdit()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="strong mb-2">Routing</div>
@@ -190,7 +230,6 @@
           }
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeEdit()">Cancel</button>
           <button type="button" class="btn btn-ims" (click)="saveEdit()"><i class="bi bi-check2"></i> Save Record</button>
         </div>
       </div>
@@ -198,22 +237,4 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
-
-            } @empty {
-              <tr><td colspan="9" class="text-center text-muted2 py-4">No inspections logged.</td></tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ===== Read-only record viewer (row click) ===== -->
-<ims-record-view
-  [view]="viewer"
-  [editable]="true"
-  (closed)="closeViewer()"
-  (edit)="editFromViewer()"
-></ims-record-view>
 

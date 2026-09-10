@@ -261,12 +261,12 @@
 
 <!-- ============== segment editor ============== -->
 @if (editOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeEdit()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="editDirty()" (dismiss)="closeEdit()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-pencil-square"></i>Edit Time — {{ editEmployee() }}</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeEdit()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           @if (editingLive()) {
@@ -310,7 +310,6 @@
               <i class="bi bi-stop-circle"></i> Clock Out Now
             </button>
           }
-          <button type="button" class="btn btn-ims-outline" (click)="closeEdit()">Cancel</button>
           <button type="button" class="btn btn-ims" (click)="saveEdit()"><i class="bi bi-check2"></i> Save</button>
         </div>
       </div>
@@ -322,12 +321,12 @@
 
 <!-- ============== punch (clock in / out) ============== -->
 @if (punchOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="punchOpen = false">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="punchDirty()" (dismiss)="closePunch()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-stopwatch"></i>Clock In / Out</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="punchOpen = false"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="lab-punch-head">
@@ -416,14 +415,13 @@
             </button>
           </div>
         </div>
-        <div class="modal-footer">
-          @if (punchOpenSegment()) {
+        @if (punchOpenSegment()) {
+          <div class="modal-footer">
             <button type="button" class="btn btn-outline-danger me-auto" (click)="punchClockOut()">
               <i class="bi bi-stop-circle"></i> Clock Out
             </button>
-          }
-          <button type="button" class="btn btn-ims-outline" (click)="punchOpen = false">Cancel</button>
-        </div>
+          </div>
+        }
       </div>
     </div>
   </div>

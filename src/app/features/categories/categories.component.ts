@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { CatalogType, CategoryOption } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -43,6 +44,8 @@ export class CategoriesComponent {
   renameFrom: string | null = null;
   formName = '';
   formActive = true;
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private formSnap = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -77,6 +80,7 @@ export class CategoriesComponent {
     this.renameFrom = null;
     this.formName = '';
     this.formActive = true;
+    this.formSnap = snapshotForm(this.formValues());
     this.modalOpen = true;
   }
 
@@ -84,7 +88,18 @@ export class CategoriesComponent {
     this.renameFrom = c.name;
     this.formName = c.name;
     this.formActive = c.active !== false;
+    this.formSnap = snapshotForm(this.formValues());
     this.modalOpen = true;
+  }
+
+  /** True when the editor holds edits that Save has not written yet. */
+  formDirty(): boolean {
+    return formChanged(this.formValues(), this.formSnap);
+  }
+
+  /** The editor's values, as compared against the open-time snapshot. */
+  private formValues(): { name: string; active: boolean } {
+    return { name: this.formName, active: this.formActive };
   }
 
   save(): void {
@@ -107,6 +122,7 @@ export class CategoriesComponent {
     this.renameFrom = null;
     this.formName = '';
     this.formActive = true;
+    this.formSnap = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

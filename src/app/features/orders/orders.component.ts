@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Order, ORDER_STATUS_LABEL, Party, statusClass } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -30,6 +31,8 @@ export class OrdersComponent {
   customerOpen = false;
   editingCustomerId: string | null = null;
   customerForm = this.emptyCustomer();
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private customerSnap = '';
 
   orderOpen = false;
   orderForm = {
@@ -39,6 +42,8 @@ export class OrdersComponent {
     startDate: new Date().toISOString().slice(0, 10),
     endDate: '',
   };
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private orderSnap = '';
   detail: Order | null = null;
 
   /** Read-only record viewer (customer rows; contract rows reuse `detail`). */
@@ -76,7 +81,13 @@ export class OrdersComponent {
           active: p.active !== false,
         }
       : this.emptyCustomer();
+    this.customerSnap = snapshotForm(this.customerForm);
     this.customerOpen = true;
+  }
+
+  /** True when the customer editor holds edits that Save has not written yet. */
+  customerDirty(): boolean {
+    return formChanged(this.customerForm, this.customerSnap);
   }
 
   saveCustomer(): void {
@@ -107,6 +118,7 @@ export class OrdersComponent {
   closeCustomer(): void {
     this.customerOpen = false;
     this.editingCustomerId = null;
+    this.customerSnap = '';
   }
 
   /* ------------------------------- orders ------------------------------ */
@@ -120,7 +132,13 @@ export class OrdersComponent {
       startDate: new Date().toISOString().slice(0, 10),
       endDate: '',
     };
+    this.orderSnap = snapshotForm(this.orderForm);
     this.orderOpen = true;
+  }
+
+  /** True when the contract editor holds edits that Save has not written yet. */
+  orderDirty(): boolean {
+    return formChanged(this.orderForm, this.orderSnap);
   }
 
   saveOrder(): void {
@@ -135,7 +153,12 @@ export class OrdersComponent {
       startDate: f.startDate,
       endDate: f.endDate || f.startDate,
     });
+    this.closeOrderForm();
+  }
+
+  closeOrderForm(): void {
     this.orderOpen = false;
+    this.orderSnap = '';
   }
 
   openDetail(o: Order): void {

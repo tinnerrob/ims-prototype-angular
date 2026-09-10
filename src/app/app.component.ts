@@ -6,6 +6,7 @@ import { filter } from 'rxjs';
 import { ModulesService } from './core/modules.service';
 import { TelemetryService } from './core/telemetry.service';
 import { NAV_GROUPS, ViewDef, viewFor } from './core/views';
+import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
 
 /**
  * App shell — sidebar + topbar, ported from the prototype's index.html and
@@ -20,7 +21,7 @@ import { NAV_GROUPS, ViewDef, viewFor } from './core/views';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, ConfirmDialogComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

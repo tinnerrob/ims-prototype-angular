@@ -11,6 +11,7 @@ import {
   TaxSchedule,
   WEEKEND_POLICIES,
 } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -47,10 +48,14 @@ export class PricingComponent {
     retail: 0,
     locked: false,
   };
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private overheadSnap = '';
 
   taxOpen = false;
   taxEditingCode: string | null = null;
   taxForm: TaxSchedule = this.emptyTax();
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private taxSnap = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -95,6 +100,7 @@ export class PricingComponent {
     this.overheadForm = o
       ? { id: o.id, name: o.name, category: o.category, chargeType: o.chargeType, pct: o.pct, cost: o.cost, retail: o.retail, locked: o.locked }
       : this.emptyOverhead();
+    this.overheadSnap = snapshotForm(this.overheadForm);
     this.overheadOpen = true;
   }
 
@@ -119,9 +125,15 @@ export class PricingComponent {
     this.data.removeOverhead(o.id);
   }
 
+  /** True when the overhead editor holds edits that Save has not written yet. */
+  overheadDirty(): boolean {
+    return formChanged(this.overheadForm, this.overheadSnap);
+  }
+
   closeOverhead(): void {
     this.overheadOpen = false;
     this.overheadEditingId = null;
+    this.overheadSnap = '';
   }
 
   /* ------------------------------- taxes -------------------------------- */
@@ -129,6 +141,7 @@ export class PricingComponent {
   openTax(t?: TaxSchedule): void {
     this.taxEditingCode = t ? t.code : null;
     this.taxForm = t ? { ...t } : this.emptyTax();
+    this.taxSnap = snapshotForm(this.taxForm);
     this.taxOpen = true;
   }
 
@@ -151,9 +164,15 @@ export class PricingComponent {
     this.data.removeTaxSchedule(t.code);
   }
 
+  /** True when the tax editor holds edits that Save has not written yet. */
+  taxDirty(): boolean {
+    return formChanged(this.taxForm, this.taxSnap);
+  }
+
   closeTax(): void {
     this.taxOpen = false;
     this.taxEditingCode = null;
+    this.taxSnap = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

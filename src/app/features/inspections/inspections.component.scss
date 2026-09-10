@@ -1,3 +1,22 @@
 /* Styling comes from the global design system (src/styles.scss), ported from the
    prototype CSS. Component styles are scoped, so rules here would out-rank those
    globals — the markup uses the prototype class names directly. */
+
+/* ---- inspection-log period filter (card header) ---- */
+.log-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+}
+/* The pager is a header control here, not the centered scheduler banner. */
+.log-filter .period-pager {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+}
+.log-filter .tl-range {
+  max-width: none;
+  font-size: 12.5px;
+}
+

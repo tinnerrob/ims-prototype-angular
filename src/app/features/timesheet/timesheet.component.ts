@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService, dISO, hmMin, minHM, snap15 } from '../../core/data.service';
 import { Item, Timesheet, TIMESHEET_KIND, TimesheetTarget } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 
 const DAY_MS = 86400000;
@@ -81,12 +82,16 @@ export class TimesheetComponent implements OnDestroy {
   editIn = '';
   editOut = '';
   editTarget = 'order|';
+  /** Segment-editor values as they were when it opened (discard prompt). */
+  private editSnap = '';
 
   /** Punch (clock in/out) modal. */
   punchOpen = false;
   punchEmpId = '';
   punchDate = '';
   punchTime = '';
+  /** Punch values as they were when it opened (discard prompt). */
+  private punchSnap = '';
 
   private drag: DragState | null = null;
   /** Set when a drag actually moved, so the trailing `click` doesn't open the editor. */
@@ -480,7 +485,18 @@ export class TimesheetComponent implements OnDestroy {
     this.editIn = ts.clockIn;
     this.editOut = ts.clockOut ?? '';
     this.editTarget = `${ts.targetType}|${ts.targetId ?? ''}`;
+    this.editSnap = snapshotForm(this.editValues());
     this.editOpen = true;
+  }
+
+  /** True when the segment editor holds edits that Save has not written yet. */
+  editDirty(): boolean {
+    return formChanged(this.editValues(), this.editSnap);
+  }
+
+  /** The segment editor's values, as compared against the open-time snapshot. */
+  private editValues(): Record<string, string> {
+    return { date: this.editDate, clockIn: this.editIn, clockOut: this.editOut, target: this.editTarget };
   }
 
   saveEdit(): void {
@@ -517,6 +533,7 @@ export class TimesheetComponent implements OnDestroy {
   closeEdit(): void {
     this.editOpen = false;
     this.editId = null;
+    this.editSnap = '';
   }
 
   editingLive(): boolean {
@@ -563,7 +580,23 @@ export class TimesheetComponent implements OnDestroy {
     this.punchEmpId = empId;
     this.punchDate = dISO(now);
     this.punchTime = minHM(now.getHours() * 60 + now.getMinutes());
+    this.punchSnap = snapshotForm(this.punchValues());
     this.punchOpen = true;
+  }
+
+  /** True when the punch editor holds edits that no punch action has used yet. */
+  punchDirty(): boolean {
+    return formChanged(this.punchValues(), this.punchSnap);
+  }
+
+  /** The punch editor's values, as compared against the open-time snapshot. */
+  private punchValues(): Record<string, string> {
+    return { date: this.punchDate, time: this.punchTime };
+  }
+
+  closePunch(): void {
+    this.punchOpen = false;
+    this.punchSnap = '';
   }
 
   punchEmployee(): Item | undefined {
@@ -582,12 +615,12 @@ export class TimesheetComponent implements OnDestroy {
   punchTo(type: TimesheetTarget, id: string | null): void {
     this.data.punchIn(this.punchEmpId, type, id, hmMin(this.punchTime), this.punchDate);
     this.selectedEmp = this.punchEmpId;
-    this.punchOpen = false;
+    this.closePunch();
   }
 
   punchClockOut(): void {
     this.data.closeOpen(this.punchEmpId, hmMin(this.punchTime));
-    this.punchOpen = false;
+    this.closePunch();
   }
 
   punchLunchOut(): void {
@@ -596,7 +629,7 @@ export class TimesheetComponent implements OnDestroy {
 
   punchLunchIn(): void {
     this.data.closeOpen(this.punchEmpId, hmMin(this.punchTime));
-    this.punchOpen = false;
+    this.closePunch();
   }
 
   /* ------------------------------ summary ------------------------------- */

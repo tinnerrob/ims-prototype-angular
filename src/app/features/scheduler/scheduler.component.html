@@ -311,12 +311,12 @@
 
 <!-- ================= New Order (prototype `orderModal` → `openOrderModal`) ================= -->
 @if (orderOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeOrder()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="orderDirty()" (dismiss)="closeOrder()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-file-earmark-text"></i>New Order / Job</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeOrder()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="d-flex align-items-center gap-2 mb-3">
@@ -380,7 +380,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeOrder()">Cancel</button>
           <button
             type="button"
             class="btn btn-ims"
@@ -399,12 +398,12 @@
 
 <!-- ============ New <resource> (prototype `addPoolResource` → `openAddModal`) ============ -->
 @if (resOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeRes()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="resDirty()" (dismiss)="closeRes()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-plus-circle"></i>{{ poolAddLabel() }}</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeRes()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="strong mb-2">Identity</div>
@@ -543,7 +542,6 @@
           }
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeRes()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!resForm.name.trim()" (click)="saveRes()">
             <i class="bi bi-check2"></i> Save Record
           </button>

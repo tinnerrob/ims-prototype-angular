@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { RentalSub } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -37,6 +38,8 @@ const BLANK_RENT_FORM = {
 export class RentalsComponent {
   modalOpen = false;
   form = { ...BLANK_RENT_FORM };
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private formSnap = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -74,6 +77,7 @@ export class RentalsComponent {
 
   openForm(): void {
     this.form = this.emptyForm();
+    this.formSnap = snapshotForm(this.form);
     this.modalOpen = true;
   }
 
@@ -98,8 +102,14 @@ export class RentalsComponent {
     this.data.removeRental(r.id);
   }
 
+  /** True when the editor holds edits that Save has not written yet. */
+  formDirty(): boolean {
+    return formChanged(this.form, this.formSnap);
+  }
+
   closeForm(): void {
     this.modalOpen = false;
+    this.formSnap = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

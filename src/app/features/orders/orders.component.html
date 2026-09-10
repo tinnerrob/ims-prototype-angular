@@ -104,12 +104,12 @@
 
 <!-- customer editor -->
 @if (customerOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeCustomer()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="customerDirty()" (dismiss)="closeCustomer()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-pencil-square"></i>{{ editingCustomerId ? 'Edit' : 'New' }} Customer</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeCustomer()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="row g-2">
@@ -152,7 +152,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeCustomer()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!customerForm.name.trim()" (click)="saveCustomer()">
             <i class="bi bi-check2"></i> Save Customer
           </button>
@@ -166,12 +165,12 @@
 
 <!-- new contract -->
 @if (orderOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="orderOpen = false">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="orderDirty()" (dismiss)="closeOrderForm()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-folder2-open"></i>New Contract</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="orderOpen = false"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="field-group">
@@ -202,7 +201,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="orderOpen = false">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!orderForm.projectName.trim()" (click)="saveOrder()">
             <i class="bi bi-check2"></i> Save Contract
           </button>
@@ -220,7 +218,7 @@
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-eye"></i>Contract — {{ detail.orderId }}</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeDetail()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="row g-3">

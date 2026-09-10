@@ -113,7 +113,11 @@ detail right**, with orders as the top rows.
 - `src/app/shared/record-view/*` — shared read-only record viewer (opened by a table
   row click) + the `isInteractiveTarget()` row-click guard.
 - `src/app/shared/modal-dismiss/*` — `ModalDismissDirective` (`imsModalDismiss`),
-  click-outside-to-dismiss applied to every hand-rolled modal root.
+  the single close policy for every hand-rolled modal root: click-outside **or** the
+  corner ✕, plus the "discard changes?" guard.
+- `src/app/shared/confirm/*` — `ConfirmService` + `ims-confirm-dialog` (mounted once in
+  the app shell, raised above the editor modals) and the `snapshotForm()` /
+  `formChanged()` compare-on-close helpers.
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
 - `src/app/app.routes.ts` — route map (module routes are guarded).
 - `src/styles.scss` — token-driven global theme; `index.html` loads Bootstrap Icons CDN.
@@ -138,14 +142,38 @@ detail right**, with orders as the top rows.
   own icon buttons keep working. `ViewModel` = title/subtitle/icon/badge + sections of
   label/value fields; `[editable]="true"` adds a footer **Edit** that reopens the
   page's own editor (`editFromViewer()`). Pages with an existing read-only detail
-  modal (Orders → contract, Invoicing) route the row click into it instead.
+  modal (Orders → contract, Invoicing) route the row click into it instead, and
+  Inspections skips the viewer entirely: a log row opens the inspection editor.
 - **Modal dismissal:** every hand-rolled modal root
-  (`<div class="modal show d-block" …>`) carries `imsModalDismiss (dismiss)="closeFoo()"`,
-  so a press-and-release outside the `.modal-content` dialog closes it exactly like
-  the corner ✕. Footers therefore only hold real actions (Save/Cancel, Download CSV,
-  Edit) — the redundant footer `Close` buttons are gone, and `ims-record-view`'s
-  footer renders only when `[editable]="true"`. A press that starts inside the dialog
-  is ignored, so drags out of a modal never dismiss it.
+  (`<div class="modal show d-block" …>`) carries `imsModalDismiss (dismiss)="closeFoo()"`.
+  The directive owns **both** exits — a press-and-release outside the `.modal-content`
+  dialog and the corner ✕ — so the ✕ needs no `(click)` of its own and footers hold
+  only real actions (Save, Download CSV, Edit). A press that starts inside the dialog is
+  ignored, so drags out of a modal never dismiss it; `ims-record-view`'s footer renders
+  only when `[editable]="true"`.
+- **Unsaved changes:** an editor modal that can lose typed work adds
+  `[imsDirty]="formDirty()"` next to `imsModalDismiss`. Take a snapshot when the editor
+  opens and compare it on close (`snapshotForm()` / `formChanged()` from
+  `shared/confirm/unsaved-changes.ts`):
+
+  ```ts
+  private formSnap = '';
+  openForm(): void { this.form = …; this.formSnap = snapshotForm(this.form); this.modalOpen = true; }
+  formDirty(): boolean { return formChanged(this.form, this.formSnap); }
+  ```
+
+  A clean editor closes straight away; a dirty one asks first (`ConfirmService.ask()`
+  → `ims-confirm-dialog`: Discard / Keep editing). Closing after a successful save calls
+  the component's close method directly, which never asks. Editor modals also work on a
+  **copy** of the record (`openEdit(r) { this.editRecord = { ...r, … } }`) so Save is the
+  only write — otherwise "discard" would have nothing to discard.
+- **Inspection log:** the Receiving / Inspections log filters by period — `All` (default)
+  / Day / Week / Month around a cursor date, with the scheduler's ‹ › pager (Monday-based
+  weeks) and a **Today** reset; the badge counts visible / total. A log row click opens
+  the **inspection editor** (the prototype's `inspectionModal` on the `data-edit` row)
+  rather than the read-only viewer — the redundant pencil column is gone, and logging a
+  new inspection re-anchors the log on the record it just created so a narrowed log can't
+  hide it.
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler
@@ -168,5 +196,3 @@ The original vanilla-JS prototype lives in the sibling repo
 `docs/architecture/`: `modal-design-spec.md`, `AI-ONBOARDING.md`,
 `app-review-*.md`). Match UI/behavior against `js/pages/scheduler.js` /
 `js/pages/timesheet.js` when refining.
-
-  `updateOrderLineTimes`).

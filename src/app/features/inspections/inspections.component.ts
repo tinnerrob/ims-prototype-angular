@@ -10,24 +10,43 @@ import {
   InspectionDirection,
   statusClass,
 } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
-import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+
+/** Period filter of the inspection log. */
+type LogRange = 'all' | 'day' | 'week' | 'month';
+
+const LOG_RANGES: LogRange[] = ['all', 'day', 'week', 'month'];
+
+const LOG_RANGE_LABEL: Record<LogRange, string> = {
+  all: 'All',
+  day: 'Day',
+  week: 'Week',
+  month: 'Month',
+};
 
 /**
  * Receiving / Inspections (core) — port of the prototype's `renderYard`
  * (js/pages/yard.js): the asset in/out inspection form (telemetry verification
  * switches, meter + fuel) with the live overage preview, plus the inspection log.
+ *
+ * The log narrows to a day / week / month around a cursor date (the scheduler's
+ * period pattern: Monday-based weeks, ‹ › paging, "Today" reset), and clicking a
+ * logged inspection opens the editor directly — the prototype's
+ * `inspectionModal` on the `data-edit` row — so a record is one click from edit.
  */
 @Component({
   selector: 'ims-inspections',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective],
   templateUrl: './inspections.component.html',
   styleUrl: './inspections.component.scss',
 })
 export class InspectionsComponent {
   readonly checkKeys = INSPECTION_CHECKS;
   readonly checkLabel = INSPECTION_CHECK_LABEL;
+  readonly logRanges = LOG_RANGES;
+  readonly logRangeLabelOf = (v: LogRange): string => LOG_RANGE_LABEL[v];
 
   direction: InspectionDirection = 'Check-Out';
   itemId = '';
@@ -37,13 +56,14 @@ export class InspectionsComponent {
   fuel = 100;
   checks: Record<InspectionCheckKey, boolean> = this.allChecks(true);
 
+  /** Log period filter + the cursor date the day/week/month window is built on. */
+  logRange: LogRange = 'all';
+  logAnchor = new Date();
+
   editOpen = false;
   editRecord: Inspection | null = null;
-
-  /** Read-only record viewer (opened by clicking a table row). */
-  viewer: ViewModel | null = null;
-  /** Record behind the open viewer, so the footer Edit can reopen the editor. */
-  private viewing: Inspection | null = null;
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private editSnap = '';
 
   constructor(readonly data: DataService) {}
 
@@ -75,12 +95,12 @@ export class InspectionsComponent {
   }
 
   /** Log the in/out inspection (prototype `#inspSave`). */
-  log(): void {
+  logInspection(): void {
     if (!this.itemId) return;
     const isOut = this.direction === 'Check-Out';
     const meter = Number(this.meter) || 0;
     const fuel = Number(this.fuel) || 0;
-    this.data.createInspection({
+    const rec = this.data.createInspection({
       itemId: this.itemId,
       orderId: this.orderId || null,
       direction: this.direction,
@@ -99,14 +119,88 @@ export class InspectionsComponent {
     } else {
       this.data.updateItem('serialized', this.itemId, { status: 'Available', orderId: null });
     }
+    // Follow the new record, so a narrowed log never hides what was just logged.
+    this.logAnchor = new Date(rec.date + 'T00:00:00');
     this.meter = 0;
     this.fuel = 100;
     this.checks = this.allChecks(true);
   }
 
+  /* --------------------------- inspection log --------------------------- */
+
+  /** The period filter is narrowing the log. */
+  logFiltered(): boolean {
+    return this.logRange !== 'all';
+  }
+
+  /** Logged inspections inside the selected period (newest first). */
+  logEntries(): Inspection[] {
+    if (!this.logFiltered()) return this.inspections();
+    const b = this.logBounds();
+    return this.inspections().filter((r) => r.date >= b.start && r.date <= b.end);
+  }
+
+  /** Visible count, plus the total while a filter is narrowing the log. */
+  logCountLabel(): string {
+    const shown = this.logEntries().length;
+    return this.logFiltered() ? `${shown} / ${this.inspections().length}` : String(shown);
+  }
+
+  logEmptyLabel(): string {
+    if (!this.logFiltered()) return 'No inspections logged.';
+    return `No inspections logged for ${this.logRangeLabel()}.`;
+  }
+
+  /** Human label for the window the pager is paging through. */
+  logRangeLabel(): string {
+    if (this.logRange === 'month') {
+      return new Date(this.logBounds().start + 'T00:00:00').toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+    if (this.logRange === 'week') {
+      const b = this.logBounds();
+      return 'Week of ' + this.span(b.start) + ' – ' + this.span(b.end);
+    }
+    return new Date(this.logBounds().start + 'T00:00:00').toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+  }
+
+  /** Switch the log period, keeping the cursor date inside the new window. */
+  setLogRange(v: LogRange): void {
+    this.logRange = v;
+    if (v === 'month') this.logAnchor = new Date(this.logAnchor.getFullYear(), this.logAnchor.getMonth(), 1);
+    else if (v === 'week') this.logAnchor = this.mondayOf(this.logAnchor);
+  }
+
+  logToday(): void {
+    this.logAnchor = new Date();
+  }
+
+  /** Page the log cursor one day / week / month (scheduler `shift`). */
+  shiftLog(dir: number): void {
+    const a = this.logAnchor;
+    if (this.logRange === 'month') this.logAnchor = new Date(a.getFullYear(), a.getMonth() + dir, 1);
+    else this.logAnchor = this.dayAt(a, dir * (this.logRange === 'week' ? 7 : 1));
+  }
+
+  /* ------------------------------- editor ------------------------------- */
+
+  /** Log row click → the same editor the Edit action opens (prototype `inspectionModal`). */
   openEdit(r: Inspection): void {
-    this.editRecord = r;
+    // Edit a copy: the stored record only changes on Save.
+    this.editRecord = { ...r, checks: { ...r.checks } };
+    this.editSnap = snapshotForm(this.editRecord);
     this.editOpen = true;
+  }
+
+  /** True when the editor holds edits that Save has not written yet. */
+  editDirty(): boolean {
+    return formChanged(this.editRecord, this.editSnap);
   }
 
   saveEdit(): void {
@@ -128,72 +222,46 @@ export class InspectionsComponent {
   closeEdit(): void {
     this.editOpen = false;
     this.editRecord = null;
+    this.editSnap = '';
   }
 
-  /* --------------------------- record viewer ---------------------------- */
+  /* ------------------------------ utilities ----------------------------- */
 
-  /** Row click → read-only viewer (row actions keep their own click). */
-  showView(e: Event, r: Inspection): void {
-    if (isInteractiveTarget(e)) return;
-    this.viewing = r;
-    const done = this.checkKeys.filter((k) => r.checks[k]);
-    const failed = this.checkKeys.filter((k) => !r.checks[k]);
-    this.viewer = {
-      title: `Inspection ${r.id}`,
-      subtitle: `${r.itemId} · ${r.direction}`,
-      icon: 'bi-clipboard-check',
-      badge: r.status,
-      badgeClass: 'st-' + statusClass(r.status),
-      sections: [
-        {
-          title: 'Routing',
-          fields: [
-            { label: 'Inspection ID', value: r.id, mono: true },
-            { label: 'Asset', value: r.itemId, mono: true },
-            { label: 'Contract', value: r.orderId || '—', mono: true },
-            { label: 'Direction', value: r.direction },
-            { label: 'Date', value: this.data.fmtDate(r.date), mono: true },
-          ],
-        },
-        {
-          title: 'Readings',
-          fields: [
-            { label: 'Meter Out', value: r.meterOut == null ? '—' : String(r.meterOut) },
-            { label: 'Meter In', value: r.meterIn == null ? '—' : String(r.meterIn) },
-            { label: 'Fuel Out', value: r.fuelOut == null ? '—' : r.fuelOut + '%' },
-            { label: 'Fuel In', value: r.fuelIn == null ? '—' : r.fuelIn + '%' },
-          ],
-        },
-        {
-          title: 'Condition Checks',
-          fields: this.checkKeys.map((k) => ({
-            label: this.checkLabel[k],
-            value: r.checks[k] ? 'Pass' : 'Fail',
-          })),
-        },
-        {
-          title: 'Summary',
-          fields: [
-            { label: 'Checks Passed', value: `${done.length} of ${this.checkKeys.length}` },
-            { label: 'Failed', value: failed.length ? failed.map((k) => this.checkLabel[k]).join(', ') : '—' },
-            { label: 'Photos', value: String(r.photos ?? 0) },
-            { label: 'Notes', value: r.notes || '—' },
-          ],
-        },
-      ],
-    };
+  /** Inclusive ISO bounds of the selected log period. */
+  private logBounds(): { start: string; end: string } {
+    const a = this.logAnchor;
+    if (this.logRange === 'month') {
+      return {
+        start: this.iso(new Date(a.getFullYear(), a.getMonth(), 1)),
+        end: this.iso(new Date(a.getFullYear(), a.getMonth() + 1, 0)),
+      };
+    }
+    if (this.logRange === 'week') {
+      const start = this.mondayOf(a);
+      return { start: this.iso(start), end: this.iso(this.dayAt(start, 6)) };
+    }
+    return { start: this.iso(a), end: this.iso(a) };
   }
 
-  closeViewer(): void {
-    this.viewer = null;
-    this.viewing = null;
+  private dayAt(d: Date, days: number): Date {
+    const x = new Date(d);
+    x.setDate(x.getDate() + days);
+    return x;
   }
 
-  /** Viewer footer Edit → reopen the inspection editor for the shown record. */
-  editFromViewer(): void {
-    const r = this.viewing;
-    this.closeViewer();
-    if (r) this.openEdit(r);
+  /** Monday of the week containing `d` (the scheduler's week convention). */
+  private mondayOf(d: Date): Date {
+    return this.dayAt(d, -((d.getDay() + 6) % 7));
+  }
+
+  private iso(d: Date): string {
+    const p = (n: number) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  /** 'Sep 7' — short date for the week-range label. */
+  private span(iso: string): string {
+    return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   private allChecks(v: boolean): Record<InspectionCheckKey, boolean> {

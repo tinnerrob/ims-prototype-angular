@@ -1,0 +1,29 @@
+@if (confirm.pending; as p) {
+  <!-- `confirm-layer` raises the prompt above the editor modals (Bootstrap 1055). -->
+  <div
+    class="modal show d-block confirm-layer"
+    tabindex="-1"
+    role="dialog"
+    aria-modal="true"
+    imsModalDismiss
+    (dismiss)="confirm.settle(false)"
+  >
+    <div class="modal-dialog confirm-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i>{{ p.title }}</h5>
+        </div>
+        <div class="modal-body">{{ p.message }}</div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="confirm.settle(false)">
+            {{ p.cancelLabel }}
+          </button>
+          <button type="button" class="btn btn-ims" (click)="confirm.settle(true)">
+            {{ p.confirmLabel }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block confirm-layer"></div>
+}

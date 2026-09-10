@@ -17,6 +17,7 @@ import {
   ViewModel,
   ViewSection,
 } from '../../shared/record-view/record-view.component';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 
 const DAY_MS = 86400000;
@@ -151,10 +152,14 @@ export class SchedulerComponent implements OnDestroy {
   /** "New Order" modal (prototype `orderModal` → `openOrderModal`). */
   orderOpen = false;
   orderForm = this.emptyOrder();
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private orderSnap = '';
 
   /** "New <resource>" modal (prototype `addPoolResource` → `openAddModal`). */
   resOpen = false;
   resForm = this.emptyRes();
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private resSnap = '';
 
   constructor(readonly data: DataService, private cdr: ChangeDetectorRef) {
     // Anchor the calendar on the first active order's start week (prototype
@@ -666,6 +671,7 @@ export class SchedulerComponent implements OnDestroy {
       endDate: this.addDaysISO(start, 14),
       endTime: '17:00',
     };
+    this.orderSnap = snapshotForm(this.orderForm);
     this.orderOpen = true;
   }
 
@@ -688,12 +694,18 @@ export class SchedulerComponent implements OnDestroy {
       t1: hmMin(f.endTime),
     });
     if (!f.active) this.data.updateOrderStatus(created.orderId, 'closed');
-    this.orderOpen = false;
+    this.closeOrder();
     this.focusOrder(created.orderId);
+  }
+
+  /** True when the New Order editor holds edits that Save has not written yet. */
+  orderDirty(): boolean {
+    return formChanged(this.orderForm, this.orderSnap);
   }
 
   closeOrder(): void {
     this.orderOpen = false;
+    this.orderSnap = '';
   }
 
   /** Open the New <resource> editor for the active pool tab (prototype `addPoolResource`). */
@@ -705,6 +717,7 @@ export class SchedulerComponent implements OnDestroy {
       lat: this.data.yard.lat,
       lng: this.data.yard.lng,
     };
+    this.resSnap = snapshotForm(this.resForm);
     this.resOpen = true;
   }
 
@@ -748,11 +761,17 @@ export class SchedulerComponent implements OnDestroy {
       });
     }
     this.data.createItem(this.poolType, patch as unknown as Omit<Item, 'type' | 'id'>);
-    this.resOpen = false;
+    this.closeRes();
+  }
+
+  /** True when the New Resource editor holds edits Save has not written yet. */
+  resDirty(): boolean {
+    return formChanged(this.resForm, this.resSnap);
   }
 
   closeRes(): void {
     this.resOpen = false;
+    this.resSnap = '';
   }
   dateAt(ms: number): string {
     const d = new Date(ms);

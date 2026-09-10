@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
+import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -121,6 +122,8 @@ export class ItemsComponent {
   modalOpen = false;
   editingId: string | null = null;
   form = { ...BLANK_ITEM_FORM };
+  /** Editor values as they were when it opened (drives the discard prompt). */
+  private formSnap = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -229,6 +232,7 @@ export class ItemsComponent {
           hourlyBillable: item.hourlyBillable ?? 0,
         }
       : this.emptyForm();
+    this.formSnap = snapshotForm(this.form);
     this.modalOpen = true;
   }
 
@@ -269,9 +273,15 @@ export class ItemsComponent {
     this.data.removeItem(this.type, item.id);
   }
 
+  /** True when the editor holds edits that Save has not written yet. */
+  formDirty(): boolean {
+    return formChanged(this.form, this.formSnap);
+  }
+
   closeForm(): void {
     this.modalOpen = false;
     this.editingId = null;
+    this.formSnap = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

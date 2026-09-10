@@ -62,7 +62,7 @@
 
 <!-- add / rename modal (prototype `openFormModal`) -->
 @if (modalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="close()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="formDirty()" (dismiss)="close()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -70,7 +70,7 @@
             <i class="bi {{ renameFrom ? 'bi-pencil-square' : 'bi-plus-circle' }}"></i>
             {{ renameFrom ? 'Rename Category — ' + renameFrom : 'Add Category — ' + label() }}
           </h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="field-group">
@@ -86,7 +86,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="close()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!formName.trim()" (click)="save()">
             <i class="bi bi-check2"></i> Save Record
           </button>

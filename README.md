@@ -78,11 +78,11 @@ touching feature code.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
 - [x] Locations — ragged location hierarchy (parent/child adjacency list) + location type vocabulary, as two tabs under Admin.
-- [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
+- [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log; the log filters by All / Day / Week / Month with ‹ › paging and a Today reset, and clicking a logged inspection opens the inspection editor (no read-only step, no pencil column).
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
 - [x] Admin — Administration shell with submenus: Locations, Categories, Feature Modules.
-- [x] Scheduling — week timeline, conflict detection, item booking (overbooking allowed); blocks drag to another day, lists group by type, double-click opens the read-only asset/contract viewer without flashing the lane shut first (a lane click waits out the 250 ms double-click window); every modal closes on ✕, a click outside the dialog, or its footer actions (no redundant footer Close).
+- [x] Scheduling — week timeline, conflict detection, item booking (overbooking allowed); blocks drag to another day, lists group by type, double-click opens the read-only asset/contract viewer without flashing the lane shut first (a lane click waits out the 250 ms double-click window); every modal closes on ✕ or a click outside the dialog (no footer Close/Cancel duplicates) and asks before discarding unsaved form edits.
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 
 **Port coverage complete:** full core + all 6 industry modules + module gating + admin, on a single typed, persisted data store.

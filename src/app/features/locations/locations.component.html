@@ -138,14 +138,14 @@
 
 <!-- ===== New / Edit Location (prototype `branchConfigModal`) ===== -->
 @if (modalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeForm()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="formDirty()" (dismiss)="closeForm()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">
             <i class="bi bi-diagram-3"></i>{{ editingId ? 'Edit' : 'New' }} Location
           </h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeForm()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="row g-2">
@@ -196,7 +196,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeForm()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!form.id.trim() || !form.name.trim()" (click)="save()">
             <i class="bi bi-check2"></i> Save Record
           </button>
@@ -209,7 +208,7 @@
 
 <!-- ===== Add / Rename Location Type (the "Location Types" sub-page) ===== -->
 @if (typeModalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeType()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="typeDirty()" (dismiss)="closeType()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -217,7 +216,7 @@
             <i class="bi {{ renameTypeFrom ? 'bi-pencil-square' : 'bi-plus-circle' }}"></i>
             {{ renameTypeFrom ? 'Rename Location Type — ' + renameTypeFrom : 'Add Location Type' }}
           </h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeType()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="field-group">
@@ -233,7 +232,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeType()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!formTypeName.trim()" (click)="saveType()">
             <i class="bi bi-check2"></i> Save Record
           </button>

@@ -90,12 +90,12 @@
 </div>
 
 @if (modalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeForm()">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="formDirty()" (dismiss)="closeForm()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title"><i class="bi bi-truck"></i>New Dispatch</h5>
-          <button type="button" class="btn-close" aria-label="Close" (click)="closeForm()"></button>
+          <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
           <div class="field-group">
@@ -126,7 +126,6 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeForm()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!form.orderId || !form.vehicleId" (click)="save()">
             <i class="bi bi-check2"></i> Save Record
           </button>

@@ -1,0 +1,6 @@
+/* The prompt sits above every editor modal (Bootstrap's modal is z-index 1055),
+   so a "discard changes?" asked from a modal draws on top of it. */
+.modal.confirm-layer { z-index: 1080; }
+.modal-backdrop.confirm-layer { z-index: 1075; }
+
+.confirm-dialog { max-width: 440px; }
