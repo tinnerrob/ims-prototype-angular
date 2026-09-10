@@ -12,6 +12,25 @@ import {
 } from '../../core/models';
 
 /**
+ * Data-free blank work-order form. Class field initializers run *before* the
+ * constructor assigns parameter properties, so the initial value must not read
+ * `this.data` — `emptyForm()` layers the data-derived defaults on top when the
+ * editor opens.
+ */
+const BLANK_WO_FORM = {
+  itemId: '',
+  type: 'Repair',
+  meterReading: 0,
+  status: 'In Progress' as WorkOrderStatus,
+  laborHours: 1,
+  consumableId: '',
+  consumableQty: 0,
+  partId: '',
+  partQty: 0,
+  technicianId: '',
+};
+
+/**
  * Field Service & Maintenance (module) — port of the prototype's
  * `renderMaintenance` (js/pages/maintenance.js): the work-order cost grid
  * (parts + labour roll-up), a status filter and the New Work Order modal that
@@ -30,7 +49,7 @@ export class MaintenanceComponent {
 
   filter: 'all' | WorkOrderStatus = 'all';
   modalOpen = false;
-  form = this.emptyForm();
+  form = { ...BLANK_WO_FORM };
 
   constructor(readonly data: DataService) {}
 
@@ -120,15 +139,10 @@ export class MaintenanceComponent {
     const asset =
       this.serialized().find((a) => a.status === 'In Shop')?.id ?? this.serialized()[0]?.id ?? '';
     return {
+      ...BLANK_WO_FORM,
       itemId: asset,
-      type: 'Repair',
-      meterReading: 0,
-      status: 'In Progress' as WorkOrderStatus,
-      laborHours: 1,
       consumableId: this.consumables()[0]?.id ?? '',
-      consumableQty: 0,
       partId: this.parts()[0]?.id ?? '',
-      partQty: 0,
       technicianId: this.technicians()[0]?.id ?? '',
     };
   }

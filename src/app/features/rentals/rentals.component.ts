@@ -5,6 +5,22 @@ import { DataService } from '../../core/data.service';
 import { RentalSub } from '../../core/models';
 
 /**
+ * Data-free blank sub-rental form. Class field initializers run *before* the
+ * constructor assigns parameter properties, so the initial value must not read
+ * `this.data` — `emptyForm()` layers the contract default on top when the
+ * editor opens.
+ */
+const BLANK_RENT_FORM = {
+  itemId: '',
+  assetName: '',
+  orderId: '',
+  vendor: '',
+  vendorCost: 0,
+  retailRate: 0,
+  qty: 1,
+};
+
+/**
  * Rentals / Sub-Rentals (module) — port of the prototype's `renderRerents`
  * (js/pages/rerents.js): vendor wholesale / retail revenue / net spread KPIs
  * plus the sub-rental ledger and the New Sub-Rental modal.
@@ -18,7 +34,7 @@ import { RentalSub } from '../../core/models';
 })
 export class RentalsComponent {
   modalOpen = false;
-  form = this.emptyForm();
+  form = { ...BLANK_RENT_FORM };
 
   constructor(readonly data: DataService) {}
 
@@ -82,14 +98,6 @@ export class RentalsComponent {
   }
 
   private emptyForm() {
-    return {
-      itemId: '',
-      assetName: '',
-      orderId: this.data.listOrders()[0]?.orderId ?? '',
-      vendor: '',
-      vendorCost: 0,
-      retailRate: 0,
-      qty: 1,
-    };
+    return { ...BLANK_RENT_FORM, orderId: this.data.listOrders()[0]?.orderId ?? '' };
   }
 }

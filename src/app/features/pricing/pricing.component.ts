@@ -34,7 +34,17 @@ export class PricingComponent {
 
   overheadOpen = false;
   overheadEditingId: string | null = null;
-  overheadForm: Omit<Overhead, 'id'> & { id: string } = this.emptyOverhead();
+  /** Blank until `openOverhead()` fills it (field initializers run before `data`). */
+  overheadForm: Omit<Overhead, 'id'> & { id: string } = {
+    id: '',
+    name: '',
+    category: 'Freight/Logistics',
+    chargeType: 'Flat Fee',
+    pct: 0,
+    cost: 0,
+    retail: 0,
+    locked: false,
+  };
 
   taxOpen = false;
   taxEditingCode: string | null = null;

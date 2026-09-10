@@ -73,6 +73,34 @@ const COLUMNS: Record<string, Col[]> = {
 const MONEY_KEYS = ['purchaseValue', 'rateDaily', 'baseMonthly', 'costPrice', 'retailPrice', 'hourlyCost', 'hourlyBillable'];
 
 /**
+ * Data-free blank editor form. Class field initializers run *before* the
+ * constructor assigns parameter properties, so the initial value must not read
+ * `this.data` — `emptyForm()` layers the data-derived defaults on top when the
+ * editor opens.
+ */
+const BLANK_ITEM_FORM = {
+  name: '',
+  category: '',
+  status: 'Available' as Item['status'],
+  qty: 1,
+  rateDaily: 0,
+  make: '',
+  model: '',
+  serial: '',
+  meterHours: 0,
+  fuelType: '',
+  purchaseValue: 0,
+  qtyOnHand: 0,
+  reorderPoint: 0,
+  costPrice: 0,
+  retailPrice: 0,
+  bin: '',
+  role: '',
+  hourlyCost: 0,
+  hourlyBillable: 0,
+};
+
+/**
  * Items & Stock (core) — port of the prototype's Inventory view
  * (js/pages/inventory.js): a vertical-driven tab strip with per-type record
  * counts and the per-type column set (fleet telemetry, stock levels, labor rates).
@@ -90,7 +118,7 @@ export class ItemsComponent {
 
   modalOpen = false;
   editingId: string | null = null;
-  form = this.emptyForm();
+  form = { ...BLANK_ITEM_FORM };
 
   constructor(private readonly data: DataService) {}
 
@@ -239,27 +267,7 @@ export class ItemsComponent {
   }
 
   private emptyForm() {
-    return {
-      name: '',
-      category: this.data.categoriesFor(this.type)[0] ?? '',
-      status: 'Available' as Item['status'],
-      qty: 1,
-      rateDaily: 0,
-      make: '',
-      model: '',
-      serial: '',
-      meterHours: 0,
-      fuelType: '',
-      purchaseValue: 0,
-      qtyOnHand: 0,
-      reorderPoint: 0,
-      costPrice: 0,
-      retailPrice: 0,
-      bin: '',
-      role: '',
-      hourlyCost: 0,
-      hourlyBillable: 0,
-    };
+    return { ...BLANK_ITEM_FORM, category: this.data.categoriesFor(this.type)[0] ?? '' };
   }
 }
 

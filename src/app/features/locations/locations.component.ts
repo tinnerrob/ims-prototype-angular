@@ -19,7 +19,18 @@ import { Branch } from '../../core/models';
 export class LocationsComponent {
   modalOpen = false;
   editingId: string | null = null;
-  form: Omit<Branch, 'id'> & { id: string } = this.emptyForm();
+  /**
+   * Blank editor form. Field initializers run before the constructor assigns
+   * `data`, so this must not read it — `openForm()` applies the data-derived
+   * id default via `emptyForm()`.
+   */
+  form: Omit<Branch, 'id'> & { id: string } = {
+    id: '',
+    name: '',
+    address: '',
+    phone: '',
+    tz: 'America/New_York',
+  };
 
   constructor(private readonly data: DataService) {}
 
