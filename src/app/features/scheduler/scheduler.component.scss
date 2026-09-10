@@ -98,6 +98,16 @@
   border-radius: 6px;
 }
 
+/* A pool card is a small record — one fact per row, and NO badge row any more
+   ("2 booked" is gone): the card's own colour is the highlight (`.res-busy` red
+   / `.partial` amber / `.res-free` green / `.inactive` faded) and the state is
+   spelled out in the `line`/`dates` rows below the cost line. */
+.sched-side .res-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
 .sched-side .qc-head {
   gap: 5px;
   line-height: 1.2;
@@ -111,20 +121,31 @@
   color: var(--slate-500);
 }
 
-.sched-side .res-card-head {
-  /* the type chip ("Serialized"/"Bulk"…) is gone — the pool select above the
-     list already says which pool you're looking at — so a lone availability
-     badge sits at the right end */
-  justify-content: flex-end;
-  margin-bottom: 1px;
-  line-height: 1.2;
+/* "id · name" — the id leads so each card reads as a record, not a label. */
+.sched-side .res-line {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  line-height: 1.25;
+}
+
+.sched-side .res-id {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  color: var(--slate-500);
 }
 
 .sched-side .res-name {
+  min-width: 0;
+  overflow: hidden;
   font-size: 11.5px;
   font-weight: 700;
   line-height: 1.25;
   color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sched-side .res-note {

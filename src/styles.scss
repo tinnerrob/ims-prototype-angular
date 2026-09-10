@@ -681,12 +681,6 @@
 .res-card.res-free { border-color: #bbf7d0; }
 .res-note { font-size: 10px; color: var(--slate-500); margin-top: 2px; font-weight: 600; }
 .res-card:hover { border-color: var(--accent); }
-.res-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 3px;
-}
 .sched-pool-tabs { border-bottom: none; margin-bottom: 6px; }
 .sched-pool-tabs .subtab { padding: 6px 10px; font-size: 12px; }
 /* The inspector has no panel of its own: its cards sit straight on the page,

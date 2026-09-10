@@ -56,14 +56,30 @@ detail right**, with orders as the top rows.
   **Overbooking is allowed** — an item already booked for the visible period can be
   dropped again (the conflict pane flags it); only a *retired* item (`active: false`)
   is refused.
-- **Range-aware pool:** each pool card's badge is computed from the **visible period**
+- **Range-aware pool:** each pool card's state is computed from the **visible period**
   (`availability()` → `bookingsInRange()`), not from a fixed/lifetime state, and
-  re-evaluates when the Day/Week/Month view, the period pager or the bookings change:
-  `n booked` (booked somewhere in the range), `On site · ORD-…` (out on custody now),
-  `In Shop`, `Inactive`. `rangeLabel()` is shown above the pool for context. Cards
-  carry **no type chip** — the pool select right above the list already says which
-  pool you're looking at, so the badge row is just that availability state (and is
-  omitted entirely when there is none).
+  re-evaluates when the Day/Week/Month view, the period pager or the bookings change.
+  `rangeLabel()` is shown above the pool for context.
+- **Pool card layout** — one fact per row, so it reads as a record rather than a label:
+
+  ```
+  SS-204  CAT 320 Excavator      id · name   (name ellipsises, never wraps the card)
+  $650/d · Available             cost · item status
+  Booked on ORD-1001             only when booked somewhere in range
+  08/24/2026 → 09/04/2026        the booking's own row, first-out → last-back
+  ```
+
+  There is **no type chip and no count badge** ("2 booked" is gone). The card's own
+  colour *is* the highlight — `.res-busy` red, `.partial` amber, `.res-free` green,
+  `.inactive` faded — and the state is spelled out in the last two rows. "— drop to
+  overbook" was dropped from the row (it lives in the hover `title`, along with the
+  full order list and span, and overbooking is still allowed).
+- **`Availability` carries structured fields** (`badge` / `line` / `dates` / `note`),
+  not one prose string: `line` = "Booked on ORD-1001" (all distinct orders, comma-
+  joined), `dates` = the min start → max end across every booking in range (the old
+  prose silently *dropped* the dates once an item was booked on two orders). `badge`
+  survives only for the read-only asset viewer's "State"; `poolBadgeClass()` and the
+  `.res-card-head` / `.badge-status` badge row it fed are deleted.
 - **Pool select labels are the plain catalog names** (`poolTypes = CATALOG_TYPES`:
   "Bulk Resources", not "Items (Bulk Resources)") — "Items (…)" only made sense as
   an Items-page tab label, and here it both duplicated the Inventory Pool title and

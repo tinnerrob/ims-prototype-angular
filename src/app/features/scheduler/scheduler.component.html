@@ -44,25 +44,27 @@
           </div>
           <div class="queue-scroll">
             @for (it of lanes(); track it.id) {
+              @let av = availability(it);
               <div
-                class="res-card res-{{ availability(it).key }}"
-                [class.inactive]="availability(it).blocked"
-                [class.partial]="availability(it).key === 'partial'"
+                class="res-card res-{{ av.key }}"
+                [class.inactive]="av.blocked"
+                [class.partial]="av.key === 'partial'"
                 draggable="true"
-                [title]="availability(it).note || 'Drag to an order block to book this resource — double-click to view it'"
+                [title]="av.note || 'Drag to an order block to book this resource — double-click to view it'"
                 (dragstart)="onPoolStart($event, it)"
                 (dragend)="onDragEnd()"
                 (dblclick)="showAssetView(it)"
               >
-                @if (availability(it).badge) {
-                  <div class="res-card-head">
-                    <span class="badge-status {{ poolBadgeClass(availability(it)) }}">{{ availability(it).badge }}</span>
-                  </div>
+                <div class="res-line">
+                  <span class="res-id">{{ it.id }}</span>
+                  <span class="res-name">{{ it.name }}</span>
+                </div>
+                <div class="res-meta">{{ data.money(it.rateDaily) }}/d · {{ it.status }}</div>
+                @if (av.line) {
+                  <div class="res-note">{{ av.line }}</div>
                 }
-                <div class="res-name">{{ it.name }}</div>
-                <div class="res-meta">{{ it.id }} · {{ data.money(it.rateDaily) }}/d · {{ it.status }}</div>
-                @if (availability(it).note) {
-                  <div class="res-note">{{ availability(it).note }}</div>
+                @if (av.dates) {
+                  <div class="res-note">{{ av.dates }}</div>
                 }
               </div>
             } @empty {

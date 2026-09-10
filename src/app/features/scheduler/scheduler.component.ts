@@ -77,8 +77,25 @@ interface MoveState {
 interface BookingRef { orderId: string; start: string; end: string }
 /** Pool-card availability state (prototype `resCard` `avail.key`).
  *  Evaluated against the **visible period**, so the badge follows the selected
- *  range; `blocked` only means "not schedulable at all" (a retired item). */
-interface Availability { key: 'free' | 'partial' | 'busy' | 'inactive'; blocked: boolean; badge: string; note: string; }
+ *  range; `blocked` only means "not schedulable at all" (a retired item).
+ *
+ *  `badge` is the one-word state used by the read-only asset viewer ("3 booked",
+ *  "On site · ORD-1004", "In Shop"); the pool CARD no longer prints it — it
+ *  highlights the whole card and spells the state out in `line`/`dates` instead. */
+interface Availability {
+  key: 'free' | 'partial' | 'busy' | 'inactive';
+  blocked: boolean;
+  badge: string;
+  /** Card row under the cost line — "Booked on ORD-1001", "Out now on ORD-1004",
+   *  "In the shop", "Retired". Empty for a free item (the card stays 2 rows). */
+  line: string;
+  /** The booking's date span, on its own row under `line`. Empty when there is
+   *  no booking to date. */
+  dates: string;
+  /** Tooltip: the same facts in one sentence (and the only place that says
+   *  overbooking is allowed — it used to be printed on every booked card). */
+  note: string;
+}
 
 /** Catalog-type icon for the read-only asset viewer (matches the Items tabs). */
 const POOL_ICON: Record<string, string> = {
@@ -400,20 +417,30 @@ export class SchedulerComponent implements OnDestroy {
    */
   availability(item: Item): Availability {
     if (item.active === false) {
-      return { key: 'inactive', blocked: true, badge: 'Inactive', note: 'Retired — activate it to schedule.' };
+      return {
+        key: 'inactive',
+        blocked: true,
+        badge: 'Inactive',
+        line: 'Retired',
+        dates: '',
+        note: 'Retired — activate it to schedule.',
+      };
     }
     const booked = this.bookingsInRange(item);
     if (booked.length) {
       const orders = [...new Set(booked.map((b) => b.orderId))];
-      const detail =
-        orders.length === 1
-          ? `${orders[0]} (${this.data.fmtDate(booked[0].start)} → ${this.data.fmtDate(booked[0].end)})`
-          : orders.join(', ');
+      // Span every booking in range (ISO dates sort as strings), so a card with
+      // two of them still gets one honest "first out → last back" date row.
+      const from = booked.reduce((a, b) => (b.start < a ? b.start : a), booked[0].start);
+      const to = booked.reduce((a, b) => (b.end > a ? b.end : a), booked[0].end);
+      const span = this.data.fmtDate(from) + ' → ' + this.data.fmtDate(to);
       return {
         key: 'busy',
         blocked: false,
         badge: booked.length + ' booked',
-        note: 'Booked on ' + detail + ' — drop to overbook.',
+        line: 'Booked on ' + orders.join(', '),
+        dates: span,
+        note: 'Booked on ' + orders.join(', ') + ' (' + span + ') — drop to overbook.',
       };
     }
     const out = this.data.outInfo(item.id);
@@ -423,21 +450,22 @@ export class SchedulerComponent implements OnDestroy {
         key: 'partial',
         blocked: false,
         badge: ('On site · ' + (out.orderId ?? '')).trim(),
+        line: 'Out now on ' + where,
+        dates: '',
         note: 'Out now on ' + where + ' — free for ' + this.rangePhrase() + '.',
       };
     }
     if (item.status === 'In Shop') {
-      return { key: 'partial', blocked: false, badge: 'In Shop', note: 'In the shop — free to schedule later.' };
+      return {
+        key: 'partial',
+        blocked: false,
+        badge: 'In Shop',
+        line: 'In the shop',
+        dates: '',
+        note: 'In the shop — free to schedule later.',
+      };
     }
-    return { key: 'free', blocked: false, badge: '', note: '' };
-  }
-
-  /** Badge colour for a pool card's range-aware availability state. */
-  poolBadgeClass(a: Availability): string {
-    if (a.key === 'busy') return 'st-onrent';
-    if (a.key === 'partial') return a.badge.startsWith('On site') ? 'st-out' : 'st-inshop';
-    if (a.key === 'inactive') return 'st-closed';
-    return 'st-available';
+    return { key: 'free', blocked: false, badge: '', line: '', dates: '', note: '' };
   }
 
   /** Jump the calendar to an order's start period and expand it (prototype `focusOrder`). */
