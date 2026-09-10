@@ -53,6 +53,11 @@ detail right**, with orders as the top rows.
   expanding reveals one row per booked inventory item nested under it.
 - **Drag-to-book:** drag a resource card from the left Inventory Pool onto an order
   (queue card or its timeline row) to book it at that order's window. Auto-expands.
+  A resource we own **more than one** of opens the quantity prompt first
+  (prototype `bookQtyModal` / `doAllocate`: "NN owned · NN committed on ORD-1001's
+  window · NN available", a ×N field, an inline "Overbooked" note once the count
+  passes what is free) — 24 jugs of hydraulic fluid or 300 traffic cones are booked
+  in counts, not ones. Single-unit resources (serialized, labor) book straight away.
   **Overbooking is allowed** — an item already booked for the visible period can be
   dropped again (the conflict pane flags it); only a *retired* item (`active: false`)
   is refused.
@@ -60,6 +65,14 @@ detail right**, with orders as the top rows.
   (`availability()` → `bookingsInRange()`), not from a fixed/lifetime state, and
   re-evaluates when the Day/Week/Month view, the period pager or the bookings change.
   `rangeLabel()` is shown above the pool for context.
+- **Capacity, not one-unit-per-resource:** a booking is only a clash when the
+  overlapping bookings need **more units than the item owns** (`data.capacity()` =
+  `totalOwned` for bulk, else `qty` — on-hand for stock, 1 for a serialized unit or an
+  employee). 24 jugs of hydraulic fluid on two orders is fine; 12 + 13 overlapping is
+  not. `committedUnits()` (a sweep over the day boundaries — `peakUnits()` in the
+  component) measures the peak committed at any instant inside the window under test,
+  so *staggered* bookings never add up to a false conflict, and a handover day counts
+  for both. Capacity 1 reproduces the old rule exactly.
 - **Pool card layout** — one fact per row, so it reads as a record rather than a label:
 
   ```
@@ -70,7 +83,10 @@ detail right**, with orders as the top rows.
 
   There is **no type chip and no count badge** ("2 booked" is gone). The card's own
   colour *is* the highlight — `.res-busy` red, `.partial` amber, `.res-free` green,
-  `.inactive` faded — and the state is spelled out in that third row. "— drop to
+  `.inactive` faded — and the state is spelled out in that third row. `.partial` now
+  also carries **partly booked**: a multi-unit resource with bookings that don't fill
+  it goes amber ("Booked on ORD-1001" + range, hover adds "12 of 36 out, 24 free") and
+  only a period that commits everything it owns goes red. "— drop to
   overbook" was dropped from the row (it lives in the hover `title`, along with the
   full order list and span, and overbooking is still allowed).
 - **The booking range shares the order row but is right-justified** (`.res-when` is
@@ -116,21 +132,41 @@ detail right**, with orders as the top rows.
   consumable, part, labor, kit, attachment), then name/date. The lists re-render
   from data, so the moment a conflict is resolved (bar moved/resized, booking
   dropped) the like types fall back together.
-- **Order Details line rows are two rows, led by a type dot** — no type badge:
+- **Order Details line rows are three rows, led by ONE type dot** — no type badge:
 
   ```
-  ● SS-204 · CAT 320 Excavator   ← code · name, one line
-  ● 8/20/26 → 8/24/26            ← compact M/D/YY range under it
+  ● SS-204 · CAT 320 Excavator            ← code · name, one line (ellipsises)
+    8/20/26 → 8/24/26                     ← compact M/D/YY range, inset
+    $3,412.00                             ← what the booking bills
   ```
 
   The `.type-chip` is gone from these rows: the **dot carries the type**, filled
   from the shared resource-type palette (`.tl-res-*`'s `--tint-accent`, the same
   hue as that type's timeline bar; `--slate-400` for a type the palette doesn't
-  name) and repeated on the date row so the two read as one item. Hovering a dot
-  names the type (`typeLabel()`) — the only place the badge's text survives. The
-  "dbl-click a booking" header hint is gone (the row keeps its own `title`, and
-  double-click still opens the viewer). `lineDates()` → `fmtDay()` gives the
-  compact M/D/YY range, matching the pool cards. The conflicts pane keeps its chip.
+  name). **One dot only** — on the item row — and the rows under it are inset by
+  `--bl-inset` (dot 7px + `.bl-main` gap 7px) so the date and the amount line up
+  exactly under the name and the dot reads as the bullet for the whole block.
+  Hovering the dot names the type (`typeLabel()`) — the only place the badge's
+  text survives. The "dbl-click a booking" header hint is gone (the row keeps its
+  own `title`, and double-click still opens the viewer). `lineDates()` →
+  `fmtDay()` gives the compact M/D/YY range, matching the pool cards. The amount is
+  `lineRevenue()` = `data.lineAmountForPeriod()` over the line's own window, i.e.
+  **the invoicing rules themselves** (rate basis `rateDaily`/`baseWeekly`/
+  `baseMonthly`, risk premium, `weekendPolicy` billable days, or once only for a
+  one-time labor/consumable/part charge), so Order Details and the invoice run can
+  never disagree.
+- **Quantity is editable per line** (`×[ 12 ]` at the right end of the date row,
+  `.bl-qty`, and the drop prompt above books the first count) — rendered only when the
+  item owns more than one unit
+  (`lineCapacity()` > 1: consumables, bulk, stock, parts, kits, attachments), because
+  that is exactly the set where a quantity is meaningful. Typing re-runs
+  `data.updateOrderLineQty()` (clamped ≥ 1) and every dependent list re-renders from
+  data, so a conflict clears the moment the numbers stop over-asking. The box is bound
+  `[value]`/`(input)`, **not `ngModel`**: a rejected entry (0, blank, a fraction) has to
+  be echoed straight back into the box, and with `ngModel` the model stores the clamped
+  1 while the DOM keeps showing what was typed (the bound value never "changed").
+  Multi-unit bars also print it on the timeline (`5d · ×12`, `models()` →
+  `qtySuffix()`), so a booked quantity is visible on the calendar too.
 - **Double-click to view (read-only):** pool cards, resource bars and Order
   Details booking rows open the shared `ims-record-view` **asset** viewer;
   order bars and queue cards open the **order/contract** viewer. The conflicts
@@ -139,11 +175,15 @@ detail right**, with orders as the top rows.
   so a double-click opens the viewer *without* expanding/contracting the lane
   first; `showOrderView()` still sets selection + expansion explicitly. The
   expand chevron keeps its own immediate toggle and swallows the `dblclick`, so
-  double-clicking the expander never opens the viewer.
+  double-clicking the expander never opens the viewer. The quantity box swallows
+  its own `dblclick` for the same reason.
 - **Views:** Day (24 one-hour segments, time-of-day windows), Week (Mon–Sun), Month
   (all days of the month). `‹ ›` steps by day/week/month.
-- **Conflicts:** same resource on two orders that overlap is flagged red; the right
-  pane lists conflicts + shows the selected order's detail.
+- **Conflicts are capacity-aware:** a booking is flagged red only when the peak
+  units committed across overlapping orders exceed what the item owns, and the pane
+  row says why (`ci-why`, e.g. `30 needed · 24 owned`) next to the order id. Capacity
+  1 keeps "any overlap is a clash" for serialized units, employees, … The right pane
+  lists the conflicts + shows the selected order's detail.
 
 ### Scheduler data model (resume point)
 - `Order` / `OrderLine` carry a **date window** (`startDate`/`endDate`,
@@ -152,6 +192,13 @@ detail right**, with orders as the top rows.
 - Geometry is **percentage-based** over the visible columns; resize maps pointer →
   column/day (or minutes-of-day in Day view) and persists via `DataService`
   (`updateOrderDates`, `updateOrderLineDates`, `updateOrderTimes`,
+  `updateOrderLineQty`).
+- **`OrderLine.qty`** is *units booked*, and it is what the conflict check weighs:
+  1 for a serialized unit or an employee, on-hand for a consumable, owned for bulk.
+  A drop books 1 and Order Details lets you type the rest (`lineCapacity()` > 1 →
+  the `×[ n ]` box). `data.capacity(item)` is the ceiling — `totalOwned` for bulk,
+  else `qty` — so widening it (a bigger stock count) is all it takes to allow more
+  concurrent bookings.
 
 ## Architecture
 
@@ -312,7 +359,15 @@ detail right**, with orders as the top rows.
    method surface (the `apiAdapter` seam), then wire the real backend.
 6. Scheduler **drag-to-position** (drop a pool item at a specific calendar position
    to set its window) is not yet implemented — currently drops book the full order
-   window.
+   window (a multi-unit resource asks for its count first; the count is editable
+   afterwards in Order Details). The prototype also gated overbooking behind a
+   second confirm dialog (`overbookModal`); here the prompt shows the same facts as
+   an inline note and lets the booking through, which is this port's existing
+   "overbooking is allowed, the pane flags it" policy.
+7. **Consumable stock is not decremented by a booking** — a booked consumable is a
+   commitment against `qtyOnHand` for the conflict check, but only *parts used* on a
+   work order draw stock down (`DataService` work-order posting). Deciding whether a
+   booking should also reserve/move stock is open.
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

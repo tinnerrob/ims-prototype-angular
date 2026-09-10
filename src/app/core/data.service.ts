@@ -451,6 +451,21 @@ export class DataService {
     this.save();
   }
 
+  /**
+   * Quantity booked on a line — how many units of the resource this order takes.
+   * Only meaningful for multi-unit resources (consumables, bulk, stock, kits),
+   * and why the scheduler lets you type one: 24 jugs of hydraulic fluid can go out
+   * on two orders without clashing. Not clamped to the item's capacity — the
+   * conflicts pane is what flags over-asking (capacity-aware, see the scheduler).
+   */
+  updateOrderLineQty(orderId: string, lineId: string, qty: number): void {
+    const order = this.getOrder(orderId);
+    const li = order?.lineItems.find((l) => l.id === lineId);
+    if (!li) return;
+    li.qty = Math.max(1, Math.round(qty) || 1);
+    this.save();
+  }
+
   /** Resize an order window; clamps all its line windows to stay inside. */
   updateOrderDates(orderId: string, startISO: string, endISO: string): void {
     const order = this.getOrder(orderId);
@@ -574,6 +589,25 @@ export class DataService {
   itemLabel(type: CatalogType, id: string): string {
     const it = this.getItem(type, id);
     return it ? `${it.id} · ${it.name}` : id;
+  }
+
+  /**
+   * Units of an item that can be committed at once — the cap the scheduler's
+   * conflict rule measures overlapping bookings against, and the number the
+   * drop-to-book quantity prompt offers. Field-per-type, mirroring the prototype's
+   * `resourceCapacity()`: bulk counts what is *owned* (`totalOwned`, not the
+   * out-snapshot `qtyAvailable`), stock counts `qtyOnHand`, a kit / attachment its
+   * owned count (`qty`), and a serialized unit or an employee is 1. Never below 1,
+   * so a single-unit item keeps the old "any overlap is a clash" behaviour.
+   */
+  capacity(item: Item): number {
+    const n =
+      item.type === 'bulk'
+        ? item.totalOwned ?? item.qty
+        : item.type === 'consumable' || item.type === 'part'
+          ? item.qtyOnHand ?? item.qty
+          : item.qty;
+    return Math.max(1, Number.isFinite(n) ? Math.round(n) : 1);
   }
 
   /** Short "make model" / name used in selects (prototype `mkName`). */

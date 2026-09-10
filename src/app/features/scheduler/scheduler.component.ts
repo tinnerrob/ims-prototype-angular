@@ -181,6 +181,12 @@ export class SchedulerComponent implements OnDestroy {
   /** Editor values as they were when it opened (drives the discard prompt). */
   private resSnap = '';
 
+  /**
+   * Drop-to-book quantity prompt (prototype `bookQtyModal`), opened when a resource
+   * we own more than one of is dropped on an order — see `onDropOrder()`.
+   */
+  bookPrompt: { type: CatalogType; refId: string; orderId: string; qty: number } | null = null;
+
   constructor(readonly data: DataService, private cdr: ChangeDetectorRef) {
     // Anchor the calendar on the first active order's start week (prototype
     // `renderScheduler`), so the seeded orders are on screen immediately.
@@ -306,6 +312,62 @@ export class SchedulerComponent implements OnDestroy {
   lineStart(li: OrderLine, order: Order): string { return li.startDate ?? order.startDate; }
   lineEnd(li: OrderLine, order: Order): string { return li.endDate ?? order.endDate; }
 
+  /** Units this line takes — never below 1 (a serialized unit / employee is 1). */
+  lineQty(li: OrderLine): number { return li.qty || 1; }
+
+  /**
+   * ` · ×12` for a multi-unit line, '' when it takes one — appended to a timeline
+   * bar's sub-line, which is otherwise the only place a booking's quantity is
+   * invisible (the Order Details row is where it is edited).
+   */
+  private qtySuffix(li: OrderLine): string {
+    const q = this.lineQty(li);
+    return q > 1 ? ' · ×' + q : '';
+  }
+
+  /**
+   * The line's item capacity (see `data.capacity`). Drives whether Order Details
+   * offers a quantity box at all: a resource that owns more than one unit can take
+   * a quantity, a serialized unit or an employee cannot.
+   */
+  lineCapacity(li: OrderLine): number {
+    return this.itemCapacity(this.data.getItem(li.type, li.refId));
+  }
+
+  /** Capacity of an item, guarding the "item not in the catalog" case. */
+  itemCapacity(item: Item | undefined): number {
+    return item ? this.data.capacity(item) : 1;
+  }
+
+  /** Type a line's quantity from the Order Details inspector. */
+  setLineQty(order: Order, li: OrderLine, qty: number): void {
+    this.data.updateOrderLineQty(order.orderId, li.id, qty);
+  }
+
+  /**
+   * The quantity box fires on `input`, so a conflict clears as you type. Bound with
+   * `[value]`/`(input)` rather than `ngModel`: a rejected entry (0, blank, a
+   * fraction) has to be echoed straight back into the box — with `ngModel` the model
+   * stores the clamped 1 while the DOM keeps showing what was typed, because the
+   * bound value never "changed".
+   */
+  onLineQtyInput(order: Order, li: OrderLine, e: Event): void {
+    const el = e.target as HTMLInputElement;
+    const qty = Math.max(1, Math.round(Number(el.value)) || 1);
+    el.value = String(qty);
+    if (qty !== this.lineQty(li)) this.setLineQty(order, li, qty);
+  }
+
+  /**
+   * What this booking bills, run through the same rules invoicing uses
+   * (`lineAmountForPeriod` with the line's own window as the period): a day-rated
+   * line counts its billable days at its rate basis, a one-time line (consumable /
+   * part / labor) counts once — both multiplied by the line's quantity.
+   */
+  lineRevenue(li: OrderLine, order: Order): number {
+    return this.data.lineAmountForPeriod(order, li, this.lineStart(li, order), this.lineEnd(li, order));
+  }
+
   /**
    * The Order Details line's range in the compact form (`8/20/26 → 8/24/26`) — it
    * sits on its own row under `code · name`, where `data.fmtDate()`'s
@@ -422,6 +484,50 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   /**
+   * Peak units committed at once across a set of windows. Each span is day-
+   * inclusive; its end event lands on the day *after* the window, so a booking
+   * that finishes the day another begins still counts as overlapping that day.
+   */
+  private peakUnits(spans: { start: number; end: number; qty: number }[]): number {
+    const events: { at: number; delta: number }[] = [];
+    for (const s of spans) {
+      events.push({ at: s.start, delta: s.qty });
+      events.push({ at: s.end + DAY_MS, delta: -s.qty });
+    }
+    // Ties end before they start, so a window closing as an identical one opens
+    // doesn't read as a momentary clash it never had.
+    events.sort((a, b) => a.at - b.at || a.delta - b.delta);
+    let running = 0;
+    let peak = 0;
+    for (const ev of events) {
+      running += ev.delta;
+      if (running > peak) peak = running;
+    }
+    return peak;
+  }
+
+  /**
+   * How many units of `item` are committed at once between two day bounds — every
+   * booking of that resource, clipped to the window (so a booking that started
+   * earlier still counts for the days inside it). This is the number the capacity
+   * check measures: 24 jugs of hydraulic fluid on two orders is fine, until the two
+   * windows overlap and together ask for more than the item owns.
+   */
+  private committedUnits(item: Item, from: number, to: number): number {
+    const spans: { start: number; end: number; qty: number }[] = [];
+    for (const o of this.orders()) {
+      for (const li of o.lineItems) {
+        if (li.type !== item.type || li.refId !== item.id) continue;
+        const s = Date.parse(this.lineStart(li, o) + 'T00:00:00');
+        const e = Date.parse(this.lineEnd(li, o) + 'T00:00:00');
+        if (s > to || e < from) continue;
+        spans.push({ start: Math.max(s, from), end: Math.min(e, to), qty: li.qty || 1 });
+      }
+    }
+    return this.peakUnits(spans);
+  }
+
+  /**
    * M/D/YY — the compact date for the narrow panel rows: the pool cards' booking
    * row and the Order Details line items (via `lineDates()`). `data.fmtDate()`
    * prints leading zeros and a 4-digit year (08/24/2026), which is right for the
@@ -459,6 +565,24 @@ export class SchedulerComponent implements OnDestroy {
       // Compact form for the card row; the hover title keeps the full dates.
       const span = this.fmtDay(from) + ' → ' + this.fmtDay(to);
       const full = this.data.fmtDate(from) + ' → ' + this.data.fmtDate(to);
+      // Multi-unit resources (consumables, bulk, stock, kits, attachments) can be
+      // *partly* booked: only a period that commits more than the item owns is red.
+      // A single-unit item peaks at 1 every time, so it keeps the old behaviour.
+      const cap = this.data.capacity(item);
+      const r = this.rangeBounds();
+      const peak = this.committedUnits(item, r.start, r.end);
+      if (cap > 1 && peak < cap) {
+        return {
+          key: 'partial',
+          blocked: false,
+          badge: peak + ' of ' + cap + ' out',
+          line: 'Booked on ' + orders.join(', '),
+          dates: span,
+          note:
+            'Booked on ' + orders.join(', ') + ' (' + full + ') — ' +
+            peak + ' of ' + cap + ' out, ' + (cap - peak) + ' free; drop to book more.',
+        };
+      }
       return {
         key: 'busy',
         blocked: false,
@@ -596,7 +720,10 @@ export class SchedulerComponent implements OnDestroy {
           fields: booked.length
             ? booked.map((li) => ({
                 label: this.typeLabel(li.type) + ' · ' + this.itemName(li.type, li.refId),
-                value: this.data.fmtDate(this.lineStart(li, order)) + ' → ' + this.data.fmtDate(this.lineEnd(li, order)),
+                value:
+                  (this.lineQty(li) > 1 ? '×' + this.lineQty(li) + ' · ' : '') +
+                  this.data.fmtDate(this.lineStart(li, order)) + ' → ' + this.data.fmtDate(this.lineEnd(li, order)) +
+                  ' · ' + this.data.money(this.lineRevenue(li, order)),
                 mono: true,
               }))
             : [{ label: 'Bookings', value: 'None — drag a pool item onto this order.' }],
@@ -892,19 +1019,29 @@ export class SchedulerComponent implements OnDestroy {
     return Math.max(1, Math.round((e - s) / DAY_MS) + 1);
   }
 
+  /**
+   * Capacity-aware conflict: a booking clashes only when the overlapping bookings
+   * for the same resource need **more units than the item owns**. A serialized unit
+   * (capacity 1) behaves exactly as before — any overlap is a clash — while 24 jugs
+   * of hydraulic fluid can go out on two orders as long as their windows don't
+   * overlap and together over-ask. `committedUnits()` walks every order, so the line
+   * under test is counted in its own peak.
+   */
   private isConflicted(li: OrderLine, order: Order): boolean {
-    const s = new Date(this.lineStart(li, order) + 'T00:00:00').getTime();
-    const e = new Date(this.lineEnd(li, order) + 'T00:00:00').getTime();
-    for (const other of this.orders()) {
-      if (other.orderId === order.orderId) continue;
-      for (const ol of other.lineItems) {
-        if (ol.type !== li.type || ol.refId !== li.refId) continue;
-        const os = new Date(this.lineStart(ol, other) + 'T00:00:00').getTime();
-        const oe = new Date(this.lineEnd(ol, other) + 'T00:00:00').getTime();
-        if (s <= oe && os <= e) return true;
-      }
-    }
-    return false;
+    const item = this.data.getItem(li.type, li.refId);
+    if (!item) return false;
+    const s = Date.parse(this.lineStart(li, order) + 'T00:00:00');
+    const e = Date.parse(this.lineEnd(li, order) + 'T00:00:00');
+    return this.committedUnits(item, s, e) > this.data.capacity(item);
+  }
+
+  /** "30 needed · 24 owned" — why the conflicts pane flagged the row. */
+  private conflictDetail(li: OrderLine, order: Order): string {
+    const item = this.data.getItem(li.type, li.refId);
+    if (!item) return '';
+    const s = Date.parse(this.lineStart(li, order) + 'T00:00:00');
+    const e = Date.parse(this.lineEnd(li, order) + 'T00:00:00');
+    return this.committedUnits(item, s, e) + ' needed · ' + this.data.capacity(item) + ' owned';
   }
 
   models(): OrderModel[] {
@@ -942,11 +1079,11 @@ export class SchedulerComponent implements OnDestroy {
             const t0 = Math.max(this.orderT0(o), Math.min(this.orderT1(o), this.lineT0(li, o)));
             const t1 = Math.max(t0, Math.min(this.orderT1(o), this.lineT1(li, o)));
             lg = this.geomMin(t0, t1);
-            sub = this.fmtMin(t0) + '–' + this.fmtMin(t1);
+            sub = this.fmtMin(t0) + '–' + this.fmtMin(t1) + this.qtySuffix(li);
           }
         } else {
           lg = this.geom(this.lineStart(li, o), this.lineEnd(li, o));
-          sub = this.lineDays(li, o) + 'd';
+          sub = this.lineDays(li, o) + 'd' + this.qtySuffix(li);
         }
         if (!lg) continue;
         const conflict = !isDay && this.isConflicted(li, o);
@@ -975,14 +1112,20 @@ export class SchedulerComponent implements OnDestroy {
   /** Flat conflict list for the inspector pane (prototype `renderInspector`).
    *  Re-sorted by catalog type so like types stay together, and recomputed on
    *  every render so resolving a conflict immediately re-groups the list. */
-  conflicts(): { type: CatalogType; refId: string; orderId: string; label: string }[] {
-    const out: { type: CatalogType; refId: string; orderId: string; label: string }[] = [];
+  conflicts(): { type: CatalogType; refId: string; orderId: string; label: string; detail: string }[] {
+    const out: { type: CatalogType; refId: string; orderId: string; label: string; detail: string }[] = [];
     for (const m of this.models()) {
       for (const line of m.lines) {
         if (!line.conflict) continue;
         const li = m.order.lineItems.find((l) => l.id === line.liId);
         if (!li) continue;
-        out.push({ type: li.type, refId: li.refId, orderId: m.order.orderId, label: line.label });
+        out.push({
+          type: li.type,
+          refId: li.refId,
+          orderId: m.order.orderId,
+          label: line.label,
+          detail: this.conflictDetail(li, m.order),
+        });
       }
     }
     return out.sort(
@@ -1013,9 +1156,58 @@ export class SchedulerComponent implements OnDestroy {
     // custody) can still be scheduled; the conflicts pane flags the overbook.
     const item = this.data.getItem(t, refId);
     if (item && this.availability(item).blocked) return;
-    this.data.addOrderLine(order.orderId, { type: t, refId, qty: 1 });
     this.selectedOrderId = order.orderId;
     this.expanded.add(order.orderId);
+    // A resource we own more than one of is booked by quantity (prototype
+    // `bookQtyModal`): 24 jugs of hydraulic fluid is not a booking of one, and the
+    // count is what decides a conflict. Everything else books a single unit here.
+    if (this.itemCapacity(item) > 1) {
+      this.bookPrompt = { type: t, refId, orderId: order.orderId, qty: 1 };
+      return;
+    }
+    this.data.addOrderLine(order.orderId, { type: t, refId, qty: 1 });
+  }
+
+  /**
+   * Figures for the quantity prompt: what the resource owns, how many units are
+   * already committed across the target order's window (peak, so staggered bookings
+   * on other orders don't add up), and what is therefore free.
+   */
+  bookPromptInfo(): { label: string; orderId: string; owned: number; committed: number; free: number } | null {
+    const p = this.bookPrompt;
+    if (!p) return null;
+    const item = this.data.getItem(p.type, p.refId);
+    const order = this.data.getOrder(p.orderId);
+    if (!item || !order) return null;
+    const owned = this.data.capacity(item);
+    const committed = this.committedUnits(
+      item,
+      Date.parse(order.startDate + 'T00:00:00'),
+      Date.parse(order.endDate + 'T00:00:00'),
+    );
+    return {
+      label: this.itemName(item.type, item.id),
+      orderId: order.orderId,
+      owned,
+      committed,
+      free: Math.max(0, owned - committed),
+    };
+  }
+
+  /** Book the prompted quantity (prototype `doAllocate`). */
+  commitBook(): void {
+    const p = this.bookPrompt;
+    if (!p) return;
+    this.data.addOrderLine(p.orderId, {
+      type: p.type,
+      refId: p.refId,
+      qty: Math.max(1, Math.round(p.qty) || 1),
+    });
+    this.bookPrompt = null;
+  }
+
+  closeBookPrompt(): void {
+    this.bookPrompt = null;
   }
 
   startResize(e: PointerEvent, bar: BarModel, edge: 'l' | 'r'): void {

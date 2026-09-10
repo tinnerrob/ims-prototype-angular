@@ -704,6 +704,9 @@
 .ci-dates { font-size: 11px; color: var(--slate-600); margin-top: 3px; font-weight: 600; }
 .ci-orders { display: flex; align-items: center; gap: 6px; font-size: 11px; margin-top: 3px; color: var(--slate-600); }
 .ci-orders .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 700; color: var(--slate-800); }
+/* Why the row clashes — capacity-aware, so a multi-unit resource reads
+   "30 needed · 24 owned" instead of pretending one unit is all there is. */
+.ci-orders .ci-why { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--slate-500); }
 
 
 /* ---------- Geo view ---------- */

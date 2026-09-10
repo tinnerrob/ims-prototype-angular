@@ -250,6 +250,7 @@
               </div>
               <div class="ci-orders">
                 <span class="mono">{{ c.orderId }}</span>
+                <span class="ci-why">{{ c.detail }}</span>
               </div>
             </div>
           } @empty {
@@ -283,14 +284,37 @@
           <div class="divider"></div>
           @for (li of sortedLines(o); track li.id) {
             <div class="booking-line" title="Double-click to view this asset" (dblclick)="showBookingView(li, o)">
+              <!-- One dot only, on the item row: the date and amount rows below are
+                   inset to the name's left edge, so the dot reads as the bullet for
+                   the whole block rather than one per row. -->
               <div class="bl-main">
                 <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
-                <span>{{ itemName(li.type, li.refId) }}</span>
+                <span class="bl-name">{{ itemName(li.type, li.refId) }}</span>
               </div>
               <div class="bl-when">
-                <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
-                <span class="mono text-105">{{ lineDates(li, o) }}</span>
+                <span class="mono">{{ lineDates(li, o) }}</span>
+                <!-- Quantity box: only for a resource that owns more than one unit.
+                     The conflict rule is capacity-aware, so this is how you book 12
+                     of the 24 on hand. -->
+                @if (lineCapacity(li) > 1) {
+                  <label
+                    class="bl-qty"
+                    [title]="'Units booked — ' + lineCapacity(li) + ' owned. A conflict is flagged only when overlapping bookings need more than that.'"
+                    (dblclick)="$event.stopPropagation()"
+                  >
+                    <span class="bl-qty-x">×</span>
+                    <input
+                      class="bl-qty-in"
+                      type="number"
+                      min="1"
+                      step="1"
+                      [value]="lineQty(li)"
+                      (input)="onLineQtyInput(o, li, $event)"
+                    />
+                  </label>
+                }
               </div>
+              <div class="bl-amt">{{ data.money(lineRevenue(li, o)) }}</div>
             </div>
           } @empty {
             <p class="text-muted2 py-2">No booked inventory yet — drag a pool item onto this order.</p>
@@ -539,6 +563,59 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-ims" [disabled]="!resForm.name.trim()" (click)="saveRes()">
             <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- ===== Book quantity (prototype `bookQtyModal` — drop of a multi-unit resource) ===== -->
+@if (bookPrompt; as p) {
+  @let info = bookPromptInfo();
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeBookPrompt()">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-box-seam"></i>Book {{ typeLabel(p.type) }}</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-1"><span class="strong">{{ itemName(p.type, p.refId) }}</span></div>
+          @if (info) {
+            <div class="text-muted2 text-105 mb-3">
+              {{ info.owned }} owned · {{ info.committed }} committed on {{ info.orderId }}'s
+              window · <span class="strong">{{ info.free }} available</span>
+            </div>
+          }
+          <div class="field-group">
+            <label class="form-label" for="bq-qty">Quantity to book</label>
+            <input
+              id="bq-qty"
+              class="form-control"
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="p.qty"
+              (keydown.enter)="commitBook()"
+            />
+          </div>
+          <!-- Overbooking stays allowed (the conflicts pane is what flags it); this
+               is the warning the prototype showed before allocating. -->
+          @if (info && p.qty > info.free) {
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge-status st-reorder">Overbooked</span>
+              <span class="text-muted2 text-105">
+                More than this window has free — the booking is still allowed and the
+                conflicts pane will flag it.
+              </span>
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" (click)="commitBook()">
+            <i class="bi bi-check2"></i> Book
           </button>
         </div>
       </div>

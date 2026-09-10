@@ -221,11 +221,17 @@
   opacity: 0.8;
 }
 
-/* Order Details — one booked line is two rows: the item (`SS-204 · CAT 320
-   Excavator`, kept on a single line) and its range under it, each led by a type
-   dot. The `.type-chip` badge is gone from these rows — the dot carries the type
-   now (hover it for the name). Double-click still opens the read-only viewer. */
+/* Order Details — one booked line is three rows: the item (`SS-204 · CAT 320
+   Excavator`, kept on a single line), its range under it and what the booking
+   bills under that. ONE type dot, on the item row only; the rows below are inset
+   to the name's left edge so the dot reads as the bullet for the whole block. The
+   `.type-chip` badge is gone from these rows — the dot carries the type now (hover
+   it for the name). Double-click still opens the read-only viewer.
+
+   `--bl-inset` = dot (7px) + `.bl-main` gap (7px), i.e. exactly the name's left
+   edge, so the date and the amount line up under it. */
 .booking-line {
+  --bl-inset: 14px;
   cursor: pointer;
   border-radius: 4px;
   padding: 7px 2px;
@@ -238,7 +244,8 @@
   background: rgba(37, 99, 235, 0.06);
 }
 
-/* Row 1 — code · name, one line. */
+/* Row 1 — code · name, one line. `bl-name` ellipsises rather than wrapping: the
+   brief for this row is a single line, however long the item name is. */
 .bl-main {
   display: flex;
   align-items: center;
@@ -248,19 +255,74 @@
   color: var(--slate-800);
 }
 
-/* Row 2 — the compact range (`8/20/26 → 8/24/26`), muted under its item. */
+.bl-name {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Row 2 — the compact range (`8/20/26 → 8/24/26`), muted and inset under the
+   item, with the quantity box (when the resource owns more than one) at its right
+   end: the date speaks to when, the box to how many. */
 .bl-when {
   display: flex;
   align-items: center;
   gap: 7px;
   margin-top: 2px;
+  margin-left: var(--bl-inset);
   color: var(--slate-500);
 }
 
+/* Quantity — its own tooltip spells out the capacity rule ("a conflict is flagged
+   only when overlapping bookings need more than 24"). `margin-left: auto` parks it
+   against the card's right edge, clear of the date. `cursor: default` so it doesn't
+   promise the row's double-click-to-view. */
+.bl-qty {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10.5px;
+  color: var(--slate-500);
+  cursor: default;
+}
+
+.bl-qty-x { color: var(--slate-400); }
+
+.bl-qty-in {
+  width: 44px;
+  padding: 1px 3px;
+  border: 1px solid var(--slate-200);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--slate-700);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.bl-qty-in:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Row 3 — what the booking bills, from the same `lineAmountForPeriod` rules the
+   invoice run uses (qty x rate basis x billable days, or once for a one-time
+   charge). Tabular figures so a column of amounts lines up down the list. */
+.bl-amt {
+  margin-left: var(--bl-inset);
+  margin-top: 1px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--slate-700);
+  font-variant-numeric: tabular-nums;
+}
+
 /* The type key that replaced the `.type-chip` badge: a small circle before the
-   item and before its range, filled from the shared resource-type palette
-   (`.tl-res-*` in styles.scss) so a dot matches that type's timeline bar.
-   `--slate-400` covers a type the palette doesn't name. */
+   item row, filled from the shared resource-type palette (`.tl-res-*` in
+   styles.scss) so a dot matches that type's timeline bar. `--slate-400` covers a
+   type the palette doesn't name. */
 .type-dot {
   width: 7px;
   height: 7px;
