@@ -533,14 +533,46 @@ export class DataService {
     return daysBetween(s, e);
   }
 
-  /** Gross amount for an order: rateDaily x qty x billable days per line. */
+  /**
+   * Gross amount for an order: the sum of its lines' `lineTotal()` — so the
+   * per-booking rows in Order Details always add up to the Gross above them.
+   */
   orderAmount(order: Order): number {
-    const total = order.lineItems.reduce((sum, li) => {
-      const item = this.getItem(li.type, li.refId);
-      const rate = item?.rateDaily ?? 0;
-      return sum + rate * li.qty * this.billableDays(order, li);
-    }, 0);
-    return round2(total);
+    return round2(order.lineItems.reduce((sum, li) => sum + this.lineTotal(li, order), 0));
+  }
+
+  /**
+   * Gross billable revenue for **one line** — a port of the prototype's
+   * `computeLineTotal()`, and the number Order Details prints under a booking.
+   * Order-line pricing *policy* (custom rates, flat totals, unit prices) isn't in the
+   * ported `OrderLine`, so this is the item-defaults path only:
+   *  - labor / consumable / part bill **once** (hourly billable, retail, cost price),
+   *  - kit + attachment bill their daily rate x billable days,
+   *  - serialized + bulk step up to the weekly (`ceil(days / 7)`) and monthly
+   *    (`ceil(days / 28)`) basis at 7 and 28 days,
+   *  - the risk premium scales everything except the one-time types.
+   * `lineAmountForPeriod()` is the *invoicing* sibling (pro-rated per billing cycle);
+   * this one is the whole-booking figure the scheduler and the queues show.
+   */
+  lineTotal(li: OrderLine, order: Order): number {
+    const item = this.getItem(li.type, li.refId);
+    if (!item) return 0;
+    const qty = li.qty || 1;
+    const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
+    const days = this.orderDays(order);
+    if (li.type === 'labor') return round2(qty * (item.hourlyBillable ?? item.rateDaily));
+    if (li.type === 'consumable') return round2(qty * (item.retailPrice ?? item.rateDaily));
+    if (li.type === 'part') return round2(qty * (item.costPrice ?? item.retailPrice ?? item.rateDaily));
+    if (li.type === 'kit' || li.type === 'attachment') {
+      return round2(item.rateDaily * qty * this.billableDays(order, li) * (1 + premium));
+    }
+    const perUnit =
+      days >= 28 && item.baseMonthly
+        ? item.baseMonthly * Math.ceil(days / 28)
+        : days >= 7 && item.baseWeekly
+          ? item.baseWeekly * Math.ceil(days / 7)
+          : item.rateDaily * this.billableDays(order, li);
+    return round2(perUnit * qty * (1 + premium));
   }
 
 

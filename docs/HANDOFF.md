@@ -150,11 +150,15 @@ detail right**, with orders as the top rows.
   text survives. The "dbl-click a booking" header hint is gone (the row keeps its
   own `title`, and double-click still opens the viewer). `lineDates()` →
   `fmtDay()` gives the compact M/D/YY range, matching the pool cards. The amount is
-  `lineRevenue()` = `data.lineAmountForPeriod()` over the line's own window, i.e.
-  **the invoicing rules themselves** (rate basis `rateDaily`/`baseWeekly`/
-  `baseMonthly`, risk premium, `weekendPolicy` billable days, or once only for a
-  one-time labor/consumable/part charge), so Order Details and the invoice run can
-  never disagree.
+  `lineRevenue()` = `data.lineTotal()`, a port of the prototype's
+  `computeLineTotal()`: labor / consumable / part bill **once** (hourly billable,
+  retail, cost price), kit + attachment their daily rate x billable days, and
+  serialized + bulk step up to the weekly (`ceil(days / 7)`) / monthly
+  (`ceil(days / 28)`) basis, risk premium applied. `orderAmount()` is **the sum of
+  those lines**, so a column of bookings adds up to the Gross printed above it
+  (before this, the Gross used `rateDaily x qty x billable days` for *every* type —
+  which billed a labor line's hourly rate per *day*, e.g. $478k instead of $2.7k on
+  the seeded CT-2024-001).
 - **Quantity is editable per line** (`×[ 12 ]` at the right end of the date row,
   `.bl-qty`, and the drop prompt above books the first count) — rendered only when the
   item owns more than one unit
@@ -206,8 +210,10 @@ detail right**, with orders as the top rows.
   Movement, Location, Inspection, WorkOrder, Timesheet, RentalSub, Vehicle/Dispatch,
   Invoice, module + status enums/labels).
 - `src/app/core/data.service.ts` — one typed in-memory store + versioned
-  localStorage persistence (`ims-web.store`); typed accessors + a simple pricing
-  calc (`rateDaily x qty x days`). This is the **`apiAdapter` seam** — swap for an
+  localStorage persistence (`ims-web.store`); typed accessors + the pricing calcs:
+  `lineTotal(li, order)` (port of the prototype's `computeLineTotal()` — the
+  per-booking gross Order Details prints and the queues show) and `orderAmount()`
+  (its sum). This is the **`apiAdapter` seam** — swap for an
   `HttpClient` later without touching features.
 - `src/app/core/modules.service.ts` + `module.guard.ts` — module gating.
 - `src/app/features/*` — one folder per view (component.ts/html/scss).
@@ -368,6 +374,14 @@ detail right**, with orders as the top rows.
    commitment against `qtyOnHand` for the conflict check, but only *parts used* on a
    work order draw stock down (`DataService` work-order posting). Deciding whether a
    booking should also reserve/move stock is open.
+8. **Invoicing still bills weekly/monthly rentals per *day*** —
+   `lineAmountForPeriod()` multiplies the rate `rateBasis()` returns (which can be
+   `baseWeekly` / `baseMonthly`) by the day count, so a 22-day boom lift invoices
+   2600 x 22 instead of the prototype's 2600 x `ceil(22/7)`. The prototype's
+   `wholeUnitsBilled()` (js/pages/invoicing.js) pro-rates whole weeks/months per
+   cycle; port it if invoiced totals need to match the Gross the rest of the app now
+   prints (`lineTotal()`). Order Details / queues / dashboards are already on the
+   prototype figure.
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

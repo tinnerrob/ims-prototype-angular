@@ -359,13 +359,12 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   /**
-   * What this booking bills, run through the same rules invoicing uses
-   * (`lineAmountForPeriod` with the line's own window as the period): a day-rated
-   * line counts its billable days at its rate basis, a one-time line (consumable /
-   * part / labor) counts once — both multiplied by the line's quantity.
+   * What this booking bills — `data.lineTotal()` (the port of the prototype's
+   * `computeLineTotal()`), the same figure `data.orderAmount()` sums for the Gross
+   * above it, so a column of bookings adds up to the card's own total.
    */
   lineRevenue(li: OrderLine, order: Order): number {
-    return this.data.lineAmountForPeriod(order, li, this.lineStart(li, order), this.lineEnd(li, order));
+    return this.data.lineTotal(li, order);
   }
 
   /**
