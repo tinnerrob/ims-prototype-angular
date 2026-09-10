@@ -59,10 +59,14 @@
   padding: 6px 12px;
 }
 
-/* card bodies stack, and any list inside them takes the leftover height */
+/* card bodies stack, and any list inside them takes the leftover height.
+   `flex: 1 1 auto` is essential: without it a body with few items stays
+   content-sized and floats at the top of the card, leaving its action button
+   stranded mid-pane. */
 .sched-side .card-body {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
   padding: 7px 9px;
 }
@@ -74,6 +78,16 @@
   gap: 4px;
   padding: 0 2px;
   overflow-y: auto;
+}
+
+/* The "New Order" action body never grows: it is pinned to the bottom of the
+   card (`margin-top: auto`) so a list that is too short to fill the pane can
+   never leave the button floating in the middle. Declared after the
+   `.sched-side .card-body` rule so it wins at equal specificity. */
+.sched-side .sched-actions {
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding-top: 6px;
 }
 
 /* --- compact list items --- */
