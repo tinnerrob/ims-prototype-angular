@@ -140,7 +140,7 @@ const POOL_ADD_LABEL: Record<string, string> = {
 })
 export class SchedulerComponent implements OnDestroy {
   /** Pool tabs. The plain catalog labels ("Bulk Resources", not
-   *  "Items (Bulk Resources)") — the card is already titled Inventory Pool, so
+   *  "Items (Bulk Resources)") — the card is already titled Assets, so
    *  the "Items (…)" prefix was redundant and pushed the select to truncate. */
   readonly poolTypes = CATALOG_TYPES;
   /** Per-type status options, exposed for the New Resource modal. */

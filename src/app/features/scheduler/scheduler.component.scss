@@ -90,6 +90,55 @@
   padding-top: 6px;
 }
 
+/* ------------------------------------------------------------------
+   Right pane: Scheduling Conflicts + Order Details. These two cards use
+   exactly the same contract as the left pane's pair — each takes half the
+   column height (`flex: 1 1 0`, so a long list can't stretch the pane) and
+   scrolls its OWN body, so the pane never scrolls as a whole and the two
+   lists stay side by side with the pool/queue lists in height.
+   ------------------------------------------------------------------ */
+
+.sched-inspector {
+  gap: 10px;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sched-inspector > .card {
+  flex: 1 1 0;
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sched-inspector .card-header {
+  padding: 6px 12px;
+}
+
+.sched-inspector .card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 7px 9px;
+}
+
+/* The two scroll regions — the conflicts list and the order's booking list.
+   Everything above each of them (the explainer line, the order summary) stays
+   pinned, so the heading you're reading never scrolls away. */
+.sched-inspector .conflict-list,
+.sched-inspector .booking-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sched-inspector .od-summary {
+  flex: 0 0 auto;
+}
+
 /* --- compact list items --- */
 .sched-side .queue-order,
 .sched-side .res-card {

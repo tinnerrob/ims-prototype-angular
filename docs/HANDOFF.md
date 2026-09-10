@@ -51,7 +51,7 @@ detail right**, with orders as the top rows.
 
 - **Order rows on top, contracted by default.** Click an order (row/bar) to expand;
   expanding reveals one row per booked inventory item nested under it.
-- **Drag-to-book:** drag a resource card from the left Inventory Pool onto an order
+- **Drag-to-book:** drag a resource card from the left Assets pool onto an order
   (queue card or its timeline row) to book it at that order's window. Auto-expands.
   A resource we own **more than one** of opens the quantity prompt first
   (prototype `bookQtyModal` / `doAllocate`: "NN owned · NN committed on ORD-1001's
@@ -107,10 +107,10 @@ detail right**, with orders as the top rows.
   `.res-card-head` / `.badge-status` badge row it fed are deleted.
 - **Pool select labels are the plain catalog names** (`poolTypes = CATALOG_TYPES`:
   "Bulk Resources", not "Items (Bulk Resources)") — "Items (…)" only made sense as
-  an Items-page tab label, and here it both duplicated the Inventory Pool title and
+  an Items-page tab label, and here it both duplicated the Assets card title and
   crowded the 340px pane. The card header is title-only for the same reason (the
   "drag to a block · dbl-click to view" hint moved into each card's `title` tooltip);
-  a header hint ellipsed "Inventory Pool" onto two lines.
+  a header hint ellipsed the title onto two lines.
 - **Pane action buttons are pinned:** `.sched-side .card-body > .form-select /
   .pool-scope / .btn-sm2` are `flex: 0 0 auto` (only `.queue-scroll` flexes) — as
   plain column flex items they defaulted to `flex-shrink: 1`, so a long pool list
@@ -339,11 +339,17 @@ detail right**, with orders as the top rows.
     is what makes "banding resets here" obvious. Keep `--tl-base-row` **light** (`#e8ecf4`):
     it spans the full width, so a deep grey turns an unscheduled stretch into a black hole;
     all the depth belongs to the bar.
-  - *Bar colours:* pastel fill + saturated ink, never solid saturated blocks (monday-style).
-    Each type sets `--tint-bg` / `--tint-ink` / `--tint-accent` from the soft tokens in
-    `:root`: `.tl-res-*` for the Scheduler, `.ts-*` for the Timesheets (which keep `--tcol`
-    as the saturated hue for icons, the legend swatch and chip edges). `.tl-h` / `.ts-h`
-    resize handles are dark, not white, since the bars are light now.
+  - *Bar colours:* desaturated fill + dark same-hue ink, never solid saturated blocks
+    (monday-style). The recipe: **hue** per type (green 140, blue 210, orange 25, plus
+    cyan 190 / teal 175 / violet 265 / pink 330 and red for a conflict), **fill** at
+    S 25-35% / L 85-93%, **ink** a dark tone of the same hue and **accent** the mid tone
+    that draws the 3px left edge + the 40% border. Each pairing measures **≥ 7.3:1**, so
+    the 12px title *and* the 10.5px sub-line stay readable instead of leaning on the fill
+    to separate bars (`.tl-block-sub` is `opacity: .9`, still > 5.5:1). Declared once per
+    type on `.tl-res-*` (Scheduler, at the type palette in `styles.scss`) and `.ts-*`
+    (Timesheets — same values for the same kinds of bar, keeping `--tcol` as the stronger
+    hue for icons, the legend swatch and chip edges). `.tl-h` / `.ts-h` resize handles are
+    dark, not white, since the bars are light.
   - *No selected row chrome:* clicking a calendar row sets the focus id but paints
     nothing — the work is drag/drop driven and the Order Details inspector reports the
     selection, so a blue row/ring was noise. Only the left **queue card**
@@ -351,6 +357,20 @@ detail right**, with orders as the top rows.
 - **Right-hand inspector cards sit straight on the page:** `.sched-inspector` is a bare
   flex column (no background/border/padding of its own), so Scheduling Conflicts +
   Order Details read like the `.sched-side` panels — a card, not a card-on-a-card.
+- **Both right-hand cards split the pane exactly like the left pair.** `.sched-inspector`
+  no longer scrolls as a whole (the long conflict/booking lists used to stretch the pane
+  and push the second card out of view): it is `height: 100%; overflow: hidden`, each
+  `> .card` is `flex: 1 1 0; min-height: 160px` with `overflow: hidden`, and the card
+  bodies are the same flex column as the left pane, so the two lists land at the same
+  heights as the queue and pool lists. Each card then scrolls **its own** body:
+  `.conflict-list` and `.booking-scroll` (`flex: 1 1 auto; min-height: 0; overflow-y:
+  auto`) are the scroll regions. The conflicts explainer line and the Order Details
+  summary (id · project · dates · Days / Gross / Items booked, wrapped in `.od-summary`,
+  `flex: 0 0 auto`) stay pinned above them; only the bookings scroll.
+- **Card titles are short:** the left cards are titled **Orders** (was "Orders &
+  Scheduling") and **Assets** (was "Inventory Pool") — the pane context already says
+  they're the scheduler's pickers, and the longer titles were the ones ellipsing onto
+  two lines in the 340px pane.
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler

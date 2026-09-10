@@ -6,7 +6,7 @@
     <div class="sched-queue">
       <div class="card">
         <div class="card-header">
-          <span class="card-title"><i class="bi bi-stack"></i> Orders &amp; Scheduling</span>
+          <span class="card-title"><i class="bi bi-stack"></i> Orders</span>
           <span class="badge-status st-onrent">{{ orders().length }} active</span>
         </div>
         <div class="card-body queue-scroll">
@@ -31,7 +31,7 @@
 
       <div class="card">
         <div class="card-header">
-          <span class="card-title"><i class="bi bi-box-seam"></i> Inventory Pool</span>
+          <span class="card-title"><i class="bi bi-box-seam"></i> Assets</span>
         </div>
         <div class="card-body">
           <select class="form-select mb-2" [(ngModel)]="poolType">
@@ -266,59 +266,66 @@
       </div>
       <div class="card-body">
         @if (data.getOrder(selectedOrderId); as o) {
-          <div class="strong">{{ o.orderId }}</div>
-          <div class="text-muted2 text-xs">{{ o.projectName }}</div>
-          <div class="text-muted2 text-105">
-            {{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}
-          </div>
-          <div class="divider"></div>
-          <div class="list-line">
-            <span class="l">Days</span><span class="r strong">{{ data.orderDays(o) }}</span>
-          </div>
-          <div class="list-line">
-            <span class="l">Gross</span><span class="r strong">{{ data.money(data.orderAmount(o)) }}</span>
-          </div>
-          <div class="list-line">
-            <span class="l">Items booked</span><span class="r">{{ o.lineItems.length }}</span>
-          </div>
-          <div class="divider"></div>
-          @for (li of sortedLines(o); track li.id) {
-            <div class="booking-line" title="Double-click to view this asset" (dblclick)="showBookingView(li, o)">
-              <!-- One dot only, on the item row: the date and amount rows below are
-                   inset to the name's left edge, so the dot reads as the bullet for
-                   the whole block rather than one per row. -->
-              <div class="bl-main">
-                <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
-                <span class="bl-name">{{ itemName(li.type, li.refId) }}</span>
-              </div>
-              <div class="bl-when">
-                <span class="mono">{{ lineDates(li, o) }}</span>
-                <!-- Quantity box: only for a resource that owns more than one unit.
-                     The conflict rule is capacity-aware, so this is how you book 12
-                     of the 24 on hand. -->
-                @if (lineCapacity(li) > 1) {
-                  <label
-                    class="bl-qty"
-                    [title]="'Units booked — ' + lineCapacity(li) + ' owned. A conflict is flagged only when overlapping bookings need more than that.'"
-                    (dblclick)="$event.stopPropagation()"
-                  >
-                    <span class="bl-qty-x">×</span>
-                    <input
-                      class="bl-qty-in"
-                      type="number"
-                      min="1"
-                      step="1"
-                      [value]="lineQty(li)"
-                      (input)="onLineQtyInput(o, li, $event)"
-                    />
-                  </label>
-                }
-              </div>
-              <div class="bl-amt">{{ data.money(lineRevenue(li, o)) }}</div>
+          <!-- Fixed summary; only the bookings below it scroll (the card shares the
+               pane height with the conflicts card, so both lists scroll internally
+               rather than growing the pane). -->
+          <div class="od-summary">
+            <div class="strong">{{ o.orderId }}</div>
+            <div class="text-muted2 text-xs">{{ o.projectName }}</div>
+            <div class="text-muted2 text-105">
+              {{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}
             </div>
-          } @empty {
-            <p class="text-muted2 py-2">No booked inventory yet — drag a pool item onto this order.</p>
-          }
+            <div class="divider"></div>
+            <div class="list-line">
+              <span class="l">Days</span><span class="r strong">{{ data.orderDays(o) }}</span>
+            </div>
+            <div class="list-line">
+              <span class="l">Gross</span><span class="r strong">{{ data.money(data.orderAmount(o)) }}</span>
+            </div>
+            <div class="list-line">
+              <span class="l">Items booked</span><span class="r">{{ o.lineItems.length }}</span>
+            </div>
+            <div class="divider"></div>
+          </div>
+          <div class="booking-scroll">
+            @for (li of sortedLines(o); track li.id) {
+              <div class="booking-line" title="Double-click to view this asset" (dblclick)="showBookingView(li, o)">
+                <!-- One dot only, on the item row: the date and amount rows below are
+                     inset to the name's left edge, so the dot reads as the bullet for
+                     the whole block rather than one per row. -->
+                <div class="bl-main">
+                  <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
+                  <span class="bl-name">{{ itemName(li.type, li.refId) }}</span>
+                </div>
+                <div class="bl-when">
+                  <span class="mono">{{ lineDates(li, o) }}</span>
+                  <!-- Quantity box: only for a resource that owns more than one unit.
+                       The conflict rule is capacity-aware, so this is how you book 12
+                       of the 24 on hand. -->
+                  @if (lineCapacity(li) > 1) {
+                    <label
+                      class="bl-qty"
+                      [title]="'Units booked — ' + lineCapacity(li) + ' owned. A conflict is flagged only when overlapping bookings need more than that.'"
+                      (dblclick)="$event.stopPropagation()"
+                    >
+                      <span class="bl-qty-x">×</span>
+                      <input
+                        class="bl-qty-in"
+                        type="number"
+                        min="1"
+                        step="1"
+                        [value]="lineQty(li)"
+                        (input)="onLineQtyInput(o, li, $event)"
+                      />
+                    </label>
+                  }
+                </div>
+                <div class="bl-amt">{{ data.money(lineRevenue(li, o)) }}</div>
+              </div>
+            } @empty {
+              <p class="text-muted2 py-2">No booked inventory yet — drag a pool item onto this order.</p>
+            }
+          </div>
         } @else {
           <p class="text-muted2 py-2">Click an order row or queue card to inspect it.</p>
         }
