@@ -446,10 +446,16 @@
   background: linear-gradient(135deg, var(--accent), #1d4ed8);
   color: #fff;
   padding: 5px 10px;
-  cursor: pointer;
+  /* the block body drags the whole window (see `startMove`) — the edge handles
+     resize it instead */
+  cursor: grab;
+  user-select: none;
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0,0,0,.2);
 }
+.tl-block:active { cursor: grabbing; }
+/* live feedback while a block is being dragged to another day/time */
+.tl-block.tl-moving { opacity: .85; box-shadow: 0 6px 16px rgba(15,23,42,.35); }
 .tl-res { cursor: grab; }
 /* Resource bars: a touch taller, and flex-centered so the label/sub text has even space
    above and below it. Applies only to resource rows — order bars are untouched. */

@@ -1,7 +1,22 @@
 import { Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DataService, hmMin } from '../../core/data.service';
-import { CatalogType, CATALOG_TYPES, ITEM_STATUSES, Item, Order, OrderLine } from '../../core/models';
+import {
+  CatalogType,
+  CATALOG_TYPES,
+  ITEM_STATUSES,
+  Item,
+  Order,
+  OrderLine,
+  ORDER_STATUS_LABEL,
+  statusClass,
+} from '../../core/models';
+import {
+  RecordViewComponent,
+  ViewField,
+  ViewModel,
+  ViewSection,
+} from '../../shared/record-view/record-view.component';
 
 const DAY_MS = 86400000;
 const DAY_W = 90;
@@ -29,6 +44,31 @@ interface BarModel {
 }
 interface OrderModel { order: Order; isExpanded: boolean; orderBar: BarModel | null; lines: BarModel[]; }
 interface ResizeState { orderId: string; liId: string | null; edge: 'l' | 'r'; track: HTMLElement; }
+/**
+ * A whole-block drag (move, not resize). The origin geometry is snapshotted on
+ * pointerdown so every move event re-derives the block window from the gesture
+ * total, which keeps the drag from drifting on rounding.
+ */
+interface MoveState {
+  orderId: string;
+  liId: string | null;
+  track: HTMLElement;
+  /** Pointer x where the gesture started. */
+  x0: number;
+  /** Day view: origin minutes-of-day. Week/Month: origin ISO dates. */
+  t0: number;
+  t1: number;
+  sISO: string;
+  eISO: string;
+  /** Day-view clamp in minutes (an order spans the whole day, a line its order). */
+  loMin: number;
+  hiMin: number;
+  /** Week/Month clamp in ISO — a line stays inside its order; '' = unclamped. */
+  loISO: string;
+  hiISO: string;
+  /** True once the pointer actually travelled, so a plain click still selects. */
+  moved: boolean;
+}
 /** A booking (order line) of one pool item, with its effective window. */
 interface BookingRef { orderId: string; start: string; end: string }
 /** Pool-card availability state (prototype `resCard` `avail.key`).
@@ -37,6 +77,17 @@ interface BookingRef { orderId: string; start: string; end: string }
 interface Availability { key: 'free' | 'partial' | 'busy' | 'inactive'; blocked: boolean; badge: string; note: string; }
 
 const POOL_TYPES = CATALOG_TYPES.map((t) => ({ key: t.key, label: 'Items (' + t.label + ')' }));
+
+/** Catalog-type icon for the read-only asset viewer (matches the Items tabs). */
+const POOL_ICON: Record<string, string> = {
+  serialized: 'bi-truck-front',
+  bulk: 'bi-boxes',
+  consumable: 'bi-capsule',
+  part: 'bi-wrench-adjustable',
+  labor: 'bi-person-badge',
+  kit: 'bi-boxes',
+  attachment: 'bi-puzzle',
+};
 
 /** Short type labels used by `.type-chip` / row gutters (prototype `TYPE_LABEL`). */
 const TYPE_LABEL: Record<string, string> = {
@@ -62,7 +113,7 @@ const POOL_ADD_LABEL: Record<string, string> = {
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RecordViewComponent],
   templateUrl: './scheduler.component.html',
   styleUrl: './scheduler.component.scss',
 })
@@ -77,6 +128,15 @@ export class SchedulerComponent implements OnDestroy {
   expanded = new Set<string>();
   dragging: { type: CatalogType; refId: string } | null = null;
   resizing: ResizeState | null = null;
+  /** In-flight whole-block drag (drag a bar to another day/hour). */
+  moving: MoveState | null = null;
+
+  /** Read-only record viewer (double-click a pool card / block). */
+  viewer: ViewModel | null = null;
+
+  /** Bound once so the window listeners can be added and removed reliably. */
+  private readonly onMovePointer = (ev: PointerEvent) => this.onMoveMove(ev);
+  private readonly endMovePointer = () => this.onMoveUp();
 
   /** "New Order" modal (prototype `orderModal` → `openOrderModal`). */
   orderOpen = false;
@@ -101,6 +161,7 @@ export class SchedulerComponent implements OnDestroy {
 
   ngOnDestroy(): void {
     this.detachResize();
+    this.detachMove();
   }
 
   columns(): DayCol[] {
@@ -181,6 +242,35 @@ export class SchedulerComponent implements OnDestroy {
   shortItemLabel(li: OrderLine): string {
     const it = this.data.getItem(li.type, li.refId);
     return it ? this.data.mkName(it) || it.name : li.refId;
+  }
+
+  /* ---------------------------- type grouping ---------------------------- */
+
+  /**
+   * Rank of a catalog type in the canonical order (serialized, bulk,
+   * consumable, part, labor, kit, attachment) — the sort key that keeps like
+   * types together.
+   */
+  typeRank(type: CatalogType | 'order'): number {
+    const i = CATALOG_TYPES.findIndex((c) => c.key === type);
+    return i < 0 ? CATALOG_TYPES.length : i;
+  }
+
+  /**
+   * An order's booked items grouped by catalog type (then by name, then by the
+   * day the booking starts). Every list that shows mixed types — the expanded
+   * timeline rows, the Order Details booked list and the conflicts pane — runs
+   * through this, and all of them re-render from data, so the grouping is
+   * re-applied the moment a conflict is resolved (a bar moved/resized, or a
+   * booking dropped) and the like types fall back together.
+   */
+  sortedLines(order: Order): OrderLine[] {
+    return [...order.lineItems].sort(
+      (a, b) =>
+        this.typeRank(a.type) - this.typeRank(b.type) ||
+        this.itemName(a.type, a.refId).localeCompare(this.itemName(b.type, b.refId)) ||
+        this.lineStart(a, order).localeCompare(this.lineStart(b, order)),
+    );
   }
 
   /* ------------------------------- header ------------------------------- */
@@ -312,6 +402,185 @@ export class SchedulerComponent implements OnDestroy {
       this.anchor = st;
     }
     this.expanded.add(id);
+  }
+
+  /* ---------------------------- record viewer ---------------------------- */
+
+  /** Double-click a pool card → read-only view of that inventory asset. */
+  showAssetView(item: Item): void {
+    this.viewer = this.assetModel(item);
+  }
+
+  /** Double-click a resource bar → the asset plus the order it is booked on. */
+  showLineView(bar: BarModel): void {
+    const order = this.data.getOrder(bar.orderId);
+    const li = bar.liId ? order?.lineItems.find((l) => l.id === bar.liId) : undefined;
+    const item = li ? this.data.getItem(li.type, li.refId) : undefined;
+    if (!order || !li || !item) return;
+    this.viewer = this.assetModel(item, order, li);
+  }
+
+  /** Open the asset viewer for a booking straight from a list row. */
+  showBookingView(li: OrderLine, order: Order): void {
+    const item = this.data.getItem(li.type, li.refId);
+    if (item) this.viewer = this.assetModel(item, order, li);
+  }
+
+  /** Open the asset viewer for a row in the Scheduling Conflicts pane. */
+  showConflictView(c: { type: CatalogType; refId: string; orderId: string }): void {
+    const order = this.data.getOrder(c.orderId);
+    const li = order?.lineItems.find((l) => l.type === c.type && l.refId === c.refId);
+    const item = this.data.getItem(c.type, c.refId);
+    if (item) this.viewer = this.assetModel(item, order, li);
+  }
+
+  /** Double-click an order bar / queue card → read-only order (contract) view. */
+  showOrderView(order: Order): void {
+    // A double-click fires two row clicks first (select + expand toggle twice),
+    // so set the state explicitly instead of relying on those toggles.
+    this.selectedOrderId = order.orderId;
+    this.expanded.add(order.orderId);
+    const booked = this.sortedLines(order);
+    this.viewer = {
+      title: order.orderId,
+      subtitle: order.projectName,
+      icon: 'bi-briefcase',
+      badge: ORDER_STATUS_LABEL[order.status],
+      badgeClass: order.status === 'active' ? 'st-active' : 'st-closed',
+      sections: [
+        {
+          title: 'Customer & Job',
+          fields: [
+            { label: 'Customer', value: this.data.partyName(order.partyId) || order.party },
+            { label: 'Project', value: order.projectName },
+            { label: 'Job Site', value: order.jobSite || '—' },
+            { label: 'Geofence', value: (order.geofenceRadius ?? 300) + ' m' },
+            {
+              label: 'Site Latitude',
+              value: String(order.siteLat ?? this.data.yard.lat),
+              mono: true,
+            },
+            {
+              label: 'Site Longitude',
+              value: String(order.siteLng ?? this.data.yard.lng),
+              mono: true,
+            },
+          ],
+        },
+        {
+          title: 'Rental Window',
+          fields: [
+            { label: 'Start', value: this.data.fmtDate(order.startDate) + ' ' + this.fmtMin(this.orderT0(order)), mono: true },
+            { label: 'Expected Return', value: this.data.fmtDate(order.endDate) + ' ' + this.fmtMin(this.orderT1(order)), mono: true },
+            { label: 'Days', value: String(this.data.orderDays(order)), mono: true },
+          ],
+        },
+        {
+          title: 'Commercials',
+          fields: [
+            { label: 'Gross', value: this.data.money(this.data.orderAmount(order)), mono: true },
+            { label: 'Items booked', value: String(order.lineItems.length) },
+          ],
+        },
+        {
+          title: 'Booked Inventory',
+          fields: booked.length
+            ? booked.map((li) => ({
+                label: this.typeLabel(li.type) + ' · ' + this.itemName(li.type, li.refId),
+                value: this.data.fmtDate(this.lineStart(li, order)) + ' → ' + this.data.fmtDate(this.lineEnd(li, order)),
+                mono: true,
+              }))
+            : [{ label: 'Bookings', value: 'None — drag a pool item onto this order.' }],
+        },
+      ],
+    };
+  }
+
+  closeViewer(): void {
+    this.viewer = null;
+  }
+
+  /** Read-only model for one inventory asset (optionally the booking it sits on). */
+  private assetModel(item: Item, order?: Order, li?: OrderLine): ViewModel {
+    const avail = this.availability(item);
+    const sections: ViewSection[] = [];
+
+    if (order && li) {
+      sections.push({
+        title: 'Booked On',
+        fields: [
+          { label: 'Order', value: order.orderId, mono: true },
+          { label: 'Project', value: order.projectName },
+          { label: 'Customer', value: this.data.partyName(order.partyId) || order.party },
+          {
+            label: 'Window',
+            value: this.data.fmtDate(this.lineStart(li, order)) + ' → ' + this.data.fmtDate(this.lineEnd(li, order)),
+            mono: true,
+          },
+          { label: 'Billable days', value: String(this.data.billableDays(order, li)), mono: true },
+        ],
+      });
+    }
+
+    sections.push({
+      title: 'Availability · ' + this.rangeLabel(),
+      fields: [
+        { label: 'State', value: avail.badge || 'Free' },
+        { label: 'Note', value: avail.note || 'Free for this period.' },
+        ...this.bookingsInRange(item).map((b) => ({
+          label: b.orderId,
+          value: this.data.fmtDate(b.start) + ' → ' + this.data.fmtDate(b.end),
+          mono: true,
+        })),
+      ],
+    });
+
+    const record: ViewField[] = [
+      { label: 'Item ID', value: item.id, mono: true },
+      { label: 'Type', value: this.typeLabel(item.type) },
+      { label: 'Name', value: item.name },
+      { label: 'Category', value: item.category || '—' },
+      { label: 'Status', value: item.status },
+      { label: 'Quantity', value: this.data.int(item.qty), mono: true },
+      { label: 'Daily rate', value: this.data.money(item.rateDaily), mono: true },
+    ];
+    // [value, label, mono] — only the fields this type actually carries.
+    const optional: [unknown, string, boolean?][] = [
+      [item.serial, 'Serial / VIN', true],
+      [[item.make, item.model].filter(Boolean).join(' '), 'Make / Model'],
+      [item.meterHours, 'Meter hours', true],
+      [item.fuelType, 'Fuel'],
+      [item.purchaseValue, 'Purchase value', true],
+      [item.baseMonthly, 'Monthly rate', true],
+      [item.totalOwned, 'Total owned', true],
+      [item.qtyAvailable, 'Available', true],
+      [item.qtyOut, 'Out', true],
+      [item.qtyOnHand, 'On hand', true],
+      [item.reorderPoint, 'Reorder point', true],
+      [item.costPrice, 'Cost price', true],
+      [item.retailPrice, 'Retail price', true],
+      [item.bin, 'Bin', true],
+      [item.role, 'Role'],
+      [item.hourlyCost, 'Cost / hr', true],
+      [item.hourlyBillable, 'Billable / hr', true],
+    ];
+    for (const [value, label, mono] of optional) {
+      if (value === undefined || value === null || value === '' || value === 0) continue;
+      record.push({ label, value: String(value), mono });
+    }
+    if (item.lat != null && item.lng != null) {
+      record.push({ label: 'Coordinates', value: item.lat + ', ' + item.lng, mono: true });
+    }
+    sections.push({ title: 'Record', fields: record });
+
+    return {
+      title: item.name,
+      subtitle: item.id + ' · ' + (item.category || this.typeLabel(item.type)),
+      icon: POOL_ICON[item.type] ?? 'bi-box-seam',
+      badge: item.status,
+      badgeClass: 'st-' + statusClass(item.status),
+      sections,
+    };
   }
 
   /* ------------------------------- create ------------------------------- */
@@ -542,7 +811,7 @@ export class SchedulerComponent implements OnDestroy {
           }
         : null;
       const lines: BarModel[] = [];
-      for (const li of o.lineItems) {
+      for (const li of this.sortedLines(o)) {
         let lg: BarGeom | null = null;
         let sub = '';
         if (isDay) {
@@ -580,7 +849,9 @@ export class SchedulerComponent implements OnDestroy {
     return n;
   }
 
-  /** Flat conflict list for the inspector pane (prototype `renderInspector`). */
+  /** Flat conflict list for the inspector pane (prototype `renderInspector`).
+   *  Re-sorted by catalog type so like types stay together, and recomputed on
+   *  every render so resolving a conflict immediately re-groups the list. */
   conflicts(): { type: CatalogType; refId: string; orderId: string; label: string }[] {
     const out: { type: CatalogType; refId: string; orderId: string; label: string }[] = [];
     for (const m of this.models()) {
@@ -591,7 +862,12 @@ export class SchedulerComponent implements OnDestroy {
         out.push({ type: li.type, refId: li.refId, orderId: m.order.orderId, label: line.label });
       }
     }
-    return out;
+    return out.sort(
+      (a, b) =>
+        this.typeRank(a.type) - this.typeRank(b.type) ||
+        a.label.localeCompare(b.label) ||
+        a.orderId.localeCompare(b.orderId),
+    );
   }
 
   onPoolStart(e: Event, item: Item): void {
@@ -686,6 +962,133 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   detachResize(): void { this.resizing = null; }
+
+  /* ------------------------- move a whole block -------------------------- */
+
+  /** True while this exact bar is being dragged, so the block can show it. */
+  isMoving(orderId: string, liId: string | null): boolean {
+    const m = this.moving;
+    return !!m && m.orderId === orderId && m.liId === liId;
+  }
+
+  /**
+   * Drag the body of a block to another day (Week/Month) or another time
+   * (Day view) — the window length is preserved, unlike the edge handles that
+   * only move one end. Works on order bars and on expanded resource bars;
+   * starting on a resize handle or the expand chevron is ignored so those keep
+   * their own behaviour.
+   */
+  startMove(e: PointerEvent, bar: BarModel): void {
+    if ((e.target as Element)?.closest('.tl-h, .tl-block-chev')) return;
+    const track = (e.target as Element).closest('.tl-row-track') as HTMLElement | null;
+    const order = this.data.getOrder(bar.orderId);
+    if (!track || !order) return;
+    const li = bar.liId ? order.lineItems.find((l) => l.id === bar.liId) ?? null : null;
+    if (bar.liId && !li) return;
+    const loMin = li ? this.orderT0(order) : 0;
+    const hiMin = li ? this.orderT1(order) : 1440;
+    this.moving = {
+      orderId: bar.orderId,
+      liId: bar.liId,
+      track,
+      x0: e.clientX,
+      t0: li ? this.lineT0(li, order) : this.orderT0(order),
+      t1: li ? this.lineT1(li, order) : this.orderT1(order),
+      sISO: li ? this.lineStart(li, order) : order.startDate,
+      eISO: li ? this.lineEnd(li, order) : order.endDate,
+      loMin,
+      hiMin,
+      loISO: li ? order.startDate : '',
+      hiISO: li ? order.endDate : '',
+      moved: false,
+    };
+    window.addEventListener('pointermove', this.onMovePointer);
+    window.addEventListener('pointerup', this.endMovePointer);
+    window.addEventListener('pointercancel', this.endMovePointer);
+  }
+
+  private onMoveMove(ev: PointerEvent): void {
+    const m = this.moving;
+    if (!m) return;
+    // Ignore the first few pixels so a plain click still selects the row.
+    if (!m.moved) {
+      if (Math.abs(ev.clientX - m.x0) <= 3) return;
+      m.moved = true;
+    }
+    ev.preventDefault();
+    const rect = m.track.getBoundingClientRect();
+    if (!rect.width) return;
+
+    // Day view: shift the time window in 15-minute steps.
+    if (this.view === 'day') {
+      const dur = m.t1 - m.t0;
+      let delta = (Math.round((((ev.clientX - m.x0) / rect.width) * 1440) / 15) * 15);
+      delta = Math.max(m.loMin - m.t0, Math.min(m.hiMin - dur - m.t0, delta));
+      const a = m.t0 + delta;
+      const b = m.t1 + delta;
+      if (m.liId) this.data.updateOrderLineTimes(m.orderId, m.liId, a, b);
+      else this.data.updateOrderTimes(m.orderId, a, b);
+      this.cdr.detectChanges();
+      return;
+    }
+
+    // Week / Month: shift whole days.
+    const delta = Math.round(((ev.clientX - m.x0) / rect.width) * this.colCount());
+    let ns = this.addDaysISO(m.sISO, delta);
+    let ne = this.addDaysISO(m.eISO, delta);
+
+    if (m.liId) {
+      // A booking stays inside its order window: slide it back when either end
+      // would cross, rather than collapsing it to the edge.
+      const lo = Date.parse(m.loISO + 'T00:00:00');
+      const hi = Date.parse(m.hiISO + 'T00:00:00');
+      let s = Date.parse(ns + 'T00:00:00');
+      let e = Date.parse(ne + 'T00:00:00');
+      if (s < lo) { const d = lo - s; s += d; e += d; }
+      if (e > hi) { const d = e - hi; e -= d; s -= d; }
+      if (s < lo) s = lo;
+      if (e < s) e = s;
+      ns = this.dateAt(s);
+      ne = this.dateAt(e);
+      this.data.updateOrderLineDates(m.orderId, m.liId, ns, ne);
+    } else {
+      // Moving an order carries its bookings along (snapshot them first: the
+      // service clamps lines to the new order window).
+      const order = this.data.getOrder(m.orderId);
+      if (!order) return;
+      const carried = order.lineItems.map((l) => ({
+        id: l.id,
+        s: this.addDaysISO(this.lineStart(l, order), delta),
+        e: this.addDaysISO(this.lineEnd(l, order), delta),
+      }));
+      this.data.updateOrderDates(m.orderId, ns, ne);
+      for (const l of carried) this.data.updateOrderLineDates(m.orderId, l.id, l.s, l.e);
+    }
+    this.cdr.detectChanges();
+  }
+
+  private onMoveUp(): void {
+    const m = this.moving;
+    this.detachMove();
+    // A real drag must not also fire the row's select/expand click.
+    if (m?.moved) {
+      const kill = (ev: MouseEvent) => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        window.removeEventListener('click', kill, true);
+      };
+      window.addEventListener('click', kill, true);
+      window.setTimeout(() => window.removeEventListener('click', kill, true), 400);
+    }
+    this.cdr.detectChanges();
+  }
+
+  private detachMove(): void {
+    window.removeEventListener('pointermove', this.onMovePointer);
+    window.removeEventListener('pointerup', this.endMovePointer);
+    window.removeEventListener('pointercancel', this.endMovePointer);
+    this.moving = null;
+  }
 
   /** Blank New Order form (no service access — safe as a field initializer). */
   private emptyOrder() {

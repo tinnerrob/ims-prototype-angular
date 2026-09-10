@@ -170,6 +170,16 @@
   opacity: 0.8;
 }
 
+/* Order Details booked rows open the read-only asset viewer on double-click */
+.booking-line {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.booking-line:hover {
+  background: rgba(37, 99, 235, 0.06);
+}
+
 /* ------------------------------------------------------------------
    Calendar period navigation (date range + arrows) sits on the RIGHT of
    the timeline header instead of being centered. This scoped rule wins over

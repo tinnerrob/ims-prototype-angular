@@ -65,6 +65,23 @@ detail right**, with orders as the top rows.
   inventory bar has edge handles. Dragging snaps to a day (Week/Month) or to
   15 minutes (Day). Line bars are clamped inside their order window; resizing an
   order clamps all its lines.
+- **Move a whole block:** drag a bar's *body* (`startMove`) to another day
+  (Week/Month) or another time (Day) — the window length is preserved, unlike the
+  handles that move one end. Moving an order carries its bookings with it; a
+  booking bar slides inside its order window instead of collapsing onto the edge.
+  The first 3 px are ignored so a plain click still selects/expands, and a real
+  drag swallows the trailing click.
+- **Type grouping:** every mixed-type list — the expanded timeline rows, the
+  Order Details booked list and the conflicts pane — is ordered by catalog type
+  (`sortedLines()` / `typeRank()` in `CATALOG_TYPES` order: serialized, bulk,
+  consumable, part, labor, kit, attachment), then name/date. The lists re-render
+  from data, so the moment a conflict is resolved (bar moved/resized, booking
+  dropped) the like types fall back together.
+- **Double-click to view (read-only):** pool cards, resource bars and Order
+  Details booking rows open the shared `ims-record-view` **asset** viewer;
+  order bars and queue cards open the **order/contract** viewer. The conflicts
+  pane has a per-row eye button for the same asset view. A double-click sets the
+  selection/expansion explicitly (it fires two row clicks first).
 - **Views:** Day (24 one-hour segments, time-of-day windows), Week (Mon–Sun), Month
   (all days of the month). `‹ ›` steps by day/week/month.
 - **Conflicts:** same resource on two orders that overlap is flagged red; the right

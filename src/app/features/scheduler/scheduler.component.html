@@ -11,7 +11,7 @@
         </div>
         <div class="card-body queue-scroll">
           @for (o of orders(); track o.orderId) {
-            <div class="queue-order" [class.active]="selectedOrderId === o.orderId" (click)="focusOrder(o.orderId)">
+            <div class="queue-order" [class.active]="selectedOrderId === o.orderId" (click)="focusOrder(o.orderId)" (dblclick)="showOrderView(o)">
               <div class="qc-head">
                 <i class="bi bi-briefcase"></i><span class="strong">{{ o.orderId }}</span>
               </div>
@@ -32,7 +32,7 @@
       <div class="card">
         <div class="card-header">
           <span class="card-title"><i class="bi bi-box-seam"></i> Inventory Pool</span>
-          <span class="text-muted2 text-xs">drag to a block</span>
+          <span class="text-muted2 text-xs">drag to a block · dbl-click to view</span>
         </div>
         <div class="card-body">
           <select class="form-select mb-2" [(ngModel)]="poolType">
@@ -50,9 +50,10 @@
                 [class.inactive]="availability(it).blocked"
                 [class.partial]="availability(it).key === 'partial'"
                 draggable="true"
-                [title]="availability(it).note || 'Drag to an order block to book this resource'"
+                [title]="availability(it).note || 'Drag to an order block to book this resource — double-click to view it'"
                 (dragstart)="onPoolStart($event, it)"
                 (dragend)="onDragEnd()"
+                (dblclick)="showAssetView(it)"
               >
                 <div class="res-card-head">
                   <span class="type-chip tc-{{ it.type }}">{{ typeLabel(it.type) }}</span>
@@ -146,9 +147,12 @@
                     <div
                       class="tl-block"
                       [class.selected]="selectedOrderId === m.order.orderId"
+                      [class.tl-moving]="isMoving(m.order.orderId, null)"
                       [style.left.%]="m.orderBar.geom.left"
                       [style.width.%]="m.orderBar.geom.width"
-                      [title]="orderTitle(m.order)"
+                      [title]="orderTitle(m.order) + ' — drag to another day · double-click to view'"
+                      (pointerdown)="startMove($event, m.orderBar)"
+                      (dblclick)="showOrderView(m.order)"
                     >
                       <span class="tl-block-chev" (click)="$event.stopPropagation(); toggleExpand(m.order.orderId)">
                         <i class="bi" [class.bi-chevron-up]="m.isExpanded" [class.bi-chevron-down]="!m.isExpanded"></i>
@@ -182,9 +186,12 @@
                       <div
                         class="tl-block tl-res tl-res-{{ line.type }}"
                         [class.conflict]="line.conflict"
+                        [class.tl-moving]="isMoving(line.orderId, line.liId)"
                         [style.left.%]="line.geom.left"
                         [style.width.%]="line.geom.width"
-                        [title]="line.label + ' · ' + line.sub"
+                        [title]="line.label + ' · ' + line.sub + ' — drag to another day · double-click to view'"
+                        (pointerdown)="startMove($event, line)"
+                        (dblclick)="showLineView(line)"
                       >
                         <span class="tl-block-title">{{ line.label }}</span>
                         <span class="tl-block-sub">{{ line.sub }}</span>
@@ -219,7 +226,8 @@
       <div class="card-body">
         <div class="text-muted2 mb-2 text-xs">
           @if (conflictCount()) {
-            Red rows on the timeline mark each conflicted booking.
+            Red rows on the timeline mark each conflicted booking — move or resize a bar, then
+            the lists re-group by type.
           } @else {
             All resources are uniquely scheduled.
           }
@@ -231,6 +239,14 @@
                 <span class="type-chip tc-{{ c.type }}">{{ typeLabel(c.type) }}</span>
                 <span class="strong">{{ c.label }}</span>
                 <span class="badge-status st-reorder">Overbooked</span>
+                <button
+                  class="btn btn-ims-outline btn-sm2 ms-auto"
+                  type="button"
+                  title="View asset"
+                  (click)="showConflictView(c)"
+                >
+                  <i class="bi bi-eye"></i>
+                </button>
               </div>
               <div class="ci-orders">
                 <span class="mono">{{ c.orderId }}</span>
@@ -246,6 +262,7 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title"><i class="bi bi-clipboard-data"></i> Order Details</span>
+        <span class="text-muted2 text-xs">dbl-click a booking</span>
       </div>
       <div class="card-body">
         @if (data.getOrder(selectedOrderId); as o) {
@@ -265,8 +282,8 @@
             <span class="l">Items booked</span><span class="r">{{ o.lineItems.length }}</span>
           </div>
           <div class="divider"></div>
-          @for (li of o.lineItems; track li.id) {
-            <div class="list-line">
+          @for (li of sortedLines(o); track li.id) {
+            <div class="list-line booking-line" title="Double-click to view this asset" (dblclick)="showBookingView(li, o)">
               <span class="l">
                 <span class="type-chip tc-{{ li.type }}">{{ typeLabel(li.type) }}</span>
                 {{ itemName(li.type, li.refId) }}
@@ -531,4 +548,7 @@
   </div>
   <div class="modal-backdrop show d-block"></div>
 }
+
+<!-- ===== Read-only record viewer (double-click a pool card / block) ===== -->
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>
 
