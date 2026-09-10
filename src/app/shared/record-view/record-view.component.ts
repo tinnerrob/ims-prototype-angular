@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { ModalDismissDirective } from '../modal-dismiss/modal-dismiss.directive';
 
 /**
  * One label/value pair in the read-only record viewer.
@@ -46,11 +47,13 @@ export function isInteractiveTarget(e: Event): boolean {
  * The host page supplies the title/sections; the viewer only renders them, in
  * the same `modal → modal-dialog → modal-content` shell as the per-page
  * editors, so a row click never has to open an editable form by accident. The
- * optional footer `Edit` action hands control back to the page's own editor.
+ * optional footer `Edit` action hands control back to the page's own editor;
+ * the corner ✕ or a click outside the dialog closes it.
  */
 @Component({
   selector: 'ims-record-view',
   standalone: true,
+  imports: [ModalDismissDirective],
   templateUrl: './record-view.component.html',
   styleUrl: './record-view.component.scss',
 })

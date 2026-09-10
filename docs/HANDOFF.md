@@ -80,8 +80,12 @@ detail right**, with orders as the top rows.
 - **Double-click to view (read-only):** pool cards, resource bars and Order
   Details booking rows open the shared `ims-record-view` **asset** viewer;
   order bars and queue cards open the **order/contract** viewer. The conflicts
-  pane has a per-row eye button for the same asset view. A double-click sets the
-  selection/expansion explicitly (it fires two row clicks first).
+  pane has a per-row eye button for the same asset view. A lane click is held
+  back for `DBLCLICK_MS` (250 ms, `onRowClick`) and dropped by the second click,
+  so a double-click opens the viewer *without* expanding/contracting the lane
+  first; `showOrderView()` still sets selection + expansion explicitly. The
+  expand chevron keeps its own immediate toggle and swallows the `dblclick`, so
+  double-clicking the expander never opens the viewer.
 - **Views:** Day (24 one-hour segments, time-of-day windows), Week (Mon–Sun), Month
   (all days of the month). `‹ ›` steps by day/week/month.
 - **Conflicts:** same resource on two orders that overlap is flagged red; the right
@@ -108,6 +112,8 @@ detail right**, with orders as the top rows.
 - `src/app/features/*` — one folder per view (component.ts/html/scss).
 - `src/app/shared/record-view/*` — shared read-only record viewer (opened by a table
   row click) + the `isInteractiveTarget()` row-click guard.
+- `src/app/shared/modal-dismiss/*` — `ModalDismissDirective` (`imsModalDismiss`),
+  click-outside-to-dismiss applied to every hand-rolled modal root.
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
 - `src/app/app.routes.ts` — route map (module routes are guarded).
 - `src/styles.scss` — token-driven global theme; `index.html` loads Bootstrap Icons CDN.
@@ -133,6 +139,13 @@ detail right**, with orders as the top rows.
   label/value fields; `[editable]="true"` adds a footer **Edit** that reopens the
   page's own editor (`editFromViewer()`). Pages with an existing read-only detail
   modal (Orders → contract, Invoicing) route the row click into it instead.
+- **Modal dismissal:** every hand-rolled modal root
+  (`<div class="modal show d-block" …>`) carries `imsModalDismiss (dismiss)="closeFoo()"`,
+  so a press-and-release outside the `.modal-content` dialog closes it exactly like
+  the corner ✕. Footers therefore only hold real actions (Save/Cancel, Download CSV,
+  Edit) — the redundant footer `Close` buttons are gone, and `ims-record-view`'s
+  footer renders only when `[editable]="true"`. A press that starts inside the dialog
+  is ignored, so drags out of a modal never dismiss it.
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler

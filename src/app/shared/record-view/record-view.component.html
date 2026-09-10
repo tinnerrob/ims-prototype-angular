@@ -1,6 +1,6 @@
 <!-- Shared read-only record viewer (opened by clicking a table row) -->
 @if (view; as v) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closed.emit()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -28,14 +28,13 @@
             }
           }
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closed.emit()">Close</button>
-          @if (editable) {
+        @if (editable) {
+          <div class="modal-footer">
             <button type="button" class="btn btn-ims" (click)="edit.emit()">
               <i class="bi bi-pencil"></i> Edit
             </button>
-          }
-        </div>
+          </div>
+        }
       </div>
     </div>
   </div>

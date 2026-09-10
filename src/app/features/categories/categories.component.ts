@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { CatalogType, CategoryOption } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 interface CategoryTab {
@@ -28,7 +29,7 @@ const CAT_TYPES: CategoryTab[] = [
 @Component({
   selector: 'ims-categories',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './categories.component.html',
   styleUrl: './categories.component.scss',
 })

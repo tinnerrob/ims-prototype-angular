@@ -10,6 +10,7 @@ import {
   InspectionDirection,
   statusClass,
 } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
@@ -20,7 +21,7 @@ import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../share
 @Component({
   selector: 'ims-inspections',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './inspections.component.html',
   styleUrl: './inspections.component.scss',
 })

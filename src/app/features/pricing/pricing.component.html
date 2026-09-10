@@ -155,7 +155,7 @@
 
 <!-- overhead / service fee modal -->
 @if (overheadOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeOverhead()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -221,7 +221,7 @@
 
 <!-- tax schedule modal -->
 @if (taxOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeTax()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">

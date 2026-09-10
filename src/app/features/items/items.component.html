@@ -73,7 +73,7 @@
 </div>
 
 @if (modalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeForm()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">

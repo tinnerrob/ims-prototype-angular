@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
 import { Invoice, InvoiceStatus, INVOICE_STATUS_LABEL } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget } from '../../shared/record-view/record-view.component';
 
 /**
@@ -12,6 +13,7 @@ import { isInteractiveTarget } from '../../shared/record-view/record-view.compon
 @Component({
   selector: 'ims-invoicing',
   standalone: true,
+  imports: [ModalDismissDirective],
   templateUrl: './invoicing.component.html',
   styleUrl: './invoicing.component.scss',
 })

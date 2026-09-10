@@ -62,7 +62,7 @@
 
 <!-- add / rename modal (prototype `openFormModal`) -->
 @if (modalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="close()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">

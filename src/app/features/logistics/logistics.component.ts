@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
@@ -13,7 +14,7 @@ import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../share
 @Component({
   selector: 'ims-logistics',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './logistics.component.html',
   styleUrl: './logistics.component.scss',
 })

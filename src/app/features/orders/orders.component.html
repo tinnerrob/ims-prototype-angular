@@ -104,7 +104,7 @@
 
 <!-- customer editor -->
 @if (customerOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeCustomer()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -166,7 +166,7 @@
 
 <!-- new contract -->
 @if (orderOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="orderOpen = false">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
@@ -215,7 +215,7 @@
 
 <!-- contract detail -->
 @if (detail) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeDetail()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -267,9 +267,6 @@
           } @empty {
             <p class="text-muted2 py-2">No line items staged.</p>
           }
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeDetail()">Close</button>
         </div>
       </div>
     </div>

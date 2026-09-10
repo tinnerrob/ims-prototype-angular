@@ -82,7 +82,7 @@ touching feature code.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
 - [x] Admin — Administration shell with submenus: Locations, Categories, Feature Modules.
-- [x] Scheduling — week timeline, conflict detection, item booking (overbooking allowed); blocks drag to another day, lists group by type, double-click opens the read-only asset/contract viewer.
+- [x] Scheduling — week timeline, conflict detection, item booking (overbooking allowed); blocks drag to another day, lists group by type, double-click opens the read-only asset/contract viewer without flashing the lane shut first (a lane click waits out the 250 ms double-click window); every modal closes on ✕, a click outside the dialog, or its footer actions (no redundant footer Close).
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 
 **Port coverage complete:** full core + all 6 industry modules + module gating + admin, on a single typed, persisted data store.

@@ -10,6 +10,7 @@ import {
   WorkOrderPart,
   WorkOrderStatus,
 } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
@@ -40,7 +41,7 @@ const BLANK_WO_FORM = {
 @Component({
   selector: 'ims-maintenance',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './maintenance.component.html',
   styleUrl: './maintenance.component.scss',
 })

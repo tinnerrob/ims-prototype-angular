@@ -96,7 +96,7 @@
 
 <!-- invoice detail modal (prototype `invoiceDetailModal`) -->
 @if (detail) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeDetail()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -155,7 +155,6 @@
           <div class="list-line"><span class="l strong">Invoice Total</span><span class="r strong">{{ data.money(totals(detail).total) }}</span></div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims-outline" (click)="closeDetail()">Close</button>
           <button type="button" class="btn btn-ims-outline" (click)="exportCsv()">
             <i class="bi bi-download"></i> Download CSV
           </button>

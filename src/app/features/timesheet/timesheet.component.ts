@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService, dISO, hmMin, minHM, snap15 } from '../../core/data.service';
 import { Item, Timesheet, TIMESHEET_KIND, TimesheetTarget } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 
 const DAY_MS = 86400000;
 const DAY_A = 0;
@@ -56,7 +57,7 @@ interface DragState {
 @Component({
   selector: 'ims-timesheet',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, ModalDismissDirective],
   templateUrl: './timesheet.component.html',
   styleUrl: './timesheet.component.scss',
 })

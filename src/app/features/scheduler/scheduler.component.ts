@@ -17,8 +17,11 @@ import {
   ViewModel,
   ViewSection,
 } from '../../shared/record-view/record-view.component';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 
 const DAY_MS = 86400000;
+/** Gap within which a second click counts as a double-click (ms). */
+const DBLCLICK_MS = 250;
 const DAY_W = 90;
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -113,7 +116,7 @@ const POOL_ADD_LABEL: Record<string, string> = {
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './scheduler.component.html',
   styleUrl: './scheduler.component.scss',
 })
@@ -130,6 +133,13 @@ export class SchedulerComponent implements OnDestroy {
   resizing: ResizeState | null = null;
   /** In-flight whole-block drag (drag a bar to another day/hour). */
   moving: MoveState | null = null;
+
+  /**
+   * Lane click waiting out the double-click window (see `onRowClick`): the
+   * select/expand only happens once the record viewer can no longer be the
+   * intent.
+   */
+  private pendingRowClick: { orderId: string; timer: ReturnType<typeof setTimeout> } | null = null;
 
   /** Read-only record viewer (double-click a pool card / block). */
   viewer: ViewModel | null = null;
@@ -162,6 +172,7 @@ export class SchedulerComponent implements OnDestroy {
   ngOnDestroy(): void {
     this.detachResize();
     this.detachMove();
+    this.cancelRowClick();
   }
 
   columns(): DayCol[] {
@@ -231,6 +242,40 @@ export class SchedulerComponent implements OnDestroy {
   selectOrder(id: string): void { this.selectedOrderId = this.selectedOrderId === id ? '' : id; }
   toggleExpand(orderId: string): void { if (this.expanded.has(orderId)) this.expanded.delete(orderId); else this.expanded.add(orderId); }
   onOrderClick(orderId: string): void { this.selectOrder(orderId); this.toggleExpand(orderId); }
+
+  /**
+   * Click on an order lane (bar body or gutter). A double-click also delivers
+   * two `click`s before `dblclick`, which would expand the lane and contract it
+   * again before the record viewer opened — so the select/expand is held back
+   * for `DBLCLICK_MS` and dropped by the second click (`showOrderView` drops it
+   * too). Clicking a different lane flushes the queued one immediately, so the
+   * delay is never applied to the click that actually mattered.
+   */
+  onRowClick(orderId: string): void {
+    const pending = this.pendingRowClick;
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingRowClick = null;
+      if (pending.orderId === orderId) return;   // second click of a double-click
+      this.onOrderClick(pending.orderId);
+      this.cdr.detectChanges();
+    }
+    this.pendingRowClick = {
+      orderId,
+      timer: setTimeout(() => {
+        this.pendingRowClick = null;
+        this.onOrderClick(orderId);
+        this.cdr.detectChanges();
+      }, DBLCLICK_MS),
+    };
+  }
+
+  /** Drop a queued lane click — the double-click (viewer) supersedes it. */
+  private cancelRowClick(): void {
+    if (!this.pendingRowClick) return;
+    clearTimeout(this.pendingRowClick.timer);
+    this.pendingRowClick = null;
+  }
   lineStart(li: OrderLine, order: Order): string { return li.startDate ?? order.startDate; }
   lineEnd(li: OrderLine, order: Order): string { return li.endDate ?? order.endDate; }
   itemName(type: CatalogType, refId: string): string { return this.data.itemLabel(type, refId); }
@@ -413,6 +458,7 @@ export class SchedulerComponent implements OnDestroy {
 
   /** Double-click a resource bar → the asset plus the order it is booked on. */
   showLineView(bar: BarModel): void {
+    this.cancelRowClick();
     const order = this.data.getOrder(bar.orderId);
     const li = bar.liId ? order?.lineItems.find((l) => l.id === bar.liId) : undefined;
     const item = li ? this.data.getItem(li.type, li.refId) : undefined;
@@ -436,8 +482,10 @@ export class SchedulerComponent implements OnDestroy {
 
   /** Double-click an order bar / queue card → read-only order (contract) view. */
   showOrderView(order: Order): void {
-    // A double-click fires two row clicks first (select + expand toggle twice),
-    // so set the state explicitly instead of relying on those toggles.
+    // The double-click also delivered two lane clicks; drop the queued one so
+    // the lane does not expand and contract first.
+    this.cancelRowClick();
+    // Set the state explicitly rather than relying on those clicks.
     this.selectedOrderId = order.orderId;
     this.expanded.add(order.orderId);
     const booked = this.sortedLines(order);

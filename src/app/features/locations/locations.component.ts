@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Location, LocationType } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /** A location plus its depth in the ragged hierarchy (drives table indentation). */
@@ -41,7 +42,7 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 @Component({
   selector: 'ims-locations',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './locations.component.html',
   styleUrl: './locations.component.scss',
 })

@@ -136,7 +136,7 @@
                 [class.selected]="selectedOrderId === m.order.orderId"
                 (dragover)="allowDrop($event)"
                 (drop)="onDropOrder($event, m.order.orderId)"
-                (click)="onOrderClick(m.order.orderId)"
+                (click)="onRowClick(m.order.orderId)"
               >
                 <div class="tl-row-label">
                   {{ m.order.orderId }}
@@ -154,7 +154,12 @@
                       (pointerdown)="startMove($event, m.orderBar)"
                       (dblclick)="showOrderView(m.order)"
                     >
-                      <span class="tl-block-chev" (click)="$event.stopPropagation(); toggleExpand(m.order.orderId)">
+                      <span
+                        class="tl-block-chev"
+                        title="Expand / collapse the booked items"
+                        (click)="$event.stopPropagation(); toggleExpand(m.order.orderId)"
+                        (dblclick)="$event.stopPropagation()"
+                      >
                         <i class="bi" [class.bi-chevron-up]="m.isExpanded" [class.bi-chevron-down]="!m.isExpanded"></i>
                       </span>
                       <span class="tl-block-title">{{ m.order.projectName }}</span>
@@ -306,7 +311,7 @@
 
 <!-- ================= New Order (prototype `orderModal` → `openOrderModal`) ================= -->
 @if (orderOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeOrder()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
@@ -394,7 +399,7 @@
 
 <!-- ============ New <resource> (prototype `addPoolResource` → `openAddModal`) ============ -->
 @if (resOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeRes()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">

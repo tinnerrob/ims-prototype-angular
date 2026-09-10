@@ -11,6 +11,7 @@ import {
   TaxSchedule,
   WEEKEND_POLICIES,
 } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
@@ -21,7 +22,7 @@ import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../share
 @Component({
   selector: 'ims-pricing',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './pricing.component.html',
   styleUrl: './pricing.component.scss',
 })

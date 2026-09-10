@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 interface InvTab {
@@ -109,7 +110,7 @@ const BLANK_ITEM_FORM = {
 @Component({
   selector: 'ims-items',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './items.component.html',
   styleUrl: './items.component.scss',
 })

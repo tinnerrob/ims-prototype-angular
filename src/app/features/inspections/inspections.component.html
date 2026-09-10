@@ -127,7 +127,7 @@
 
 <!-- edit inspection modal (prototype `inspectionModal`) -->
 @if (editOpen && editRecord; as r) {
-  <div class="modal show d-block" tabindex="-1" role="dialog">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeEdit()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
