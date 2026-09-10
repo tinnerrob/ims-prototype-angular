@@ -44,9 +44,13 @@
   gap: 10px;
 }
 
+/* the two cards split the column height exactly in half.
+   NOTE: basis MUST be 0 (not `auto`) — with `auto` each card grows with its
+   own content, so the long Inventory Pool list made it far taller than the
+   Orders & Allocations list. */
 .sched-side .sched-queue > .card {
-  flex: 1 1 auto;
-  min-height: 130px;
+  flex: 1 1 0;
+  min-height: 170px;
   display: flex;
   flex-direction: column;
 }
@@ -150,4 +154,14 @@
   border-color: #fecaca;
   background: #fef2f2;
   opacity: 0.8;
+}
+
+/* ------------------------------------------------------------------
+   Calendar period navigation (date range + arrows) sits on the RIGHT of
+   the timeline header instead of being centered. This scoped rule wins over
+   the global `.period-pager { justify-content: center }` in styles.scss.
+   ------------------------------------------------------------------ */
+.tl-nav .period-pager {
+  flex: 1 1 auto;
+  justify-content: flex-end;
 }
