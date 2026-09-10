@@ -25,17 +25,17 @@ const CORE_MODULES = [
 ];
 
 /**
- * Administration: Feature Modules — port of the prototype's `renderConfig`
- * (js/pages/config.js): the industry-vertical selector plus per-module
- * on/off switches that gate navigation + routes.
+ * Administration → Feature Modules — port of the prototype's `renderConfig`
+ * (js/pages/config.js): the industry-vertical selector plus per-module on/off
+ * switches that gate navigation + routes. Rendered as an Admin submenu.
  */
 @Component({
-  selector: 'ims-config',
+  selector: 'ims-feature-modules',
   standalone: true,
-  templateUrl: './config.component.html',
-  styleUrl: './config.component.scss',
+  templateUrl: './feature-modules.component.html',
+  styleUrl: './feature-modules.component.scss',
 })
-export class ConfigComponent {
+export class FeatureModulesComponent {
   readonly modules = INDUSTRY_MODULES;
   readonly core = CORE_MODULES;
   readonly verticals = VERTICALS;

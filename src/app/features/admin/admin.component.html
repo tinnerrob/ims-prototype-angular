@@ -1,0 +1,23 @@
+<div class="page-head"></div>
+
+<div class="admin-layout">
+  <!-- Submenu: each entry moves the pane to that administration section. -->
+  <aside class="card admin-menu">
+    <div class="card-header">
+      <span class="card-title"><i class="bi bi-gear"></i> Administration</span>
+    </div>
+    <nav class="admin-nav">
+      @for (m of menus; track m.id) {
+        <a class="admin-nav-item" [routerLink]="m.id" routerLinkActive="active">
+          <i class="bi {{ m.icon }}"></i>
+          <span>{{ m.label }}</span>
+          <i class="bi bi-chevron-right admin-nav-chev"></i>
+        </a>
+      }
+    </nav>
+  </aside>
+
+  <section class="admin-pane">
+    <router-outlet />
+  </section>
+</div>

@@ -1,0 +1,101 @@
+/* ------------------------------------------------------------------
+   Administration shell: a submenu column + the routed pane. The flex contract
+   that lets a nested feature component fill the pane lives in src/styles.scss
+   (global) because it has to reach into the child components.
+   ------------------------------------------------------------------ */
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.admin-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.admin-menu {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px;
+  overflow-y: auto;
+}
+
+.admin-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--slate-600);
+  text-decoration: none;
+}
+
+.admin-nav-item i {
+  font-size: 13px;
+  color: var(--slate-400);
+}
+
+.admin-nav-item:hover {
+  background: rgba(15, 23, 42, .05);
+  color: var(--ink);
+}
+
+.admin-nav-item.active {
+  background: #eff6ff;
+  color: var(--brand);
+  box-shadow: inset 0 0 0 1px rgba(79, 70, 229, .25);
+}
+
+.admin-nav-item.active i {
+  color: inherit;
+}
+
+.admin-nav-chev {
+  margin-left: auto;
+  font-size: 11px !important;
+  opacity: .5;
+}
+
+.admin-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Narrow screens: the submenu becomes a horizontal strip above the pane. */
+@media (max-width: 900px) {
+  .admin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-menu {
+    align-self: stretch;
+  }
+
+  .admin-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .admin-nav-chev {
+    display: none;
+  }
+}

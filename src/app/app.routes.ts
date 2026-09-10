@@ -1,8 +1,10 @@
 import { Routes } from '@angular/router';
 
 import { requireModule } from './core/module.guard';
+import { AdminComponent } from './features/admin/admin.component';
+import { FeatureModulesComponent } from './features/admin/feature-modules.component';
+import { LocationTypesComponent } from './features/admin/location-types.component';
 import { CategoriesComponent } from './features/categories/categories.component';
-import { ConfigComponent } from './features/config/config.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { HandoffComponent } from './features/handoff/handoff.component';
 import { InspectionsComponent } from './features/inspections/inspections.component';
@@ -26,8 +28,20 @@ import { TimesheetComponent } from './features/timesheet/timesheet.component';
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
   { path: 'dashboard', component: DashboardComponent },
-  { path: 'categories', component: CategoriesComponent },
-  { path: 'admin', component: ConfigComponent },
+  {
+    // Administration shell — the submenu moves between child routes.
+    path: 'admin',
+    component: AdminComponent,
+    children: [
+      { path: '', pathMatch: 'full', redirectTo: 'modules' },
+      { path: 'modules', component: FeatureModulesComponent },
+      { path: 'categories', component: CategoriesComponent },
+      { path: 'location-types', component: LocationTypesComponent },
+      { path: '**', redirectTo: 'modules' },
+    ],
+  },
+  // Legacy deep link: Categories & Types now lives under Administration.
+  { path: 'categories', redirectTo: 'admin/categories', pathMatch: 'full' },
   { path: 'handoff', component: HandoffComponent },
   { path: 'inspections', component: InspectionsComponent },
   { path: 'invoicing', component: InvoicingComponent, canActivate: [requireModule('billing')] },

@@ -1,0 +1,5 @@
+/* Location Types panel (Administration). The table shell + badges come from the
+   global design system; only the disabled-remove affordance needs help. */
+.btn:disabled {
+  cursor: not-allowed;
+}

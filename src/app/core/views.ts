@@ -51,17 +51,9 @@ export const VIEWS: ViewDef[] = [
     group: 'inventory',
   },
   {
-    id: 'categories',
-    title: 'Categories & Types',
-    desc: 'Core: manage item type / category options across the catalog.',
-    nav: 'Categories & Types',
-    icon: 'bi-tags',
-    group: 'inventory',
-  },
-  {
     id: 'locations',
     title: 'Locations',
-    desc: 'Core: location hierarchy (yards, branches, warehouses, bins).',
+    desc: 'Core: location hierarchy (yards, branches, warehouses, bins) — types managed in Admin.',
     nav: 'Locations',
     icon: 'bi-buildings',
     group: 'inventory',
@@ -167,10 +159,10 @@ export const VIEWS: ViewDef[] = [
   /* ---- Administration ---- */
   {
     id: 'admin',
-    title: 'Feature Modules',
-    desc: 'Administration: enable or disable industry modules layered on the inventory core.',
-    nav: 'Feature Modules',
-    icon: 'bi-toggles',
+    title: 'Administration',
+    desc: 'Administration: feature modules, item categories & types, and location types.',
+    nav: 'Admin',
+    icon: 'bi-gear',
     group: 'admin',
   },
   {

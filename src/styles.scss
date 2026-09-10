@@ -2165,3 +2165,46 @@ a { color: var(--brand); }
 }
 
 
+
+/* =========================================================
+   Administration page (2026-09-10)
+   ---------------------------------------------------------
+   The admin submenu hosts a full feature component one level BELOW the routed
+   view, so the routed-view flex contract (`.content > :not(router-outlet) >
+   .card`, defined above) has to be mirrored inside `.admin-pane`. Without it a
+   nested table page would size to its content instead of filling the pane and
+   scrolling internally.
+   ========================================================= */
+
+.admin-pane > :not(router-outlet) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.admin-pane > :not(router-outlet) > .card {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* list pages: the card fills the pane and its table scrolls internally */
+.admin-pane > :not(router-outlet) > .card:has(.table-wrap) {
+  flex: 1 1 auto;
+}
+
+.admin-pane > :not(router-outlet) > .card > .card-body:has(.table-wrap) {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-pane > :not(router-outlet) > .card > .card-body > .table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+

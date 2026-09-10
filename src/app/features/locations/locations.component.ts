@@ -1,10 +1,9 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 
 import { DataService } from '../../core/data.service';
-import { Location, LocationType } from '../../core/models';
-
-type Tab = 'locations' | 'types';
+import { Location } from '../../core/models';
 
 /** A location plus its depth in the ragged hierarchy (drives table indentation). */
 interface LocationRow {
@@ -32,23 +31,17 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
  * Port of the prototype's `renderBranches` (js/pages/branches.js), extended to
  * a *ragged hierarchy*: each location has one optional parent and any number
  * of children, and any node may itself be a parent at any depth (an
- * adjacency-list / self-referencing `parent_id`). Location types are
- * user-defined and managed on the second sub-tab.
+ * adjacency-list / self-referencing `parent_id`). The location-type vocabulary
+ * is managed under Administration → Location Types.
  */
 @Component({
   selector: 'ims-locations',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './locations.component.html',
   styleUrl: './locations.component.scss',
 })
 export class LocationsComponent {
-  readonly tabs: { key: Tab; label: string; icon: string }[] = [
-    { key: 'locations', label: 'Locations', icon: 'bi-diagram-3' },
-    { key: 'types', label: 'Location Types', icon: 'bi-tags' },
-  ];
-
-  tab: Tab = 'locations';
   search = '';
 
   /** Location editor. */
@@ -56,22 +49,12 @@ export class LocationsComponent {
   editingId: string | null = null;
   form = { ...BLANK_LOCATION_FORM };
 
-  /** Location-type editor (add / rename). */
-  typeModalOpen = false;
-  renameTypeFrom: string | null = null;
-  formTypeName = '';
-  formTypeActive = true;
-
   constructor(readonly data: DataService) {}
 
   /* ------------------------------- queries ------------------------------ */
 
   locations(): Location[] {
     return this.data.listLocations();
-  }
-
-  typeRecords(): LocationType[] {
-    return this.data.locationTypeRecords();
   }
 
   /**
@@ -122,10 +105,6 @@ export class LocationsComponent {
 
   childCount(id: string): number {
     return this.data.locationChildCount(id);
-  }
-
-  typeCount(name: string): number {
-    return this.data.locationTypeCount(name);
   }
 
   /** Active location types for the editor (keeps a now-inactive current value). */
@@ -188,47 +167,5 @@ export class LocationsComponent {
 
   private emptyForm() {
     return { ...BLANK_LOCATION_FORM, id: this.data.previewLocationId() };
-  }
-
-  /* -------------------------- location types tab ------------------------ */
-
-  selectTab(t: Tab): void {
-    this.tab = t;
-    this.search = '';
-    this.closeForm();
-    this.closeType();
-  }
-
-  openTypeAdd(): void {
-    this.renameTypeFrom = null;
-    this.formTypeName = '';
-    this.formTypeActive = true;
-    this.typeModalOpen = true;
-  }
-
-  openTypeRename(t: LocationType): void {
-    this.renameTypeFrom = t.name;
-    this.formTypeName = t.name;
-    this.formTypeActive = t.active !== false;
-    this.typeModalOpen = true;
-  }
-
-  saveType(): void {
-    const name = this.formTypeName.trim();
-    if (!name) return;
-    if (this.renameTypeFrom) this.data.renameLocationType(this.renameTypeFrom, name, this.formTypeActive);
-    else this.data.addLocationType(name, this.formTypeActive);
-    this.closeType();
-  }
-
-  removeType(t: LocationType): void {
-    this.data.removeLocationType(t.name);
-  }
-
-  closeType(): void {
-    this.typeModalOpen = false;
-    this.renameTypeFrom = null;
-    this.formTypeName = '';
-    this.formTypeActive = true;
   }
 }

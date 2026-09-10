@@ -25,9 +25,9 @@ src/app/
 │   ├── models.ts        # Typed domain models + catalog type registry
 │   └── data.service.ts  # Typed in-memory store + localStorage persistence (the apiAdapter seam)
 ├── features/
-│   ├── config/          # Feature Modules (admin: toggle industry modules)
+│   ├── admin/           # Administration shell (Feature Modules, Categories & Types, Location Types)
 │   ├── dashboard/       # Landing + port roadmap
-│   ├── categories/      # Categories & Types (list + add/rename/remove)
+│   ├── categories/      # Categories & Types (Admin submenu: list + add/rename/remove)
 │   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
 │   ├── invoicing/       # Billing & Invoicing (module: invoices from orders)
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
@@ -67,7 +67,7 @@ touching feature code.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
-- [x] Admin: Feature Modules toggle view.
+- [x] Admin — Administration shell with submenus: Feature Modules, Categories & Types, Location Types.
 - [x] Allocations & Scheduling — week timeline, conflict detection, item booking.
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 
