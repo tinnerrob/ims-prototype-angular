@@ -20,7 +20,7 @@ const CAT_TYPES: CategoryTab[] = [
 ];
 
 /**
- * Categories & Types (core) — port of the prototype's `renderCategories`
+ * Categories (core) — port of the prototype's `renderCategories`
  * (js/pages/categories.js): a type tab strip with counts, a category grid
  * (Active / Items / rename / remove) and the add + rename modals.
  */

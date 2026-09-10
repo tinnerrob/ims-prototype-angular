@@ -152,7 +152,7 @@ export const VIEWS: ViewDef[] = [
   {
     id: 'admin',
     title: 'Administration',
-    desc: 'Administration: locations & their types, item categories & types, and feature modules.',
+    desc: 'Administration: locations & their types, item categories, and feature modules.',
     nav: 'Admin',
     icon: 'bi-gear',
     group: 'admin',

@@ -23,9 +23,9 @@ persisted data store. Module views are gated by `ModulesService` + a route guard
 | Area | Path | Notes |
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
-| **Administration** | `features/admin` | submenu shell: Locations & Types · Categories & Types · Feature Modules |
-| Locations & Types | `features/locations` | ragged hierarchy + type vocabulary behind a tab strip (Admin submenu) |
-| Categories & Types | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
+| **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules |
+| Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu) |
+| Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
 | Items & Stock | `features/items` | typed catalog: list/CRUD per type |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |

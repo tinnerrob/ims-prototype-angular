@@ -25,8 +25,8 @@ interface AdminMenu {
 })
 export class AdminComponent {
   readonly menus: AdminMenu[] = [
-    { id: 'locations', label: 'Locations & Types', icon: 'bi-buildings' },
-    { id: 'categories', label: 'Categories & Types', icon: 'bi-tags' },
+    { id: 'locations', label: 'Locations', icon: 'bi-buildings' },
+    { id: 'categories', label: 'Categories', icon: 'bi-tags' },
     { id: 'modules', label: 'Feature Modules', icon: 'bi-toggles' },
   ];
 }

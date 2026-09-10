@@ -25,14 +25,14 @@ src/app/
 │   ├── models.ts        # Typed domain models + catalog type registry
 │   └── data.service.ts  # Typed in-memory store + localStorage persistence (the apiAdapter seam)
 ├── features/
-│   ├── admin/           # Administration shell (Locations & Types, Categories & Types, Feature Modules)
+│   ├── admin/           # Administration shell (Locations, Categories, Feature Modules)
 │   ├── dashboard/       # Landing + port roadmap
-│   ├── categories/      # Categories & Types (Admin submenu: list + add/rename/remove)
+│   ├── categories/      # Categories (Admin submenu: type tabs, list + add/rename/remove)
 │   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
 │   ├── invoicing/       # Billing & Invoicing (module: invoices from orders)
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
 │   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
-│   ├── locations/       # Locations & Types (Admin submenu: hierarchy + type vocabulary tabs)
+│   ├── locations/       # Locations (Admin submenu: hierarchy + location type tabs)
 │   ├── logistics/       # Logistics & Dispatch (module: truck dispatch)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
@@ -58,16 +58,16 @@ touching feature code.
 
 ## Port roadmap
 
-- [x] Foundation: shell, typed data store + persistence, routing, Categories & Types.
+- [x] Foundation: shell, typed data store + persistence, routing, Categories.
 - [x] Parties & Orders (core) — parties CRUD + order headers + detail + persistence.
 - [x] Items & Stock (core) — typed catalog: list + CRUD per item type.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
-- [x] Locations & Types — ragged location hierarchy (parent/child adjacency list) + type vocabulary, as two tabs under Admin.
+- [x] Locations — ragged location hierarchy (parent/child adjacency list) + location type vocabulary, as two tabs under Admin.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
-- [x] Admin — Administration shell with submenus: Locations & Types, Categories & Types, Feature Modules.
+- [x] Admin — Administration shell with submenus: Locations, Categories, Feature Modules.
 - [x] Allocations & Scheduling — week timeline, conflict detection, item booking.
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 

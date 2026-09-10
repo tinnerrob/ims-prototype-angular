@@ -30,7 +30,7 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 /**
  * Locations (Administration → Locations) — the location hierarchy and the
  * location-type vocabulary as two sub-tables behind a tab strip (the same
- * pattern as Categories & Types), so both live on one page.
+ * pattern as Categories), so both live on one page.
  *
  * Port of the prototype's `renderBranches` (js/pages/branches.js), extended to
  * a *ragged hierarchy*: each location has one optional parent and any number

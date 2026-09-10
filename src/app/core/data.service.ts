@@ -626,7 +626,7 @@ export class DataService {
     return this.db.settings.categories;
   }
 
-  /** Category records for a type (Categories & Types grid). */
+  /** Category records for a type (Categories grid). */
   categoryRecordsFor(type: CatalogType): CategoryOption[] {
     return [...(this.db.settings.categories[type] ?? [])];
   }
