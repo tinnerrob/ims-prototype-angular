@@ -61,18 +61,24 @@
      so an order's items always stripe the same way; Labor & Timesheets has no
      grouping to reset at, so its employee rows just alternate. */
   --tl-band-label: var(--card);
-  --tl-band-track: #fafbfd;
-  --tl-band-label-alt: #e9eef7;
-  --tl-band-track-alt: #e8eef7;
+  --tl-band-track: #fbfcfe;
+  --tl-band-label-alt: #f0f4fa;
+  --tl-band-track-alt: #eef3f9;
 
   /* The lane heading — the Scheduler's order/contract row — is a flat NEUTRAL
      GREY band (label + track share one tint) rather than another stripe, so the
      pastel item rows beneath it read as its detail lines instead of siblings.
-     Its bar is the one grey bar in the calendar (`--tl-base-bar`). */
-  --tl-base-row: #dde3ec;
-  --tl-base-bar: #ccd5e1;
-  --tl-base-ink: #313d50;
-  --tl-base-accent: #8f9cb0;
+     Deliberately LIGHT: it spans the whole width, so a heavier grey turns an
+     empty period into a black hole. Depth comes from its bar (`--tl-base-bar`),
+     never from how dark the band is. */
+  --tl-base-row: #e8ecf4;
+  --tl-base-bar: #dae1ea;
+  --tl-base-ink: #334155;
+  --tl-base-accent: #94a3b8;
+
+  /* Table gridline. Rows sit flush (no gaps), so this is the only line between
+     two rows — it has to read on a white, banded and grey row alike. */
+  --tl-grid: #e4e9f0;
 
   /* Table rows band the same way (low alpha so a row still reads as a row). */
   --row-band: rgba(15, 23, 42, .032);
@@ -400,7 +406,7 @@
   background: var(--card);
   display: grid;
   gap: 0;
-  margin-bottom: 4px;
+  margin-bottom: 0;
   box-shadow: 0 2px 4px rgba(15,23,42,.06);
 }
 .tl-corner {
@@ -426,7 +432,8 @@
   font-size: 11.5px;
   font-weight: 700;
   background: var(--slate-100);
-  border-radius: 6px;
+  /* square: the header band sits flush on the rows below it (table, not chips) */
+  border-radius: 0;
   padding: 6px 0 8px;
 }
 .tl-day-hours > div {
@@ -438,8 +445,11 @@
   text-align: left;
 }
 .tl-day-hours > div:first-child { border-left: none; }
-.tl-body { display: flex; flex-direction: column; gap: 6px; }
-.tl-lane { display: flex; flex-direction: column; gap: 4px; }
+/* Rows sit FLUSH — the table is a grid, not a stack of floating strips, so
+   lanes and rows contribute no vertical gap. Separation is carried by the
+   banding, the grey lane heading and the `--tl-grid` line. */
+.tl-body { display: flex; flex-direction: column; gap: 0; }
+.tl-lane { display: flex; flex-direction: column; gap: 0; }
 /* Banded rows.
    - Labor & Timesheets: plain alternation (its rows are employees — nothing to
      group them by).
@@ -469,7 +479,7 @@
 /* divider inside the grey band (slate-200 would be lighter than the band itself) */
 .tl-row-order .tl-row-label,
 .tl-row-contract .tl-row-label {
-  border-right-color: #c7d0dd;
+  border-right-color: #ccd5e1;
 }
 .tl-row-label {
   position: sticky;
@@ -498,7 +508,8 @@
   position: relative;
   background: var(--tl-band-track);
   border: 1px solid var(--slate-100);
-  border-radius: 6px;
+  /* square + flush: adjacent rows share one continuous gridline */
+  border-radius: 0;
   min-height: var(--tl-track-plain);
 }
 .tl-row-order .tl-row-track { min-height: var(--tl-track-base); }
@@ -1062,9 +1073,10 @@ i.ts-lunch { color: var(--tcol); }
 @media (max-width: 860px) { .ts-page { grid-template-columns: 1fr; height: auto; overflow: visible; } .ts-page .sched-timeline { min-height: 72vh; } }
 
 
-/* uniform, symmetric vertical rhythm in the timesheet timeline (matches scheduler feel) */
-.ts-page .tl-head { margin-bottom: 6px; }
-.ts-page .tl-body { gap: 6px; padding-bottom: 6px; }
+/* uniform, symmetric vertical rhythm in the timesheet timeline (matches scheduler feel) —
+   rows are flush here too; only the body keeps a bottom pad under the last row */
+.ts-page .tl-head { margin-bottom: 0; }
+.ts-page .tl-body { gap: 0; padding-bottom: 6px; }
 .ts-page .tl-inner { padding: 0 0 0 0; }
 
 /* timesheet: active orders as a vertical stack + centered bars + 4-line employee label */
@@ -2264,7 +2276,9 @@ a { color: var(--brand); }
 
 .tl-row-track {
   border: 0;
-  box-shadow: inset 0 0 0 1px var(--slate-100);
+  /* `--tl-grid` (not slate-100): rows are flush, so this inset ring is the only
+     line between two rows and must read on white, banded and grey rows alike. */
+  box-shadow: inset 0 0 0 1px var(--tl-grid);
 }
 .tl-row.conflict .tl-row-track {
   box-shadow: inset 0 0 0 1px #fecaca;

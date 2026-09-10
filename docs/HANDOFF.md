@@ -207,19 +207,31 @@ detail right**, with orders as the top rows.
     maths is expressed on the bar and the row follows. Re-size in **one** place: `--tl-bar`.
   - *Banded rows:* a striped row swaps the `--tl-band-label` / `--tl-band-track` pair
     for its `…-alt` twin; the band covers the sticky label column *and* the bar track, so
-    a stripe reads as one line. **Who gets striped differs by page:** Labor & Timesheets
+    a stripe reads as one line. The `…-alt` tints are **light on purpose** (`#f0f4fa` /
+    `#eef3f9` — a ~10% luminance step off white): heavy zebra fought the bar colours.
+    **Who gets striped differs by page:** Labor & Timesheets
     has nothing to group its rows by, so it simply alternates
     (`.tl-body > .tl-row:nth-child(even)`); the Scheduler takes parity from the *template*
     instead — `[class.band]="i % 2 === 1"` on the booked-item `@for` — so **the stripes
     restart at every order** rather than running on down the whole calendar. Data tables
     band the same way via `--row-band` on `.table tbody tr:nth-child(even)` (declared
     **before** the hover rule so hover still wins).
+  - *Flush table, not floating strips:* `.tl-body` / `.tl-lane` have **`gap: 0`** and
+    `.tl-row-track` / `.tl-day-head` are **square** (`border-radius: 0`), so rows share one
+    continuous gridline and the calendar reads as a table. `.tl-head` has no bottom margin
+    either — its sticky `box-shadow` is what separates it from the first row. The line
+    between two rows is `--tl-grid` (`#e4e9f0`), applied as the track's inset ring (the
+    real border is stripped to keep bars aligned with the header columns — see the
+    "Calendar alignment" block at the end of the file); it is chosen to read on a white,
+    banded *and* grey row. `--slate-100` (the old ring) vanished on a banded row.
   - *Lane heading:* the order/contract row (`.tl-row-order` / `.tl-row-contract`) is
     deliberately **not** a stripe — it pins both band vars to the flat grey `--tl-base-row`
     so label + track read as one continuous grey band, and its bar falls back to the grey
     `--tl-base-bar` / `--tl-base-ink` / `--tl-base-accent` (it carries no `--tint-*`). The
     pastel item rows underneath then read as that order's detail lines, and the grey row
-    is what makes "banding resets here" obvious.
+    is what makes "banding resets here" obvious. Keep `--tl-base-row` **light** (`#e8ecf4`):
+    it spans the full width, so a deep grey turns an unscheduled stretch into a black hole;
+    all the depth belongs to the bar.
   - *Bar colours:* pastel fill + saturated ink, never solid saturated blocks (monday-style).
     Each type sets `--tint-bg` / `--tint-ink` / `--tint-accent` from the soft tokens in
     `:root`: `.tl-res-*` for the Scheduler, `.ts-*` for the Timesheets (which keep `--tcol`
