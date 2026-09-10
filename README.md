@@ -52,6 +52,11 @@ src/app/
 3. Create `features/<name>/` components that read/write through the service.
 4. Register the route in `app.routes.ts` and the nav group in `app.component.ts`.
 
+Table row actions follow one shared pattern (Admin → Locations is the reference):
+`class="btn btn-ims-outline btn-sm2"` with a single icon and no label text —
+`bi-plus-lg` add, `bi-pencil` edit, `bi-x-lg` remove, `bi-eye` view — labelled by a
+`title` tooltip inside a `text-end text-nowrap` cell.
+
 The `DataService` mirrors the prototype's `IMS.store`; a future `HttpClient`
 adapter replaces its synchronous methods (the `apiAdapter` contract) without
 touching feature code.

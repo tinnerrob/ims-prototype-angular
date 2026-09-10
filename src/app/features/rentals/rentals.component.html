@@ -55,8 +55,8 @@
               <td class="num">{{ data.money(r.retailRate) }}</td>
               <td class="num">{{ r.qty }}</td>
               <td class="num strong">{{ data.money(data.rentalSpread(r)) }}</td>
-              <td class="text-end">
-                <button class="btn btn-ims-outline btn-sm2" type="button" (click)="remove(r)">
+              <td class="text-end text-nowrap">
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(r)">
                   <i class="bi bi-x-lg"></i>
                 </button>
               </td>

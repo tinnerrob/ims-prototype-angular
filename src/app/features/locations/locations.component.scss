@@ -31,8 +31,6 @@
   font-weight: 600;
 }
 
-/* a disabled remove (type still in use) should not look clickable */
-.btn:disabled {
-  cursor: not-allowed;
-}
+/* row actions (+, pencil, x) and the disabled-in-use remove button follow the
+   shared table-action pattern in src/styles.scss */
 

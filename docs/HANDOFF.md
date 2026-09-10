@@ -90,6 +90,12 @@ detail right**, with orders as the top rows.
 - Angular templates **cannot use inline arrow functions** — put logic in methods.
 - Feature = model + DataService table (+seed/persistence) + list/overlay UI + route +
   nav + roadmap note. Build + serve each change; commit + push.
+- **Table row actions** use one shared pattern (Admin → Locations is the reference):
+  `class="btn btn-ims-outline btn-sm2"` + a single Bootstrap icon, no label text —
+  `bi-plus-lg` (add a child), `bi-pencil` (edit/rename), `bi-x-lg` (remove),
+  `bi-eye` (view). The label lives in a `title` tooltip, cells are
+  `class="text-end text-nowrap"`, and a still-in-use row is `[disabled]` (global
+  `.btn:disabled { cursor: not-allowed; }` in `src/styles.scss`).
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler

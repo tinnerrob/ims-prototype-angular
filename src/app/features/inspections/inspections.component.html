@@ -103,14 +103,13 @@
               <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
               <th class="num">Meter Out</th><th class="num">Meter In</th>
               <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th>
+              <th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
             @for (r of inspections(); track r.id) {
               <tr>
-                <td class="strong mono">
-                  <button class="btn btn-link p-0 mono strong" type="button" (click)="openEdit(r)">{{ r.id }}</button>
-                </td>
+                <td class="strong mono">{{ r.id }}</td>
                 <td class="strong">{{ r.itemId }}</td>
                 <td>{{ r.direction }}</td>
                 <td class="mono text-muted2">{{ data.fmtDate(r.date) }}</td>
@@ -119,6 +118,11 @@
                 <td class="num">{{ r.fuelOut ?? '—' }}</td>
                 <td class="num">{{ r.fuelIn ?? '—' }}</td>
                 <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
+                <td class="text-end text-nowrap">
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openEdit(r)">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                </td>
               </tr>
 
 <!-- edit inspection modal (prototype `inspectionModal`) -->

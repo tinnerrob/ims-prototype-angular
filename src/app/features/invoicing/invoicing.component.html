@@ -65,11 +65,7 @@
           @for (inv of invoices(); track inv.id) {
             <tr>
               <td class="strong mono">{{ inv.id }}</td>
-              <td>
-                <button class="btn btn-link p-0 mono strong" type="button" (click)="openDetail(inv)">
-                  {{ inv.orderId }}
-                </button>
-              </td>
+              <td class="mono text-muted2">{{ inv.orderId }}</td>
               <td class="text-muted2 text-xs2">{{ customer(inv) }}</td>
               <td class="num">{{ inv.cycle }}</td>
               <td class="mono text-muted2">{{ data.fmtDate(inv.cycleStart) }} → {{ data.fmtDate(inv.cycleEnd) }}</td>

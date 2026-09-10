@@ -2215,3 +2215,17 @@ a { color: var(--brand); }
   flex: 0 0 auto;
 }
 
+/* ------------------------------------------------------------------
+   Table row actions — one shared icon-button pattern across every page
+   (Admin → Locations is the reference): `btn btn-ims-outline btn-sm2`
+   + a single Bootstrap icon (bi-plus-lg / bi-pencil / bi-x-lg / bi-eye),
+   with the label carried by a `title` tooltip instead of button text.
+   No extra rules are needed — the shared `btn-sm2` styling already sizes
+   the icon button; this block only carries the disabled state.
+   ------------------------------------------------------------------ */
+/* a disabled row action (e.g. a location type still in use) must not read
+   as clickable */
+.btn:disabled {
+  cursor: not-allowed;
+}
+

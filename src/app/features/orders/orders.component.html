@@ -86,7 +86,7 @@
                 <td class="num">{{ o.lineItems.length }}</td>
                 <td class="num">{{ data.money(gross(o)) }}</td>
                 <td><span [class]="badge(o.status === 'active' ? 'Active' : 'Closed')">{{ statusLabel[o.status] }}</span></td>
-                <td class="text-end">
+                <td class="text-end text-nowrap">
                   <button class="btn btn-ims-outline btn-sm2" type="button" title="View" (click)="openDetail(o)">
                     <i class="bi bi-eye"></i>
                   </button>

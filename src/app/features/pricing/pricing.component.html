@@ -92,10 +92,10 @@
                     }
                   </td>
                   <td class="text-end text-nowrap">
-                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openOverhead(o)">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openOverhead(o)">
                       <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="removeOverhead(o)">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeOverhead(o)">
                       <i class="bi bi-x-lg"></i>
                     </button>
                   </td>
@@ -134,10 +134,10 @@
                   <td>{{ t.city || '—' }}</td>
                   <td class="num">{{ (t.rate * 100).toFixed(3) }}%</td>
                   <td class="text-end text-nowrap">
-                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openTax(t)">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openTax(t)">
                       <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="removeTax(t)">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeTax(t)">
                       <i class="bi bi-x-lg"></i>
                     </button>
                   </td>
