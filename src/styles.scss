@@ -579,7 +579,7 @@
    still separates from the `#fff5f5` wash of its own row. */
 .tl-res.conflict { --tint-bg: hsl(0, 35%, 88%); --tint-ink: hsl(0, 66%, 28%); --tint-accent: hsl(0, 62%, 42%); }
 /* the conflicted ROW keeps a lighter red wash than the conflicted BAR, so the
-   bar (danger-soft + the red edge) still stands out against its own row */
+   bar (its own red fill + the red edge) still stands out against its own row */
 .tl-row.conflict .tl-row-track { background: #fff5f5; border-color: #fecaca; }
 .tl-row.conflict .tl-row-label.res { background: #fff5f5; color: #b91c1c; font-weight: 700; }
 .tl-row.conflict .tl-row-label.res .text-muted2 { color: #b91c1c; }
