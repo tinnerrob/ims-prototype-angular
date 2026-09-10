@@ -2125,3 +2125,43 @@ a { color: var(--brand); }
 }
 
 
+/* =========================================================
+   Calendar alignment + week/month header separators (2026-09-09)
+   ---------------------------------------------------------
+   The bar/column misalignment came from `.tl-row-track` having a 1px
+   border: absolutely-positioned bars resolve their left/width % against the
+   track's PADDING box (width − 2px), while the header day columns span the
+   full track width — so bars drift further off with each day across a row.
+   Removing the border (keeping the same visual via an inset shadow) makes the
+   track's padding box equal the header's column area, so bars line up exactly.
+   ========================================================= */
+
+.tl-row-track {
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--slate-100);
+}
+.tl-row.conflict .tl-row-track {
+  box-shadow: inset 0 0 0 1px #fecaca;
+}
+
+/* Vertical separators between day/date header cells (week + month),
+   mirroring the hour separators in Day view. */
+.tl-head .tl-day-head {
+  border-left: 1px solid rgba(148, 163, 184, .35);
+}
+.tl-head .tl-corner + .tl-day-head {
+  border-left: 0;
+}
+/* Day view already separates its 24 hour cells; keep its single wrapper clean. */
+.tl-head .tl-day-head.tl-day-hours {
+  border-left: 0;
+}
+
+/* The 120px label/corner columns carry a 1px right border — include it in the
+   box so the header and the body track start at exactly the same x. */
+.tl-corner,
+.tl-row-label {
+  box-sizing: border-box;
+}
+
+
