@@ -86,11 +86,12 @@ interface Availability {
   key: 'free' | 'partial' | 'busy' | 'inactive';
   blocked: boolean;
   badge: string;
-  /** Card row under the cost line — "Booked on ORD-1001", "Out now on ORD-1004",
-   *  "In the shop", "Retired". Empty for a free item (the card stays 2 rows). */
+  /** Card-row detail — "Booked on ORD-1001" / "Out now on ORD-1004" / "In the
+   *  shop" / "Retired". Empty for a free item (the card stays 2 rows). */
   line: string;
-  /** The booking's date span, on its own row under `line`. Empty when there is
-   *  no booking to date. */
+  /** The booking's date span, printed inline *after* `line` (`· 8/20/26 → 8/24/26`)
+   *  in the compact M/D/YY form — the full `data.fmtDate()` pushed the range onto
+   *  a row of its own in the 340px pane. Empty when there is no booking to date. */
   dates: string;
   /** Tooltip: the same facts in one sentence (and the only place that says
    *  overbooking is allowed — it used to be printed on every booked card). */
@@ -410,6 +411,16 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   /**
+   * M/D/YY — the compact date for the pool cards' booking row. `data.fmtDate()`
+   * prints leading zeros and a 4-digit year (08/24/2026), which is right for the
+   * panels but pushed "· 08/24/2026 → 09/04/2026" onto a second row here.
+   */
+  private fmtDay(iso: string): string {
+    const d = this.data.parseDT(iso);
+    return `${d.getMonth() + 1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`;
+  }
+
+  /**
    * Availability of a pool resource **for the visible period** — the badge/colour
    * update as the Day/Week/Month view, the period pager or the bookings change.
    * A booked item stays schedulable (overbooking is allowed and flagged in the
@@ -430,17 +441,19 @@ export class SchedulerComponent implements OnDestroy {
     if (booked.length) {
       const orders = [...new Set(booked.map((b) => b.orderId))];
       // Span every booking in range (ISO dates sort as strings), so a card with
-      // two of them still gets one honest "first out → last back" date row.
+      // two of them still gets one honest "first out → last back" range.
       const from = booked.reduce((a, b) => (b.start < a ? b.start : a), booked[0].start);
       const to = booked.reduce((a, b) => (b.end > a ? b.end : a), booked[0].end);
-      const span = this.data.fmtDate(from) + ' → ' + this.data.fmtDate(to);
+      // Compact form for the card row; the hover title keeps the full dates.
+      const span = this.fmtDay(from) + ' → ' + this.fmtDay(to);
+      const full = this.data.fmtDate(from) + ' → ' + this.data.fmtDate(to);
       return {
         key: 'busy',
         blocked: false,
         badge: booked.length + ' booked',
         line: 'Booked on ' + orders.join(', '),
         dates: span,
-        note: 'Booked on ' + orders.join(', ') + ' (' + span + ') — drop to overbook.',
+        note: 'Booked on ' + orders.join(', ') + ' (' + full + ') — drop to overbook.',
       };
     }
     const out = this.data.outInfo(item.id);

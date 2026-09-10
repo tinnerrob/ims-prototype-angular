@@ -153,6 +153,14 @@
   font-size: 9.5px;
 }
 
+/* The booking dates ride on the "Booked on ORD-…" row. Kept unbreakable and
+   tabular so the range can never wrap away from its order, and so two cards'
+   date columns line up under each other. */
+.sched-side .res-when {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .sched-side .pool-scope {
   margin-bottom: 4px;
   line-height: 1.3;

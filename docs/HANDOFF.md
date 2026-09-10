@@ -63,17 +63,22 @@ detail right**, with orders as the top rows.
 - **Pool card layout** — one fact per row, so it reads as a record rather than a label:
 
   ```
-  SS-204  CAT 320 Excavator      id · name   (name ellipsises, never wraps the card)
-  $650/d · Available             cost · item status
-  Booked on ORD-1001             only when booked somewhere in range
-  08/24/2026 → 09/04/2026        the booking's own row, first-out → last-back
+  SS-204  CAT 320 Excavator                    id · name (name ellipsises)
+  $650/d · Available                           cost · item status
+  Booked on CT-2024-001 · 8/20/26 → 8/24/26    only when booked in range
   ```
 
   There is **no type chip and no count badge** ("2 booked" is gone). The card's own
   colour *is* the highlight — `.res-busy` red, `.partial` amber, `.res-free` green,
-  `.inactive` faded — and the state is spelled out in the last two rows. "— drop to
+  `.inactive` faded — and the state is spelled out in that third row. "— drop to
   overbook" was dropped from the row (it lives in the hover `title`, along with the
   full order list and span, and overbooking is still allowed).
+- **The booking range rides on the order row**, and in **M/D/YY** (`fmtDay()`, not
+  `data.fmtDate()`'s 08/24/2026): `Booked on CT-2024-001 · 8/20/26 → 8/24/26` is 41
+  chars ≈ 200px, comfortably inside the ~318px of card text — the padded full form
+  wrapped onto a line of its own. `.res-when` is `nowrap` + `tabular-nums`, so the
+  range can never split from its order and two cards' date columns line up. The
+  hover `title` still carries the full MM/DD/YYYY span.
 - **`Availability` carries structured fields** (`badge` / `line` / `dates` / `note`),
   not one prose string: `line` = "Booked on ORD-1001" (all distinct orders, comma-
   joined), `dates` = the min start → max end across every booking in range (the old

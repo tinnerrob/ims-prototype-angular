@@ -61,10 +61,7 @@
                 </div>
                 <div class="res-meta">{{ data.money(it.rateDaily) }}/d · {{ it.status }}</div>
                 @if (av.line) {
-                  <div class="res-note">{{ av.line }}</div>
-                }
-                @if (av.dates) {
-                  <div class="res-note">{{ av.dates }}</div>
+                  <div class="res-note">{{ av.line }}@if (av.dates) {<span class="res-when"> · {{ av.dates }}</span>}</div>
                 }
               </div>
             } @empty {
