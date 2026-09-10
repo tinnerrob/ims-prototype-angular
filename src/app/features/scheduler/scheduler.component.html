@@ -32,7 +32,6 @@
       <div class="card">
         <div class="card-header">
           <span class="card-title"><i class="bi bi-box-seam"></i> Inventory Pool</span>
-          <span class="text-muted2 text-xs">drag to a block · dbl-click to view</span>
         </div>
         <div class="card-body">
           <select class="form-select mb-2" [(ngModel)]="poolType">
@@ -55,12 +54,11 @@
                 (dragend)="onDragEnd()"
                 (dblclick)="showAssetView(it)"
               >
-                <div class="res-card-head">
-                  <span class="type-chip tc-{{ it.type }}">{{ typeLabel(it.type) }}</span>
-                  @if (availability(it).badge) {
+                @if (availability(it).badge) {
+                  <div class="res-card-head">
                     <span class="badge-status {{ poolBadgeClass(availability(it)) }}">{{ availability(it).badge }}</span>
-                  }
-                </div>
+                  </div>
+                }
                 <div class="res-name">{{ it.name }}</div>
                 <div class="res-meta">{{ it.id }} · {{ data.money(it.rateDaily) }}/d · {{ it.status }}</div>
                 @if (availability(it).note) {

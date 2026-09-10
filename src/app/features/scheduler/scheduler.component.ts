@@ -80,8 +80,6 @@ interface BookingRef { orderId: string; start: string; end: string }
  *  range; `blocked` only means "not schedulable at all" (a retired item). */
 interface Availability { key: 'free' | 'partial' | 'busy' | 'inactive'; blocked: boolean; badge: string; note: string; }
 
-const POOL_TYPES = CATALOG_TYPES.map((t) => ({ key: t.key, label: 'Items (' + t.label + ')' }));
-
 /** Catalog-type icon for the read-only asset viewer (matches the Items tabs). */
 const POOL_ICON: Record<string, string> = {
   serialized: 'bi-truck-front',
@@ -122,7 +120,10 @@ const POOL_ADD_LABEL: Record<string, string> = {
   styleUrl: './scheduler.component.scss',
 })
 export class SchedulerComponent implements OnDestroy {
-  readonly poolTypes = POOL_TYPES;
+  /** Pool tabs. The plain catalog labels ("Bulk Resources", not
+   *  "Items (Bulk Resources)") — the card is already titled Inventory Pool, so
+   *  the "Items (…)" prefix was redundant and pushed the select to truncate. */
+  readonly poolTypes = CATALOG_TYPES;
   /** Per-type status options, exposed for the New Resource modal. */
   readonly statuses = ITEM_STATUSES;
   view: View = 'week';

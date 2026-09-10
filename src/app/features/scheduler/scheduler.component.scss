@@ -112,6 +112,10 @@
 }
 
 .sched-side .res-card-head {
+  /* the type chip ("Serialized"/"Bulk"…) is gone — the pool select above the
+     list already says which pool you're looking at — so a lone availability
+     badge sits at the right end */
+  justify-content: flex-end;
   margin-bottom: 1px;
   line-height: 1.2;
 }
@@ -141,6 +145,22 @@
 
 .sched-side .btn-sm2 {
   padding: 3px 8px;
+}
+
+/* Everything in a pool body EXCEPT the list is fixed-size. The list
+   (`.queue-scroll`, `flex: 1 1 auto`) is the only child that should absorb the
+   body's height; the rest default to `flex-shrink: 1`, so a long pool used to
+   quietly squash the select, the range line and the action button — which is
+   what made "New <resource>" a different height from "New Order". The min-height
+   is belt-and-braces on top of `btn-sm2`'s own 30px. */
+.sched-side .card-body > .form-select,
+.sched-side .card-body > .pool-scope,
+.sched-side .card-body > .btn-sm2 {
+  flex: 0 0 auto;
+}
+
+.sched-side .card-body > .btn-sm2 {
+  min-height: 30px;
 }
 
 /* selected order / queue highlight (prototype dashboard.css) */

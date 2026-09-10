@@ -60,7 +60,21 @@ detail right**, with orders as the top rows.
   (`availability()` → `bookingsInRange()`), not from a fixed/lifetime state, and
   re-evaluates when the Day/Week/Month view, the period pager or the bookings change:
   `n booked` (booked somewhere in the range), `On site · ORD-…` (out on custody now),
-  `In Shop`, `Inactive`. `rangeLabel()` is shown above the pool for context.
+  `In Shop`, `Inactive`. `rangeLabel()` is shown above the pool for context. Cards
+  carry **no type chip** — the pool select right above the list already says which
+  pool you're looking at, so the badge row is just that availability state (and is
+  omitted entirely when there is none).
+- **Pool select labels are the plain catalog names** (`poolTypes = CATALOG_TYPES`:
+  "Bulk Resources", not "Items (Bulk Resources)") — "Items (…)" only made sense as
+  an Items-page tab label, and here it both duplicated the Inventory Pool title and
+  crowded the 340px pane. The card header is title-only for the same reason (the
+  "drag to a block · dbl-click to view" hint moved into each card's `title` tooltip);
+  a header hint ellipsed "Inventory Pool" onto two lines.
+- **Pane action buttons are pinned:** `.sched-side .card-body > .form-select /
+  .pool-scope / .btn-sm2` are `flex: 0 0 auto` (only `.queue-scroll` flexes) — as
+  plain column flex items they defaulted to `flex-shrink: 1`, so a long pool list
+  squashed the `<select>` and the action button, leaving "New <resource>"
+  visibly shorter than "New Order" (whose own `.sched-actions` body never shrinks).
 - **Resize (day-granular in Week/Month; 15-min in Day):** every order and each
   inventory bar has edge handles. Dragging snaps to a day (Week/Month) or to
   15 minutes (Day). Line bars are clamped inside their order window; resizing an
