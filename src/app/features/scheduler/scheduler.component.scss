@@ -153,10 +153,21 @@
   font-size: 9.5px;
 }
 
-/* The booking dates ride on the "Booked on ORD-…" row. Kept unbreakable and
-   tabular so the range can never wrap away from its order, and so two cards'
-   date columns line up under each other. */
+/* Booking row: the range is right-justified, so a stack of booked cards shows
+   its dates in one vertical line at the card's right edge instead of trailing
+   the order id (which is a variable width). Only the row that actually carries
+   dates flexes — the other `line` states stay a plain sentence. */
+.sched-side .res-note.res-booked {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* Unbreakable and tabular so a range can never split from its own row, and so
+   two cards' date columns line up under each other. `margin-left: auto` is what
+   pushes it to the right edge of the card. */
 .sched-side .res-when {
+  margin-left: auto;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }

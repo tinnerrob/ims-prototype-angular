@@ -65,7 +65,7 @@ detail right**, with orders as the top rows.
   ```
   SS-204  CAT 320 Excavator                    id · name (name ellipsises)
   $650/d · Available                           cost · item status
-  Booked on CT-2024-001 · 8/20/26 → 8/24/26    only when booked in range
+  Booked on CT-2024-001          8/20/26 → 8/24/26   ← range right-justified
   ```
 
   There is **no type chip and no count badge** ("2 booked" is gone). The card's own
@@ -73,12 +73,16 @@ detail right**, with orders as the top rows.
   `.inactive` faded — and the state is spelled out in that third row. "— drop to
   overbook" was dropped from the row (it lives in the hover `title`, along with the
   full order list and span, and overbooking is still allowed).
-- **The booking range rides on the order row**, and in **M/D/YY** (`fmtDay()`, not
-  `data.fmtDate()`'s 08/24/2026): `Booked on CT-2024-001 · 8/20/26 → 8/24/26` is 41
-  chars ≈ 200px, comfortably inside the ~318px of card text — the padded full form
-  wrapped onto a line of its own. `.res-when` is `nowrap` + `tabular-nums`, so the
-  range can never split from its order and two cards' date columns line up. The
-  hover `title` still carries the full MM/DD/YYYY span.
+- **The booking range shares the order row but is right-justified** (`.res-when` is
+  `margin-left: auto` inside `.res-note.res-booked`, a `flex` row) and in **M/D/YY**
+  (`fmtDay()`, not `data.fmtDate()`'s 08/24/2026). Flush-right beats trailing the
+  order id — ids vary in width, so the dates now form one clean vertical column at
+  the card's right edge across the whole list. The row is the only place that
+  flexes: the other `line` states ("In the shop", "Retired") stay a plain sentence,
+  and `.res-when` is `nowrap` + `tabular-nums` so a range never splits and the
+  columns stay aligned. Fits with room to spare (41 chars ≈ 200px in ~318px of card
+  text, worst case two orders ≈ 260px). The hover `title` still carries the full
+  MM/DD/YYYY span.
 - **`Availability` carries structured fields** (`badge` / `line` / `dates` / `note`),
   not one prose string: `line` = "Booked on ORD-1001" (all distinct orders, comma-
   joined), `dates` = the min start → max end across every booking in range (the old

@@ -89,9 +89,10 @@ interface Availability {
   /** Card-row detail — "Booked on ORD-1001" / "Out now on ORD-1004" / "In the
    *  shop" / "Retired". Empty for a free item (the card stays 2 rows). */
   line: string;
-  /** The booking's date span, printed inline *after* `line` (`· 8/20/26 → 8/24/26`)
-   *  in the compact M/D/YY form — the full `data.fmtDate()` pushed the range onto
-   *  a row of its own in the 340px pane. Empty when there is no booking to date. */
+  /** The booking's date span, right-justified on the same row as `line`, in the
+   *  compact M/D/YY form (`8/20/26 → 8/24/26`): `data.fmtDate()`'s padded
+   *  08/24/2026 needed a row of its own in the 340px pane. Empty when there is no
+   *  booking to date. */
   dates: string;
   /** Tooltip: the same facts in one sentence (and the only place that says
    *  overbooking is allowed — it used to be printed on every booked card). */
