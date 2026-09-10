@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 
 import {
-  Branch,
   CatalogType,
   CATALOG_TYPE_KEYS,
   CategoryOption,
@@ -13,6 +12,8 @@ import {
   InvoiceStatus,
   InvoiceTotals,
   Item,
+  Location,
+  LocationType,
   Movement,
   MovementKind,
   Order,
@@ -93,11 +94,14 @@ function countWeekdays(a: string, b: string): number {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 3;
+  private readonly VERSION = 4;
 
   private db: {
     settings: {
-      branches: Branch[];
+      /** Location hierarchy (ragged / adjacency list — see `Location`). */
+      locations: Location[];
+      /** User-defined location types (Site, Yard, Bin, …). */
+      locationTypes: LocationType[];
       taxSchedules: TaxSchedule[];
       overheads: Overhead[];
       pricing: PricingSettings;
@@ -119,7 +123,8 @@ export class DataService {
     invoices: Invoice[];
   } = {
     settings: {
-      branches: this.seedBranches(),
+      locations: this.seedLocations(),
+      locationTypes: this.seedLocationTypes(),
       taxSchedules: this.seedTaxSchedules(),
       overheads: this.seedOverheads(),
       pricing: this.seedPricing(),
@@ -154,7 +159,8 @@ export class DataService {
       const snap = JSON.parse(raw);
       if (!snap || snap._v !== this.VERSION) return; // stale/incompatible -> reseed
       if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
-      if (snap.settings?.branches) this.db.settings.branches = snap.settings.branches;
+      if (Array.isArray(snap.settings?.locations)) this.db.settings.locations = snap.settings.locations;
+      if (Array.isArray(snap.settings?.locationTypes)) this.db.settings.locationTypes = snap.settings.locationTypes;
       if (snap.settings?.taxSchedules) this.db.settings.taxSchedules = snap.settings.taxSchedules;
       if (snap.settings?.overheads) this.db.settings.overheads = snap.settings.overheads;
       if (snap.settings?.pricing) this.db.settings.pricing = snap.settings.pricing;
@@ -679,37 +685,143 @@ export class DataService {
   }
 
 
-  /* ------------------------------ branches ------------------------------ */
+  /* ------------------------------ locations ----------------------------- */
 
-  listBranches(): Branch[] {
-    return [...this.db.settings.branches];
+  /** Locations in insertion order (the view assembles the tree by `parentId`). */
+  listLocations(): Location[] {
+    return [...this.db.settings.locations];
   }
 
-  createBranch(data: Omit<Branch, 'id'> & { id?: string }): Branch {
-    const rec: Branch = { ...data, id: data.id ?? this.nextBranchId() };
-    this.db.settings.branches.push(rec);
+  getLocation(id: string): Location | undefined {
+    return this.db.settings.locations.find((x) => x.id === id);
+  }
+
+  /** Direct children of a location (null/undefined parent = top level). */
+  locationChildren(parentId: string | null | undefined): Location[] {
+    const key = parentId ?? null;
+    return this.db.settings.locations.filter((l) => (l.parentId ?? null) === key);
+  }
+
+  /** Number of locations sitting directly under a location. */
+  locationChildCount(id: string): number {
+    return this.db.settings.locations.filter((l) => l.parentId === id).length;
+  }
+
+  createLocation(data: Omit<Location, 'id'> & { id?: string }): Location {
+    const rec: Location = { ...data, id: data.id ?? this.nextLocationId() };
+    this.db.settings.locations.push(rec);
     this.save();
     return rec;
   }
 
-  updateBranch(id: string, patch: Partial<Branch>): void {
-    const b = this.db.settings.branches.find((x) => x.id === id);
-    if (b) {
-      Object.assign(b, patch);
-      this.save();
+  /**
+   * Patch a location. Re-parenting is guarded so the ragged hierarchy can
+   * never form a cycle: a location may not become its own ancestor.
+   */
+  updateLocation(id: string, patch: Partial<Location>): void {
+    const loc = this.db.settings.locations.find((x) => x.id === id);
+    if (!loc) return;
+    const next: Partial<Location> = { ...patch };
+    if (next.parentId && this.isLocationAncestor(next.parentId, id)) {
+      delete next.parentId; // refuse the move — would create a cycle
     }
+    Object.assign(loc, next);
+    this.save();
   }
 
-  removeBranch(id: string): void {
-    const i = this.db.settings.branches.findIndex((x) => x.id === id);
-    if (i >= 0) {
-      this.db.settings.branches.splice(i, 1);
-      this.save();
+  /**
+   * Remove a location. Its children are re-parented to the removed node's own
+   * parent (move up one level) so the hierarchy stays intact and nothing is
+   * orphaned — the adjacency-list equivalent of re-pointing the child rows'
+   * `parent_id` at the deleted node's parent.
+   */
+  removeLocation(id: string): void {
+    const i = this.db.settings.locations.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    const [removed] = this.db.settings.locations.splice(i, 1);
+    const up = removed.parentId ?? null;
+    for (const child of this.db.settings.locations) {
+      if (child.parentId === id) child.parentId = up;
     }
+    this.save();
   }
 
-  private nextBranchId(): string {
-    return 'BR-' + String(this.db.settings.branches.length + 1).padStart(2, '0');
+  /** True when `candidateId` is `ofId` or sits anywhere beneath it (cycle guard). */
+  isLocationAncestor(candidateId: string, ofId: string): boolean {
+    const seen = new Set<string>();
+    let cur: string | null | undefined = candidateId;
+    while (cur) {
+      if (cur === ofId) return true;
+      if (seen.has(cur)) return false; // defensive: pre-existing cycle
+      seen.add(cur);
+      cur = this.getLocation(cur)?.parentId ?? null;
+    }
+    return false;
+  }
+
+  private nextLocationId(): string {
+    let max = 0;
+    for (const l of this.db.settings.locations) {
+      const m = l.id.match(/-(\d+)$/);
+      if (m) {
+        const n = Number(m[1]);
+        if (n > max) max = n;
+      }
+    }
+    return 'LOC-' + String(max + 1).padStart(2, '0');
+  }
+
+  /** The id `createLocation` will assign next — for read-only modal previews. */
+  previewLocationId(): string {
+    return this.nextLocationId();
+  }
+
+  /* --------------------------- location types --------------------------- */
+
+  /** All location types (Locations → Location Types grid). */
+  locationTypeRecords(): LocationType[] {
+    return [...this.db.settings.locationTypes];
+  }
+
+  /** Active location type names — what the location editor offers. */
+  activeLocationTypes(): string[] {
+    return this.db.settings.locationTypes.filter((t) => t.active !== false).map((t) => t.name);
+  }
+
+  /** Location count using a type (Location Types grid "Locations" column). */
+  locationTypeCount(name: string): number {
+    return this.db.settings.locations.filter((l) => l.type === name).length;
+  }
+
+  addLocationType(name: string, active = true): void {
+    const clean = name.trim();
+    if (!clean || this.db.settings.locationTypes.some((t) => t.name === clean)) return;
+    this.db.settings.locationTypes.push({ name: clean, active });
+    this.save();
+  }
+
+  /** Rename a type, keeping every location that uses it consistent. */
+  renameLocationType(oldName: string, newName: string, active = true): void {
+    const clean = newName.trim();
+    if (!clean) return;
+    const rec = this.db.settings.locationTypes.find((t) => t.name === oldName);
+    if (!rec || this.db.settings.locationTypes.some((t) => t.name === clean && t.name !== oldName)) return;
+    rec.name = clean;
+    rec.active = active;
+    for (const l of this.db.settings.locations) {
+      if (l.type === oldName) l.type = clean;
+    }
+    this.save();
+  }
+
+  /** Remove a type when no location uses it. Returns false while still in use. */
+  removeLocationType(name: string): boolean {
+    if (this.locationTypeCount(name) > 0) return false;
+    const i = this.db.settings.locationTypes.findIndex((t) => t.name === name);
+    if (i < 0) return false;
+    this.db.settings.locationTypes.splice(i, 1);
+    this.save();
+    return true;
   }
 
   /* ----------------------------- movements ------------------------------ */
@@ -1877,11 +1989,34 @@ export class DataService {
     }));
   }
 
-  /** Branch / yard profiles (prototype `IMS.settings.branches`). */
-  private seedBranches(): Branch[] {
+  /**
+   * User-defined location types. These are the vocabulary the location editor
+   * offers and the levels a ragged hierarchy is usually built from.
+   */
+  private seedLocationTypes(): LocationType[] {
+    return ['Site', 'Yard', 'Zone', 'Warehouse', 'Rack', 'Shelf', 'Bin', 'Dock', 'Office', 'Customer Site', 'Vehicle']
+      .map((name) => ({ name, active: true }));
+  }
+
+  /**
+   * Location hierarchy (ragged / adjacency list). Demonstrates that any node
+   * may be a parent and that depth is unbounded. `parentId: null` = top level.
+   */
+  private seedLocations(): Location[] {
     return [
-      { id: 'BR-ATL', name: 'Atlanta Main', address: '1200 Logistics Dr, Atlanta GA', phone: '(404) 555-0100', tz: 'America/New_York' },
-      { id: 'BR-SAV', name: 'Savannah Port', address: '8 Terminal Way, Savannah GA', phone: '(912) 555-0177', tz: 'America/New_York' },
+      { id: 'LOC-01', name: 'Atlanta Main Campus', type: 'Site', parentId: null, address: '1200 Logistics Dr, Atlanta GA', phone: '(404) 555-0100', tz: 'America/New_York' },
+      { id: 'LOC-02', name: 'Main Yard', type: 'Yard', parentId: 'LOC-01', address: '1200 Logistics Dr, Atlanta GA', phone: '(404) 555-0101', tz: 'America/New_York' },
+      { id: 'LOC-03', name: 'Yard A — Equipment Staging', type: 'Zone', parentId: 'LOC-02', address: '1200 Logistics Dr, Atlanta GA', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-04', name: 'Yard B — Trailer Parking', type: 'Zone', parentId: 'LOC-02', address: '1200 Logistics Dr, Atlanta GA', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-05', name: 'Warehouse 1', type: 'Warehouse', parentId: 'LOC-01', address: '1210 Logistics Dr, Atlanta GA', phone: '(404) 555-0120', tz: 'America/New_York' },
+      { id: 'LOC-06', name: 'Aisle 1', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-07', name: 'Bay A1-01', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-08', name: 'Bay A1-02', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-09', name: 'Aisle 2', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-10', name: 'Savannah Port Depot', type: 'Site', parentId: null, address: '8 Terminal Way, Savannah GA', phone: '(912) 555-0177', tz: 'America/New_York' },
+      { id: 'LOC-11', name: 'Dock 4', type: 'Dock', parentId: 'LOC-10', address: '8 Terminal Way, Savannah GA', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-12', name: 'Bonded Warehouse', type: 'Warehouse', parentId: 'LOC-10', address: '10 Terminal Way, Savannah GA', phone: '(912) 555-0178', tz: 'America/New_York' },
+      { id: 'LOC-13', name: 'Secure Cage C', type: 'Zone', parentId: 'LOC-12', address: '', phone: '', tz: 'America/New_York' },
     ];
   }
 

@@ -1,14 +1,38 @@
-/* Locations page: the branch profile cards live in one scrolling column
-   (the global design system styles the cards themselves). */
-:host > .card > .card-body {
-  flex: 1 1 auto;
-  min-height: 0;
+/* ------------------------------------------------------------------
+   Locations page — the ragged hierarchy as a table, plus the Location Types
+   table. The routed-view shell in src/styles.scss already stretches the card
+   and lets `.table-wrap` scroll, so only the cell internals live here.
+   ------------------------------------------------------------------ */
+
+/* Location cell: hierarchy glyph + name + id, indented by depth (inline px). */
+.loc-cell {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  overflow-y: auto;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
 }
 
-.branch-card {
+.loc-glyph {
   flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--slate-400);
 }
+
+/* child rows use a lighter connector glyph so the tree reads at a glance */
+.loc-glyph.loc-child {
+  color: var(--slate-300);
+}
+
+/* neutral chip for a location type (keeps full type names readable) */
+.badge-status.loc-type {
+  background: rgba(15, 23, 42, .06);
+  color: var(--slate-700);
+  border-color: rgba(15, 23, 42, .08);
+  font-weight: 600;
+}
+
+/* a disabled remove (type still in use) should not look clickable */
+.btn:disabled {
+  cursor: not-allowed;
+}
+

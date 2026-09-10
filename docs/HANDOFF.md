@@ -26,7 +26,7 @@ persisted data store. Module views are gated by `ModulesService` + a route guard
 | Categories & Types | `features/categories` | type tabs, add/rename/remove |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
 | Items & Stock | `features/items` | typed catalog: list/CRUD per type |
-| Locations | `features/locations` | yard/branch/warehouse/bin CRUD |
+| Locations | `features/locations` | ragged location hierarchy + custom location types |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log |
 | **Allocations & Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |

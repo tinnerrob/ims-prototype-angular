@@ -209,10 +209,31 @@ export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
   adjust: 'Adjust',
 };
 
-/** Branch / yard profile (prototype `IMS.settings.branches`) — the Locations view. */
-export interface Branch {
+/**
+ * Location type — user-defined, e.g. Site, Yard, Building, Rack, Bin
+ * (prototype `IMS.settings.branches`, extended for the hierarchy).
+ */
+export interface LocationType {
+  name: string;
+  /** Inactive types stay in the list but drop out of the location pickers. */
+  active: boolean;
+}
+
+/**
+ * Location in a ragged (adjacency-list) hierarchy.
+ *
+ * A location has at most ONE parent (`parentId`, null for a root) and any
+ * number of children; any node may itself be a parent, at any depth. This
+ * mirrors a DB `locations` table with a self-referencing `parent_id` column
+ * and a `location_type` column.
+ */
+export interface Location {
   id: string;
   name: string;
+  /** Location type name (see `LocationType`). */
+  type: string;
+  /** Parent location id, or null/undefined for a top-level location. */
+  parentId?: string | null;
   address: string;
   phone: string;
   tz: string;

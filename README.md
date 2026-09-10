@@ -32,7 +32,7 @@ src/app/
 │   ├── invoicing/       # Billing & Invoicing (module: invoices from orders)
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
 │   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
-│   ├── locations/       # Locations (yards/branches/warehouses/bins)
+│   ├── locations/       # Locations (ragged parent/child hierarchy + location types)
 │   ├── logistics/       # Logistics & Dispatch (module: truck dispatch)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
@@ -63,7 +63,7 @@ touching feature code.
 - [x] Items & Stock (core) — typed catalog: list + CRUD per item type.
 - [ ] Items & Stock (core) — typed catalog + item registry.
 - [x] Item Hand-Off & Custody (core) — movements: issue/return + chain-of-custody log.
-- [x] Locations (core) — yard/branch/warehouse/bin CRUD.
+- [x] Locations (core) — ragged location hierarchy (parent/child adjacency list) + custom location types.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log.
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
