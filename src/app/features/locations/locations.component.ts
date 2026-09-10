@@ -2,13 +2,16 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { Location } from '../../core/models';
+import { Location, LocationType } from '../../core/models';
 
 /** A location plus its depth in the ragged hierarchy (drives table indentation). */
 interface LocationRow {
   loc: Location;
   depth: number;
 }
+
+/** Which of the page's two sub-tables is showing (the tab strip at the top). */
+type Tab = 'locations' | 'types';
 
 /**
  * Data-free blank editor form. Class field initializers run *before* the
@@ -25,13 +28,14 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 };
 
 /**
- * Locations (Administration → Locations) — the location hierarchy as a table.
+ * Locations (Administration → Locations) — the location hierarchy and the
+ * location-type vocabulary as two sub-tables behind a tab strip (the same
+ * pattern as Categories & Types), so both live on one page.
  *
  * Port of the prototype's `renderBranches` (js/pages/branches.js), extended to
  * a *ragged hierarchy*: each location has one optional parent and any number
  * of children, and any node may itself be a parent at any depth (an
- * adjacency-list / self-referencing `parent_id`). The location-type vocabulary
- * is managed in the sibling section Administration → Location Types.
+ * adjacency-list / self-referencing `parent_id`).
  */
 @Component({
   selector: 'ims-locations',
@@ -41,6 +45,9 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
   styleUrl: './locations.component.scss',
 })
 export class LocationsComponent {
+  /** Which sub-table the page is showing. */
+  tab: Tab = 'locations';
+
   search = '';
 
   /** Location editor. */
@@ -48,7 +55,20 @@ export class LocationsComponent {
   editingId: string | null = null;
   form = { ...BLANK_LOCATION_FORM };
 
+  /** Location-type editor (the `types` sub-table). */
+  typeModalOpen = false;
+  renameTypeFrom: string | null = null;
+  formTypeName = '';
+  formTypeActive = true;
+
   constructor(readonly data: DataService) {}
+
+  /** Switch sub-table — closing any open editor so a stale modal can't linger. */
+  selectTab(t: Tab): void {
+    this.tab = t;
+    this.closeForm();
+    this.closeType();
+  }
 
   /* ------------------------------- queries ------------------------------ */
 
@@ -166,5 +186,49 @@ export class LocationsComponent {
 
   private emptyForm() {
     return { ...BLANK_LOCATION_FORM, id: this.data.previewLocationId() };
+  }
+
+  /* ---------------------------- location types --------------------------- */
+
+  typeRecords(): LocationType[] {
+    return this.data.locationTypeRecords();
+  }
+
+  /** How many locations use a type (blocks removal while > 0). */
+  typeCount(name: string): number {
+    return this.data.locationTypeCount(name);
+  }
+
+  openTypeAdd(): void {
+    this.renameTypeFrom = null;
+    this.formTypeName = '';
+    this.formTypeActive = true;
+    this.typeModalOpen = true;
+  }
+
+  openTypeRename(t: LocationType): void {
+    this.renameTypeFrom = t.name;
+    this.formTypeName = t.name;
+    this.formTypeActive = t.active !== false;
+    this.typeModalOpen = true;
+  }
+
+  saveType(): void {
+    const name = this.formTypeName.trim();
+    if (!name) return;
+    if (this.renameTypeFrom) this.data.renameLocationType(this.renameTypeFrom, name, this.formTypeActive);
+    else this.data.addLocationType(name, this.formTypeActive);
+    this.closeType();
+  }
+
+  removeType(t: LocationType): void {
+    this.data.removeLocationType(t.name);
+  }
+
+  closeType(): void {
+    this.typeModalOpen = false;
+    this.renameTypeFrom = null;
+    this.formTypeName = '';
+    this.formTypeActive = true;
   }
 }

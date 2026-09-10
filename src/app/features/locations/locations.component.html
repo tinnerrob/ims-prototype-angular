@@ -2,13 +2,35 @@
 
 <div class="card">
   <div class="card-header">
-    <span class="card-title"><i class="bi bi-diagram-3"></i> Location Hierarchy</span>
-    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
-      <i class="bi bi-plus-lg"></i> New Location
-    </button>
+    <span class="card-title">
+      <i class="bi {{ tab === 'locations' ? 'bi-diagram-3' : 'bi-tags' }}"></i>
+      {{ tab === 'locations' ? 'Location Hierarchy' : 'Location Types' }}
+    </span>
+    @if (tab === 'locations') {
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+        <i class="bi bi-plus-lg"></i> New Location
+      </button>
+    } @else {
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openTypeAdd()">
+        <i class="bi bi-plus-lg"></i> Add Location Type
+      </button>
+    }
   </div>
   <div class="card-body">
-    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+    <!-- sub-page toggle (same pattern as Categories & Types) -->
+    <div class="subtabs">
+      <button class="subtab" type="button" [class.active]="tab === 'locations'" (click)="selectTab('locations')">
+        <i class="bi bi-diagram-3"></i>Locations
+        <span class="count-pill">{{ locations().length }}</span>
+      </button>
+      <button class="subtab" type="button" [class.active]="tab === 'types'" (click)="selectTab('types')">
+        <i class="bi bi-tags"></i>Location Types
+        <span class="count-pill">{{ typeRecords().length }}</span>
+      </button>
+    </div>
+
+    @if (tab === 'locations') {
+      <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
         <input class="filter-input search" placeholder="Search ID, name, type, address…" [(ngModel)]="search" />
         <span class="text-muted2">{{ rows().length }} of {{ locations().length }} locations</span>
       </div>
@@ -66,6 +88,50 @@
           </tbody>
         </table>
       </div>
+    } @else {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Location Type</th>
+              <th>Active</th>
+              <th class="num">Locations</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of typeRecords(); track t.name) {
+              <tr>
+                <td class="strong">{{ t.name }}</td>
+                <td>
+                  @if (t.active !== false) {
+                    <span class="badge-status st-active"><i class="bi bi-circle-fill"></i>Active</span>
+                  } @else {
+                    <span class="badge-status st-out"><i class="bi bi-circle-fill"></i>Inactive</span>
+                  }
+                </td>
+                <td class="num">{{ typeCount(t.name) }}</td>
+                <td class="text-end text-nowrap">
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Rename" (click)="openTypeRename(t)">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                          [disabled]="typeCount(t.name) > 0"
+                          [title]="typeCount(t.name) > 0 ? 'In use by ' + typeCount(t.name) + ' location(s)' : 'Remove'"
+                          (click)="removeType(t)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="4" class="text-center text-muted2 py-4">No location types defined.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   </div>
 </div>
 
@@ -132,6 +198,43 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-ims-outline" (click)="closeForm()">Cancel</button>
           <button type="button" class="btn btn-ims" [disabled]="!form.id.trim() || !form.name.trim()" (click)="save()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- ===== Add / Rename Location Type (the "Location Types" sub-page) ===== -->
+@if (typeModalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi {{ renameTypeFrom ? 'bi-pencil-square' : 'bi-plus-circle' }}"></i>
+            {{ renameTypeFrom ? 'Rename Location Type — ' + renameTypeFrom : 'Add Location Type' }}
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeType()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">{{ renameTypeFrom ? 'New Type Name' : 'Type Name' }} *</label>
+            <input class="form-control" [(ngModel)]="formTypeName" placeholder="e.g. Rack, Bin, Dock, Customer Site" />
+          </div>
+          <div class="field-group">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="loc-type-active" [(ngModel)]="formTypeActive" />
+              <label class="form-check-label" for="loc-type-active">Active</label>
+            </div>
+            <div class="form-hint">Inactive types stay in the list but drop out of the location editor.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeType()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!formTypeName.trim()" (click)="saveType()">
             <i class="bi bi-check2"></i> Save Record
           </button>
         </div>

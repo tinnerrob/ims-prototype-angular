@@ -3,7 +3,6 @@ import { Routes } from '@angular/router';
 import { requireModule } from './core/module.guard';
 import { AdminComponent } from './features/admin/admin.component';
 import { FeatureModulesComponent } from './features/admin/feature-modules.component';
-import { LocationTypesComponent } from './features/admin/location-types.component';
 import { CategoriesComponent } from './features/categories/categories.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { HandoffComponent } from './features/handoff/handoff.component';
@@ -35,9 +34,11 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'modules' },
       { path: 'locations', component: LocationsComponent },
-      { path: 'location-types', component: LocationTypesComponent },
       { path: 'categories', component: CategoriesComponent },
       { path: 'modules', component: FeatureModulesComponent },
+      // Location Types merged into the Locations page as a sub-tab — keep the
+      // old URL working for bookmarks.
+      { path: 'location-types', redirectTo: 'locations', pathMatch: 'full' },
       { path: '**', redirectTo: 'modules' },
     ],
   },

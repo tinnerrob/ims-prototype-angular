@@ -2208,3 +2208,10 @@ a { color: var(--brand); }
   min-height: 0;
 }
 
+/* Keep a page's tab strip / filter row pinned at their natural height so only
+   the table below them takes (and scrolls in) the remaining space. */
+.admin-pane > :not(router-outlet) > .card > .card-body > .subtabs,
+.admin-pane > :not(router-outlet) > .card > .card-body > .d-flex {
+  flex: 0 0 auto;
+}
+
