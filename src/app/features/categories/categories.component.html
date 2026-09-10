@@ -1,65 +1,98 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Categories &amp; Types</h1>
-      <p class="page-sub">Manage category options for each item type (core catalog).</p>
-    </div>
-    <span class="core-tag">Core · always on</span>
+<div class="page-head"></div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-tags"></i> Resource Categories</span>
+    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openAdd()">
+      <i class="bi bi-plus-lg"></i> Add Category
+    </button>
   </div>
-
-  <div class="card">
-    <div class="type-tabs" role="tablist">
-      @for (t of types; track t.key) {
-        <button
-          type="button"
-          class="type-tab"
-          [class.active]="type === t.key"
-          (click)="selectType(t.key)"
-        >{{ t.label }}</button>
-      }
-    </div>
-
-    <div class="card-body">
-      <div class="add-row">
-        <input
-          class="input"
-          placeholder="New category name…"
-          [(ngModel)]="draft"
-          (keyup.enter)="add()"
-          aria-label="New category name"
-        />
-        <button class="btn btn-primary" (click)="add()" [disabled]="!draft.trim()">
-          + Add
+  <div class="card-body">
+    <!-- type tab strip -->
+    <div class="subtabs">
+      @for (t of tabs; track t.key) {
+        <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
+          <i class="bi {{ t.icon }}"></i>{{ t.label }}
+          <span class="count-pill">{{ data.categoryRecordsFor(t.key).length }}</span>
         </button>
-      </div>
-
-      @if (names.length === 0) {
-        <p class="empty">No categories for this type yet — add one above.</p>
-      } @else {
-        <ul class="cat-list">
-          @for (name of names; track $index) {
-            <li class="cat-row">
-              @if (editIndex === $index) {
-                <input
-                  class="input"
-                  [(ngModel)]="editValue"
-                  (keyup.enter)="saveEdit($index, name)"
-                  (keyup.esc)="cancelEdit()"
-                  (blur)="saveEdit($index, name)"
-                />
-                <button class="btn btn-ghost" (mousedown)="saveEdit($index, name)">Save</button>
-                <button class="btn btn-ghost" (mousedown)="cancelEdit()">Cancel</button>
-              } @else {
-                <span class="name">{{ name }}</span>
-                <div class="row-actions">
-                  <button class="btn btn-ghost" (click)="beginEdit($index, name)">Rename</button>
-                  <button class="btn btn-danger-ghost" (click)="remove($index, name)">Remove</button>
-                </div>
-              }
-            </li>
-          }
-        </ul>
       }
     </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Active</th>
+            <th class="num">Items</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of records(); track c.name) {
+            <tr>
+              <td class="strong">{{ c.name }}</td>
+              <td>
+                @if (c.active !== false) {
+                  <span class="badge-status st-active"><i class="bi bi-circle-fill"></i>Active</span>
+                } @else {
+                  <span class="badge-status st-out"><i class="bi bi-circle-fill"></i>Inactive</span>
+                }
+              </td>
+              <td class="num">{{ itemsIn(c.name) }}</td>
+              <td class="text-end text-nowrap">
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Rename" (click)="openRename(c)">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(c)">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4" class="text-center text-muted2 py-4">No categories for this type.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
   </div>
-</section>
+</div>
+
+<!-- add / rename modal (prototype `openFormModal`) -->
+@if (modalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi {{ renameFrom ? 'bi-pencil-square' : 'bi-plus-circle' }}"></i>
+            {{ renameFrom ? 'Rename Category — ' + renameFrom : 'Add Category — ' + label() }}
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">{{ renameFrom ? 'New Category Name' : 'Category Name' }} *</label>
+            <input class="form-control" [(ngModel)]="formName" />
+          </div>
+          <div class="field-group">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="cat-active" [(ngModel)]="formActive" />
+              <label class="form-check-label" for="cat-active">Active</label>
+            </div>
+            <div class="form-hint">Inactive categories won't appear in Items &amp; Stock.</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="close()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!formName.trim()" (click)="save()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}

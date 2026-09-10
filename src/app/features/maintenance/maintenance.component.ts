@@ -2,16 +2,21 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { WorkOrder, WORK_ORDER_STATUSES, WorkOrderPriority, WorkOrderStatus } from '../../core/models';
+import {
+  SERVICE_TYPES,
+  statusClass,
+  WorkOrder,
+  WORK_ORDER_STATUSES,
+  WorkOrderPart,
+  WorkOrderStatus,
+} from '../../core/models';
 
-interface WoForm {
-  itemId: string;
-  title: string;
-  serviceType: string;
-  priority: WorkOrderPriority;
-  notes: string;
-}
-
+/**
+ * Field Service & Maintenance (module) — port of the prototype's
+ * `renderMaintenance` (js/pages/maintenance.js): the work-order cost grid
+ * (parts + labour roll-up), a status filter and the New Work Order modal that
+ * books parts and moves the asset into the shop.
+ */
 @Component({
   selector: 'ims-maintenance',
   standalone: true,
@@ -21,54 +26,110 @@ interface WoForm {
 })
 export class MaintenanceComponent {
   readonly statuses = WORK_ORDER_STATUSES;
+  readonly serviceTypes = SERVICE_TYPES;
 
-  formOpen = false;
-  form: WoForm = this.emptyForm();
+  filter: 'all' | WorkOrderStatus = 'all';
+  modalOpen = false;
+  form = this.emptyForm();
 
   constructor(readonly data: DataService) {}
 
   workOrders(): WorkOrder[] {
-    return this.data.listWorkOrders();
+    const all = this.data.listWorkOrders();
+    return this.filter === 'all' ? all : all.filter((w) => w.status === this.filter);
+  }
+
+  count(status: WorkOrderStatus): number {
+    return this.data.listWorkOrders().filter((w) => w.status === status).length;
   }
 
   serialized() {
     return this.data.listItems('serialized');
   }
 
+  /** Consumables + stock parts available to book against a work order. */
+  consumables() {
+    return this.data.listItems('consumable');
+  }
+
+  parts() {
+    return this.data.listItems('part');
+  }
+
+  technicians() {
+    return this.data.listItems('labor').filter((e) => e.role === 'Technician');
+  }
+
+  cost(w: WorkOrder) {
+    return this.data.workOrderCost(w);
+  }
+
+  assetLabel(w: WorkOrder): string {
+    const a = this.data.getItem('serialized', w.itemId);
+    return a ? `${a.id} ${this.data.mkName(a)}` : w.itemId;
+  }
+
+  partLabel(p: WorkOrderPart): string {
+    return `${p.refId} ×${p.qty}`;
+  }
+
+  badge(status: string): string {
+    return 'badge-status st-' + statusClass(status);
+  }
+
   openForm(): void {
     this.form = this.emptyForm();
-    this.formOpen = true;
+    this.modalOpen = true;
   }
 
   save(): void {
     const f = this.form;
-    if (!f.title.trim() || !f.itemId) return;
+    if (!f.itemId || !f.type) return;
+    const parts: WorkOrderPart[] = [];
+    if (Number(f.consumableQty) > 0 && f.consumableId) {
+      parts.push({ kind: 'consumable', refId: f.consumableId, qty: Number(f.consumableQty) });
+    }
+    if (Number(f.partQty) > 0 && f.partId) {
+      parts.push({ kind: 'part', refId: f.partId, qty: Number(f.partQty) });
+    }
     this.data.createWorkOrder({
       itemId: f.itemId,
-      title: f.title,
-      serviceType: f.serviceType || 'Repair',
-      priority: f.priority,
-      openedAt: new Date().toISOString().slice(0, 10),
-      notes: f.notes,
+      type: f.type,
+      meterReading: Number(f.meterReading) || 0,
+      status: f.status,
+      parts,
+      laborHours: Number(f.laborHours) || 0,
+      date: new Date().toISOString().slice(0, 10),
     });
-    this.formOpen = false;
+    this.closeForm();
   }
 
-  setStatus(wo: WorkOrder, status: WorkOrderStatus): void {
-    this.data.setWorkOrderStatus(wo.id, status);
+  setStatus(w: WorkOrder, status: string): void {
+    this.data.setWorkOrderStatus(w.id, status as WorkOrderStatus);
   }
 
-  remove(wo: WorkOrder): void {
-    if (confirm(`Remove work order ${wo.id}?`)) this.data.removeWorkOrder(wo.id);
+  remove(w: WorkOrder): void {
+    this.data.removeWorkOrder(w.id);
   }
 
-  private emptyForm(): WoForm {
+  closeForm(): void {
+    this.modalOpen = false;
+  }
+
+  private emptyForm() {
+    const asset =
+      this.serialized().find((a) => a.status === 'In Shop')?.id ?? this.serialized()[0]?.id ?? '';
     return {
-      itemId: this.serialized()[0]?.id ?? '',
-      title: '',
-      serviceType: 'Repair',
-      priority: 'normal',
-      notes: '',
+      itemId: asset,
+      type: 'Repair',
+      meterReading: 0,
+      status: 'In Progress' as WorkOrderStatus,
+      laborHours: 1,
+      consumableId: this.consumables()[0]?.id ?? '',
+      consumableQty: 0,
+      partId: this.parts()[0]?.id ?? '',
+      partQty: 0,
+      technicianId: this.technicians()[0]?.id ?? '',
     };
   }
 }

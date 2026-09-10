@@ -2,23 +2,81 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import {
-  CatalogType,
-  CATALOG_TYPES,
-  ITEM_STATUSES,
-  Item,
-  ItemStatus,
-} from '../../core/models';
+import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
 
-interface ItemForm {
-  name: string;
-  category: string;
-  status: ItemStatus;
-  qty: number;
-  rateDaily: number;
-  notes: string;
+interface InvTab {
+  key: CatalogType;
+  label: string;
+  icon: string;
+  addLabel: string;
 }
 
+/** Tab strip (prototype `INV_TABS`). */
+const INV_TABS: InvTab[] = [
+  { key: 'serialized', label: 'Items (Serialized)', icon: 'bi-truck-front', addLabel: 'New Equipment' },
+  { key: 'bulk', label: 'Items (Bulk)', icon: 'bi-boxes', addLabel: 'New Bulk Resource' },
+  { key: 'consumable', label: 'Consumables', icon: 'bi-capsule', addLabel: 'New Consumable' },
+  { key: 'part', label: 'Stock Inventory', icon: 'bi-wrench-adjustable', addLabel: 'New Part' },
+  { key: 'labor', label: 'Labor / Employees', icon: 'bi-person-badge', addLabel: 'New Labor Item' },
+  { key: 'kit', label: 'Kits', icon: 'bi-boxes', addLabel: 'New Kit' },
+  { key: 'attachment', label: 'Attachments', icon: 'bi-puzzle', addLabel: 'New Attachment' },
+];
+
+/** Which tabs a vertical exposes (prototype `VERTICAL_INV_TABS`). */
+const VERTICAL_TABS: Record<string, CatalogType[]> = {
+  HeavyEquipment: ['serialized', 'bulk', 'consumable', 'part', 'labor', 'attachment', 'kit'],
+  Rental: ['serialized', 'bulk', 'consumable', 'part', 'labor', 'kit'],
+  Healthcare: ['bulk', 'consumable', 'part', 'labor'],
+  Lumberyard: ['bulk', 'consumable', 'part', 'labor'],
+  Warehouse: ['bulk', 'consumable', 'part', 'labor'],
+};
+
+/** [key, header, align] — per-type column set (prototype grid descriptors). */
+type Col = [string, string, ('num' | 'text-end')?];
+
+const COLUMNS: Record<string, Col[]> = {
+  serialized: [
+    ['id', 'Item ID'], ['serial', 'Serial / VIN'], ['name', 'Name / Model'], ['category', 'Category'],
+    ['meterHours', 'Meter Hrs', 'num'], ['fuelType', 'Fuel'], ['purchaseValue', 'Purchase Value', 'num'],
+    ['rateDaily', 'Daily', 'num'], ['status', 'Status'],
+  ],
+  bulk: [
+    ['id', 'SKU'], ['name', 'Name'], ['category', 'Category'], ['totalOwned', 'Total Owned', 'num'],
+    ['qtyAvailable', 'Available', 'num'], ['qtyOut', 'Out', 'num'], ['rateDaily', 'Daily', 'num'],
+    ['baseMonthly', 'Monthly', 'num'],
+  ],
+  consumable: [
+    ['id', 'SKU'], ['name', 'Name'], ['category', 'Category'], ['qtyOnHand', 'On Hand', 'num'],
+    ['reorderPoint', 'Reorder Pt', 'num'], ['costPrice', 'Cost', 'num'], ['retailPrice', 'Retail', 'num'],
+    ['status', 'Status'],
+  ],
+  part: [
+    ['id', 'Part ID'], ['name', 'Description'], ['category', 'Category'], ['bin', 'Bin'],
+    ['qtyOnHand', 'On Hand', 'num'], ['reorderPoint', 'Reorder Pt', 'num'], ['costPrice', 'Cost', 'num'],
+    ['status', 'Status'],
+  ],
+  labor: [
+    ['id', 'Emp ID'], ['name', 'Name'], ['role', 'Role'], ['category', 'Category'],
+    ['hourlyCost', 'Cost / hr', 'num'], ['hourlyBillable', 'Billable / hr', 'num'],
+    ['spread', 'Spread / hr', 'num'], ['status', 'Status'],
+  ],
+  kit: [
+    ['id', 'Kit ID'], ['name', 'Name'], ['category', 'Category'], ['qty', 'Qty', 'num'],
+    ['rateDaily', 'Rate', 'num'], ['status', 'Status'],
+  ],
+  attachment: [
+    ['id', 'Acc ID'], ['name', 'Name'], ['category', 'Category'], ['qty', 'Qty', 'num'],
+    ['rateDaily', 'Daily', 'num'], ['status', 'Status'],
+  ],
+};
+
+const MONEY_KEYS = ['purchaseValue', 'rateDaily', 'baseMonthly', 'costPrice', 'retailPrice', 'hourlyCost', 'hourlyBillable'];
+
+/**
+ * Items & Stock (core) — port of the prototype's Inventory view
+ * (js/pages/inventory.js): a vertical-driven tab strip with per-type record
+ * counts and the per-type column set (fleet telemetry, stock levels, labor rates).
+ */
 @Component({
   selector: 'ims-items',
   standalone: true,
@@ -27,79 +85,181 @@ interface ItemForm {
   styleUrl: './items.component.scss',
 })
 export class ItemsComponent {
-  readonly types = CATALOG_TYPES;
-  readonly statuses = ITEM_STATUSES;
-
   type: CatalogType = 'serialized';
+  search = '';
 
-  formOpen = false;
+  modalOpen = false;
   editingId: string | null = null;
-  form: ItemForm = this.emptyForm();
+  form = this.emptyForm();
 
-  constructor(readonly data: DataService) {}
+  constructor(private readonly data: DataService) {}
 
-  items(): Item[] {
-    return this.data.listItems(this.type);
+  /** Tabs for the active vertical (prototype `invTabKeys()`). */
+  tabs(): InvTab[] {
+    const allowed = VERTICAL_TABS[this.data.vertical] ?? VERTICAL_TABS['HeavyEquipment'];
+    return INV_TABS.filter((t) => allowed.includes(t.key));
+  }
+
+  activeTab(): InvTab | undefined {
+    return this.tabs().find((t) => t.key === this.type);
+  }
+
+  count(type: CatalogType): number {
+    return this.data.listItems(type).length;
+  }
+
+  /** Rows for the active tab, filtered by the inline search. */
+  rows(): Item[] {
+    const q = this.search.trim().toLowerCase();
+    const list = this.data.listItems(this.type);
+    if (!q) return list;
+    return list.filter(
+      (i) =>
+        i.id.toLowerCase().includes(q) ||
+        i.name.toLowerCase().includes(q) ||
+        i.category.toLowerCase().includes(q),
+    );
+  }
+
+  columns(): Col[] {
+    return COLUMNS[this.type] ?? COLUMNS['attachment'];
+  }
+
+  selectType(t: CatalogType): void {
+    this.type = t;
+    this.search = '';
+  }
+
+  /** Cell text for a column (template stays branch-free). */
+  cell(item: Item, key: string): string {
+    const raw = (item as unknown as Record<string, unknown>)[key];
+    if (key === 'spread') {
+      return this.data.money((item.hourlyBillable ?? 0) - (item.hourlyCost ?? 0));
+    }
+    if (MONEY_KEYS.includes(key)) {
+      return raw ? this.data.money(raw as number) : '—';
+    }
+    if (raw === undefined || raw === null || raw === '') return '—';
+    if (typeof raw === 'number') return this.data.int(raw);
+    return String(raw);
+  }
+
+  isStatus(key: string): boolean {
+    return key === 'status';
+  }
+
+  badge(item: Item): string {
+    return 'badge-status st-' + statusClass(item.status);
+  }
+
+  /** Low-stock highlight for consumables / parts (prototype reorder warning). */
+  reorder(item: Item): boolean {
+    return needsReorder(item);
   }
 
   categories(): string[] {
     return this.data.categoriesFor(this.type);
   }
 
-  openForm(it?: Item): void {
-    this.editingId = it ? it.id : null;
-    const f = it
+  /** Status options offered for the active type (prototype `ITEM_STATUSES`). */
+  statusesForType(): Item['status'][] {
+    return ITEM_STATUSES[this.type];
+  }
+
+  /* ------------------------------- editor ------------------------------- */
+
+  openForm(item?: Item): void {
+    this.editingId = item ? item.id : null;
+    this.form = item
       ? {
-          name: it.name,
-          category: it.category,
-          status: it.status,
-          qty: it.qty,
-          rateDaily: it.rateDaily,
-          notes: it.notes ?? '',
+          name: item.name,
+          category: item.category,
+          status: item.status,
+          qty: item.qty,
+          rateDaily: item.rateDaily,
+          make: item.make ?? '',
+          model: item.model ?? '',
+          serial: item.serial ?? '',
+          meterHours: item.meterHours ?? 0,
+          fuelType: item.fuelType ?? '',
+          purchaseValue: item.purchaseValue ?? 0,
+          qtyOnHand: item.qtyOnHand ?? item.qty,
+          reorderPoint: item.reorderPoint ?? 0,
+          costPrice: item.costPrice ?? 0,
+          retailPrice: item.retailPrice ?? 0,
+          bin: item.bin ?? '',
+          role: item.role ?? '',
+          hourlyCost: item.hourlyCost ?? 0,
+          hourlyBillable: item.hourlyBillable ?? 0,
         }
-      : { ...this.emptyForm(), category: this.categories()[0] ?? '' };
-    this.form = f;
-    this.formOpen = true;
+      : this.emptyForm();
+    this.modalOpen = true;
   }
 
   save(): void {
     const f = this.form;
     if (!f.name.trim()) return;
-    const patch = {
+    const patch: Record<string, unknown> = {
       name: f.name,
       category: f.category,
       status: f.status,
-      qty: f.qty,
-      rateDaily: f.rateDaily,
-      notes: f.notes,
+      qty: Number(f.qty) || 0,
+      rateDaily: Number(f.rateDaily) || 0,
     };
-    if (this.editingId) {
-      this.data.updateItem(this.type, this.editingId, patch);
-    } else {
-      this.data.createItem(this.type, patch);
+    if (this.type === 'serialized') {
+      Object.assign(patch, {
+        make: f.make, model: f.model, serial: f.serial,
+        meterHours: Number(f.meterHours) || 0, fuelType: f.fuelType,
+        purchaseValue: Number(f.purchaseValue) || 0,
+      });
     }
+    if (this.type === 'consumable' || this.type === 'part') {
+      Object.assign(patch, {
+        qtyOnHand: Number(f.qtyOnHand) || 0, reorderPoint: Number(f.reorderPoint) || 0,
+        costPrice: Number(f.costPrice) || 0, retailPrice: Number(f.retailPrice) || 0, bin: f.bin,
+      });
+    }
+    if (this.type === 'labor') {
+      Object.assign(patch, {
+        role: f.role, hourlyCost: Number(f.hourlyCost) || 0, hourlyBillable: Number(f.hourlyBillable) || 0,
+      });
+    }
+    if (this.editingId) this.data.updateItem(this.type, this.editingId, patch as Partial<Item>);
+    else this.data.createItem(this.type, patch as unknown as Omit<Item, 'type' | 'id'>);
     this.closeForm();
   }
 
+  remove(item: Item): void {
+    this.data.removeItem(this.type, item.id);
+  }
+
   closeForm(): void {
-    this.formOpen = false;
+    this.modalOpen = false;
     this.editingId = null;
   }
 
-  remove(it: Item): void {
-    if (confirm(`Remove "${it.id} · ${it.name}"?`)) {
-      this.data.removeItem(this.type, it.id);
-    }
-  }
-
-  private emptyForm(): ItemForm {
+  private emptyForm() {
     return {
       name: '',
-      category: '',
-      status: ITEM_STATUSES[this.type][0],
+      category: this.data.categoriesFor(this.type)[0] ?? '',
+      status: 'Available' as Item['status'],
       qty: 1,
       rateDaily: 0,
-      notes: '',
+      make: '',
+      model: '',
+      serial: '',
+      meterHours: 0,
+      fuelType: '',
+      purchaseValue: 0,
+      qtyOnHand: 0,
+      reorderPoint: 0,
+      costPrice: 0,
+      retailPrice: 0,
+      bin: '',
+      role: '',
+      hourlyCost: 0,
+      hourlyBillable: 0,
     };
   }
 }
+

@@ -1,94 +1,148 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 
 import { DataService } from '../../core/data.service';
-import { Item } from '../../core/models';
+import { Item, statusClass } from '../../core/models';
+import { GEO_BOUNDS, TrackedPosition, TelemetryService } from '../../core/telemetry.service';
 
-interface Ping {
-  itemId: string;
-  name: string;
-  status: string;
-  inYard: boolean;
-  lastSeen: string;
-  battery: number;
-  signal: number;
+interface Pin {
+  id: string;
+  x: number;
+  y: number;
+  alerting: boolean;
 }
 
-interface FeedEntry {
-  id: number;
-  at: string;
-  msg: string;
-  kind: 'breach' | 'ping';
+interface Ring {
+  id: string;
+  x: number;
+  y: number;
+  /** Diameter as a % of the map width (the element keeps a 1:1 aspect ratio). */
+  d: number;
+  label: string;
 }
 
-const YARD_RADIUS_M = 300;
+/** Longitude span of the simulated map window, in degrees (for ring scaling). */
+const LNG_SPAN_DEG = GEO_BOUNDS.maxLng - GEO_BOUNDS.minLng;
+/** Approximate ground width of the map window, in metres (~0.13° at 33.7°N). */
+const MAP_WIDTH_M = LNG_SPAN_DEG * 111320 * Math.cos((33.735 * Math.PI) / 180);
 
+/**
+ * Fleet Telemetry (module) — port of the prototype's `renderGeo`
+ * (js/pages/geo.js): the fleet asset status grid (status + breach badge,
+ * last reported, battery bar, meter hours) with a live filter, the geofence
+ * breach alert log, and the map (grid, yard hub, geofence rings, asset pins).
+ */
 @Component({
   selector: 'ims-telemetry',
   standalone: true,
+  imports: [FormsModule],
   templateUrl: './telemetry.component.html',
   styleUrl: './telemetry.component.scss',
 })
-export class TelemetryComponent implements OnInit, OnDestroy {
-  radius = YARD_RADIUS_M;
-  pings: Ping[] = [];
-  feed: FeedEntry[] = [];
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private seq = 0;
+export class TelemetryComponent {
+  filter = '';
 
-  constructor(readonly data: DataService) {}
-
-  ngOnInit(): void {
-    this.refreshPings();
-    this.timer = setInterval(() => this.tick(), 2500);
+  constructor(
+    readonly data: DataService,
+    readonly telemetry: TelemetryService,
+    private readonly route: ActivatedRoute,
+  ) {
+    // Global search routes here with ?q= (prototype `App.geoFilter`).
+    this.filter = this.route.snapshot.queryParamMap.get('q') ?? '';
+    this.telemetry.start();
   }
 
-  ngOnDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-  }
+  /* ------------------------------- fleet -------------------------------- */
 
-  /** Rebuild the live board from catalog items + their custody status. */
-  private refreshPings(): void {
-    const items: Item[] = this.data.listItems('serialized');
-    const now = new Date();
-    this.pings = items.map((it) => {
-      const inYard = it.status === 'Available' || it.status === 'In Shop';
-      return {
-        itemId: it.id,
-        name: it.name,
-        status: it.status,
-        inYard,
-        lastSeen: now.toLocaleTimeString(),
-        battery: 100 - ((Math.abs(it.id.length * 7) + it.name.length) % 31),
-        signal: 60 + ((it.id.charCodeAt(1) + it.name.length * 3) % 40),
-      };
+  rows(): TrackedPosition[] {
+    const q = this.filter.trim().toLowerCase();
+    const all = this.telemetry.tracked();
+    if (!q) return all;
+    return all.filter((t) => {
+      const hay = `${t.item.id} ${this.data.mkName(t.item)} ${t.item.serial ?? ''}`.toLowerCase();
+      return hay.includes(q);
     });
   }
 
-  private tick(): void {
-    const now = new Date();
-    this.pings.forEach((p) => {
-      p.lastSeen = now.toLocaleTimeString();
-      p.signal = Math.max(20, Math.min(100, p.signal + (Math.random() > 0.5 ? 1 : -1) * 5));
-      p.battery = Math.max(5, p.battery - (Math.random() > 0.7 ? 1 : 0));
-      if (p.inYard) return;
-      if (Math.random() > 0.85) {
-        this.push('breach', `Asset ${p.itemId} pinged ${Math.round(Math.random() * 180)}m outside ${this.radius}m geofence`);
-      }
-    });
-    this.push('ping', `${this.pings.filter((p) => !p.inYard).length} asset(s) on site · ${this.pings.length} tracked`);
+  totalTracked(): number {
+    return this.data.listItems('serialized').length;
   }
 
-  private push(kind: FeedEntry['kind'], msg: string): void {
-    this.seq++;
-    this.feed.unshift({ id: this.seq, at: new Date().toLocaleTimeString(), kind, msg });
-    if (this.feed.length > 20) this.feed.length = 20;
+  badge(status: string): string {
+    return 'badge-status st-' + statusClass(status);
   }
 
-  outCount(): number {
-    return this.pings.filter((p) => !p.inYard).length;
+  /** Battery bar colour band (prototype `battCls`). */
+  batteryColor(item: Item): string {
+    const b = item.battery ?? 0;
+    return b > 60 ? 'var(--success)' : b > 30 ? 'var(--warning)' : 'var(--danger)';
+  }
+
+  meterHours(item: Item): number {
+    return item.meterHours ?? 0;
+  }
+
+  reported(item: Item): string {
+    return this.data.fmtDT(item.lastReported);
+  }
+
+  locationLabel(item: Item): string {
+    return this.telemetry.locationLabel(item).label;
+  }
+
+  /* ------------------------------- alerts ------------------------------- */
+
+  alerts() {
+    return this.telemetry.recentAlerts();
   }
 
   breachCount(): number {
-    return this.feed.filter((f) => f.kind === 'breach').length;
+    return this.telemetry.breachCount();
+  }
+
+  clearAlerts(): void {
+    this.telemetry.clearAlerts();
+  }
+
+  /* -------------------------------- map --------------------------------- */
+
+  /** Map X/Y as a percentage of the viewport (prototype `latLngToXY`). */
+  private toXY(lat: number, lng: number): { x: number; y: number } {
+    const x = ((lng - GEO_BOUNDS.minLng) / LNG_SPAN_DEG) * 100;
+    const y = ((GEO_BOUNDS.maxLat - lat) / (GEO_BOUNDS.maxLat - GEO_BOUNDS.minLat)) * 100;
+    return { x: Math.max(0, Math.min(100, x)), y: Math.max(0, Math.min(100, y)) };
+  }
+
+  yardPin(): { x: number; y: number } {
+    return this.toXY(this.data.yard.lat, this.data.yard.lng);
+  }
+
+  /** Geofence rings for every open order (prototype `renderGeoMap`). */
+  rings(): Ring[] {
+    return this.data
+      .listOrders()
+      .filter((o) => o.status !== 'closed' && o.siteLat != null && o.siteLng != null)
+      .map((o) => {
+        const p = this.toXY(o.siteLat as number, o.siteLng as number);
+        const radius = o.geofenceRadius ?? 300;
+        // Diameter as a share of the map width (the element is 1:1).
+        const d = (2 * radius * 100) / MAP_WIDTH_M;
+        return {
+          id: o.orderId,
+          x: p.x,
+          y: p.y,
+          d: Math.max(4, Math.min(46, d)),
+          label: `${o.projectName} (${radius}m)`,
+        };
+      });
+  }
+
+  /** Live asset pins, red when outside their geofence. */
+  pins(): Pin[] {
+    return this.telemetry.tracked().map((t) => {
+      const p = this.toXY(t.lat, t.lng);
+      return { id: t.item.id, x: p.x, y: p.y, alerting: t.breached };
+    });
   }
 }

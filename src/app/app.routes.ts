@@ -12,6 +12,7 @@ import { LocationsComponent } from './features/locations/locations.component';
 import { LogisticsComponent } from './features/logistics/logistics.component';
 import { MaintenanceComponent } from './features/maintenance/maintenance.component';
 import { OrdersComponent } from './features/orders/orders.component';
+import { PricingComponent } from './features/pricing/pricing.component';
 import { RentalsComponent } from './features/rentals/rentals.component';
 import { SchedulerComponent } from './features/scheduler/scheduler.component';
 import { TelemetryComponent } from './features/telemetry/telemetry.component';
@@ -35,6 +36,7 @@ export const routes: Routes = [
   { path: 'logistics', component: LogisticsComponent, canActivate: [requireModule('dispatch')] },
   { path: 'maintenance', component: MaintenanceComponent, canActivate: [requireModule('service')] },
   { path: 'orders', component: OrdersComponent },
+  { path: 'pricing', component: PricingComponent },
   { path: 'rentals', component: RentalsComponent, canActivate: [requireModule('rentals')] },
   { path: 'scheduler', component: SchedulerComponent, canActivate: [requireModule('scheduling')] },
   { path: 'telemetry', component: TelemetryComponent, canActivate: [requireModule('telemetry')] },

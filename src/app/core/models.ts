@@ -32,6 +32,13 @@ export const CATALOG_TYPES: CatalogTypeDef[] = [
 
 export const CATALOG_TYPE_KEYS: CatalogType[] = CATALOG_TYPES.map((t) => t.key);
 
+/** Category option row (prototype `IMS.settings.categories[type][]`). */
+export interface CategoryOption {
+  name: string;
+  /** Inactive categories stay in the list but drop out of item pickers. */
+  active: boolean;
+}
+
 export interface Party {
   id: string;
   name: string;
@@ -57,6 +64,10 @@ export interface OrderLine {
   /** Minutes-of-day window in Day view; falls back to the order's. */
   t0?: number;
   t1?: number;
+  /** Billing weekend policy (prototype `li.weekendPolicy`). */
+  weekendPolicy?: 'bill' | 'skip' | 'overtime';
+  /** Risk / environment premium key (prototype `li.riskPremium`). */
+  riskPremium?: RiskPremiumKey;
 }
 
 export interface Order {
@@ -72,7 +83,13 @@ export interface Order {
   /** Minutes-of-day window used in Day view (defaults 08:00–17:00). */
   t0?: number;
   t1?: number;
+  /** Geofence radius (m) around the job site — drives telemetry breaches. */
+  geofenceRadius?: number;
+  /** Job-site coordinates (telemetry map). */
+  siteLat?: number;
+  siteLng?: number;
 }
+
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   draft: 'Draft',
@@ -92,8 +109,10 @@ export type ItemStatus =
   | 'Low'
   | 'Committed';
 
-/** Typed catalog item (core). Common shape across types; vertical-specific
- *  fields (meter hours, lot, …) will live in an `extended` map in a later slice. */
+/** Typed catalog item (core). Mirrors the prototype's per-type records behind one
+ *  unified `id` (the prototype calls these id/sku/partId/accId per type).
+ *  The optional fields are the prototype's per-type extras (fleet telemetry,
+ *  stock reorder points, labor rates); a feature only reads the ones it needs. */
 export interface Item {
   id: string;
   type: CatalogType;
@@ -105,7 +124,52 @@ export interface Item {
   /** daily retail rate (rentable types) or 0 */
   rateDaily: number;
   notes?: string;
+
+  /* ---- serialized fleet (prototype `IMS.itemInstances`) ---- */
+  serial?: string;
+  make?: string;
+  model?: string;
+  meterHours?: number;
+  fuelType?: string;
+  purchaseValue?: number;
+  baseWeekly?: number;
+  baseMonthly?: number;
+  lat?: number;
+  lng?: number;
+  battery?: number;
+  lastReported?: string;
+  /** Order the unit is currently out on (custody link, mirrors the prototype). */
+  orderId?: string | null;
+
+  /* ---- bulk resources (prototype `IMS.bulkResources`) ---- */
+  totalOwned?: number;
+  qtyAvailable?: number;
+  qtyOut?: number;
+
+  /* ---- consumables / parts stock (prototype `IMS.consumables` / `IMS.parts`) ---- */
+  qtyOnHand?: number;
+  reorderPoint?: number;
+  costPrice?: number;
+  retailPrice?: number;
+  bin?: string;
+  locationId?: string;
+
+  /* ---- labor / employees (prototype `IMS.labor`) ---- */
+  role?: string;
+  certs?: string[];
+  hourlyCost?: number;
+  hourlyBillable?: number;
+
+  active?: boolean;
 }
+
+/** Reorder-warning threshold check for stock types (consumable / part). */
+export function needsReorder(item: Item): boolean {
+  const onHand = item.qtyOnHand ?? item.qty;
+  const point = item.reorderPoint ?? 0;
+  return point > 0 && onHand <= point;
+}
+
 
 /** Per-type statuses offered in the Items & Stock editor. */
 export const ITEM_STATUSES: Record<CatalogType, ItemStatus[]> = {
@@ -128,6 +192,8 @@ export interface Movement {
   refId: string;
   orderId?: string | null;
   party?: string;
+  /** Yard / location the movement happened at. */
+  location?: string;
   kind: MovementKind;
   qty: number;
   at: string; // ISO timestamp
@@ -143,35 +209,101 @@ export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
   adjust: 'Adjust',
 };
 
-export type LocationType = 'yard' | 'branch' | 'warehouse' | 'bin';
-
-export interface Location {
+/** Branch / yard profile (prototype `IMS.settings.branches`) — the Locations view. */
+export interface Branch {
   id: string;
   name: string;
-  type: LocationType;
   address: string;
-  parentId?: string | null;
+  phone: string;
+  tz: string;
 }
 
-export const LOCATION_TYPE_LABEL: Record<LocationType, string> = {
-  yard: 'Yard',
-  branch: 'Branch',
-  warehouse: 'Warehouse',
-  bin: 'Bin',
+/** Sales-tax jurisdiction (prototype `IMS.settings.taxSchedules`). */
+export interface TaxSchedule {
+  code: string;
+  state: string;
+  county: string;
+  city: string;
+  rate: number;
+  note: string;
+}
+
+/** Overhead / service-fee configuration (prototype `IMS.settings.overheads`). */
+export interface Overhead {
+  id: string;
+  name: string;
+  category: 'Facility' | 'Freight/Logistics' | 'Compliance';
+  chargeType: 'Flat Fee' | 'Percent of Equipment Total' | 'Per Mile' | 'Per Day';
+  pct: number;
+  cost: number;
+  retail: number;
+  /** Auto-injected into every new order. */
+  locked: boolean;
+}
+
+export const OVERHEAD_CATEGORIES: Overhead['category'][] = ['Facility', 'Freight/Logistics', 'Compliance'];
+export const OVERHEAD_CHARGE_TYPES: Overhead['chargeType'][] = [
+  'Flat Fee',
+  'Percent of Equipment Total',
+  'Per Mile',
+  'Per Day',
+];
+
+export type RiskPremiumKey = 'standard' | 'coastal' | 'hazmat';
+
+/** Pricing rules engine (prototype `IMS.settings.pricing`). */
+export interface PricingSettings {
+  dailyMinHours: number;
+  weeklyHours: number;
+  cycleDays: number;
+  weekendPolicyDefault: 'bill' | 'skip' | 'overtime';
+  riskPremiums: Record<RiskPremiumKey, number>;
+  envFeePct: number;
+  depreciationAnnual: number;
+}
+
+export const WEEKEND_POLICIES: PricingSettings['weekendPolicyDefault'][] = ['bill', 'skip', 'overtime'];
+
+/** The operating yard (geofence centre on the telemetry map). */
+export interface Yard {
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+
+export type InspectionDirection = 'Check-Out' | 'Check-In';
+
+/** Condition checks captured on the yard inspection form. */
+export type InspectionCheckKey = 'tires' | 'fluids' | 'guards' | 'lights' | 'engine';
+
+export const INSPECTION_CHECKS: InspectionCheckKey[] = ['tires', 'fluids', 'guards', 'lights', 'engine'];
+
+export const INSPECTION_CHECK_LABEL: Record<InspectionCheckKey, string> = {
+  tires: 'Tires / Tracks',
+  fluids: 'Fluids',
+  guards: 'Safety Guards',
+  lights: 'Lights',
+  engine: 'Engine',
 };
 
-export type InspectionDirection = 'out' | 'in';
-
+/** Yard in/out inspection (prototype `IMS.inspections`). */
 export interface Inspection {
   id: string;
-  itemId: string; // serialized item
-  date: string; // ISO date
+  itemId: string; // serialized asset id
+  orderId?: string | null;
   direction: InspectionDirection;
-  meter: number;
-  fuel: number;
-  notes?: string;
+  date: string; // ISO date
+  meterOut?: number | null;
+  meterIn?: number | null;
+  fuelOut?: number | null;
+  fuelIn?: number | null;
+  checks: Record<InspectionCheckKey, boolean>;
+  photos?: number;
   status: 'Open' | 'Closed';
+  notes?: string;
 }
+
 
 /* ------------------------- industry modules --------------------------- */
 
@@ -201,36 +333,79 @@ export const INDUSTRY_MODULES: IndustryModuleDef[] = [
   { key: 'billing', label: 'Billing & Invoicing', desc: 'Invoice generation derived from priced orders.' },
 ];
 
-export type WorkOrderStatus = 'Open' | 'In Progress' | 'Completed';
-export type WorkOrderPriority = 'low' | 'normal' | 'high';
+export type WorkOrderStatus = 'In Progress' | 'Completed' | 'Pending' | 'Scheduled';
 
+export const WORK_ORDER_STATUSES: WorkOrderStatus[] = ['In Progress', 'Completed', 'Pending', 'Scheduled'];
+
+/** A part/consumable consumed by a work order (prototype `w.parts[]`). */
+export interface WorkOrderPart {
+  kind: 'part' | 'consumable';
+  refId: string;
+  qty: number;
+}
+
+/** Service / maintenance work order (prototype `IMS.workOrders`). */
 export interface WorkOrder {
   id: string;
-  itemId: string; // serialized item under service
-  title: string;
-  serviceType: string;
+  itemId: string; // serialized asset under service
+  type: string; // service type: Preventive | Repair | Inspection
+  meterReading: number;
   status: WorkOrderStatus;
-  priority: WorkOrderPriority;
-  openedAt: string; // ISO date
+  parts: WorkOrderPart[];
+  laborHours: number;
+  date: string; // ISO date
   notes?: string;
 }
 
-export const WORK_ORDER_STATUSES: WorkOrderStatus[] = ['Open', 'In Progress', 'Completed'];
+export const SERVICE_TYPES = ['Preventive', 'Repair', 'Inspection'];
 
+/** Cost roll-up for a work order (prototype `woComputed`). */
+export interface WorkOrderCost {
+  partsCost: number;
+  laborCost: number;
+  total: number;
+  laborRate: number;
+}
+
+
+export type TimesheetTarget = 'order' | 'workorder' | 'shop' | 'overhead' | 'idle' | 'lunch';
+
+/** Display metadata per time-record target (prototype `TS_KIND`). */
+export const TIMESHEET_KIND: Record<TimesheetTarget, { label: string; icon: string; cls: string }> = {
+  order: { label: 'Job', icon: 'bi-briefcase', cls: 'ts-order' },
+  workorder: { label: 'Work Order', icon: 'bi-tools', cls: 'ts-wo' },
+  shop: { label: 'Shop', icon: 'bi-wrench-adjustable', cls: 'ts-shop' },
+  overhead: { label: 'Overhead', icon: 'bi-diagram-3', cls: 'ts-overhead' },
+  idle: { label: 'Idle', icon: 'bi-hourglass-split', cls: 'ts-idle' },
+  lunch: { label: 'Lunch', icon: 'bi-cup-hot', cls: 'ts-lunch' },
+};
+
+export const TIMESHEET_TARGETS: TimesheetTarget[] = ['order', 'workorder', 'shop', 'overhead', 'idle', 'lunch'];
+
+/** A labour clock segment (prototype `IMS.timesheets` row). */
 export interface Timesheet {
   id: string;
   empId: string; // labor item id (EMP-…)
-  date: string; // ISO date
-  hours: number;
-  orderId?: string | null;
-  targetLabel: string; // display target (order id, shop, etc.)
+  date: string; // "YYYY-MM-DD"
+  clockIn: string; // "HH:mm"
+  /** null while the segment is still running (the employee is clocked in). */
+  clockOut: string | null;
+  targetType: TimesheetTarget;
+  /** Order id / work-order id for job-backed segments, else null. */
+  targetId: string | null;
+  /** Hours worked; null while running (prototype stores null too). */
+  hours: number | null;
   note?: string;
 }
 
+
 export interface RentalSub {
   id: string;
-  itemId?: string | null; // catalog item when it maps to one
+  /** Catalog item when the sub-rental maps to one (prototype `assetId`). */
+  itemId?: string | null;
   assetName: string;
+  /** Customer contract the sub-rental is billed against. */
+  orderId?: string | null;
   vendor: string;
   vendorCost: number; // daily cost to us
   retailRate: number; // daily billable
@@ -247,29 +422,86 @@ export interface Vehicle {
 
 export type DispatchStatus = 'Staged' | 'En Route' | 'Delivered' | 'Pending Return';
 
+export const DISPATCH_STATUSES: DispatchStatus[] = ['Staged', 'En Route', 'Delivered', 'Pending Return'];
+
+/** Dispatch board row (prototype `IMS.dispatches`). */
 export interface Dispatch {
   id: string;
   orderId: string;
-  orderLabel: string;
-  itemId?: string | null;
-  vehicleId: string;
+  assetId?: string | null;
+  routeSeq: number;
   driverId?: string | null;
+  vehicleId?: string | null;
   status: DispatchStatus;
 }
 
-export const DISPATCH_STATUSES: DispatchStatus[] = ['Staged', 'En Route', 'Delivered', 'Pending Return'];
-
 export type InvoiceStatus = 'pending' | 'invoiced' | 'paid';
 
+export const INVOICE_STATUSES: InvoiceStatus[] = ['pending', 'invoiced', 'paid'];
+
+export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
+  pending: 'Pending',
+  invoiced: 'Invoiced',
+  paid: 'Paid',
+};
+
+/** Cycle invoice (prototype `IMS.invoices`). */
 export interface Invoice {
   id: string;
   orderId: string;
-  orderLabel: string;
-  amount: number;
-  periodStart: string;
-  periodEnd: string;
+  cycle: number;
+  cycleStart: string;
+  cycleEnd: string;
+  envFeePct: number;
+  damageWaiver: boolean;
+  fuelCharge: number;
+  taxRate: number;
   status: InvoiceStatus;
 }
+
+/** Totals breakdown for an invoice (prototype `invoiceTotals`). */
+export interface InvoiceTotals {
+  base: number;
+  envFee: number;
+  waiver: number;
+  fuel: number;
+  tax: number;
+  total: number;
+}
+
+/* --------------------------- badge helpers ---------------------------- */
+
+/** Status -> `badge-status st-*` suffix (prototype `STATUS_CLS`). */
+const STATUS_CLS: Record<string, string> = {
+  Available: 'available',
+  'On Rent': 'onrent',
+  'In Shop': 'inshop',
+  Staged: 'staged',
+  'In Use': 'inuse',
+  Inactive: 'out',
+  Active: 'active',
+  Completed: 'closed',
+  'In Progress': 'inprogress',
+  Pending: 'reorder',
+  Scheduled: 'inshop',
+  Delivered: 'available',
+  'Pending Return': 'reorder',
+  'En Route': 'on',
+  Open: 'on',
+  Closed: 'closed',
+  Low: 'out',
+  'In Stock': 'available',
+  Committed: 'staged',
+  draft: 'closed',
+  closed: 'closed',
+  active: 'active',
+};
+
+/** Map any status string to its badge class. */
+export function statusClass(status: string): string {
+  return STATUS_CLS[status] ?? 'available';
+}
+
 
 
 

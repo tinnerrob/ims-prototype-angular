@@ -1,31 +1,162 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>IMS — Angular Port</h1>
-      <p class="page-sub">Core inventory engine first; industry modules layered on top.</p>
+<div class="page-head"></div>
+
+<div class="dash-bento">
+  <!-- KPI: fleet book value -->
+  <div class="bento bento--kpi c-3">
+    <div class="kpi-row">
+      <div class="kpi-icon kpi-blue"><i class="bi bi-safe"></i></div>
+      <div>
+        <div class="kpi-label">Total Fleet Book Value</div>
+        <div class="kpi-value">{{ data.money(kpis().book) }}</div>
+        <div class="text-muted2 small">{{ kpis().fleet }} serialized units</div>
+      </div>
     </div>
   </div>
 
-  <div class="stat-row">
-    <div class="card stat"><span class="stat-label">Categories seeded</span><span class="stat-value">28</span></div>
-    <div class="card stat"><span class="stat-label">Parties seeded</span><span class="stat-value">{{ partyCount() }}</span></div>
-    <div class="card stat"><span class="stat-label">Port status</span><span class="stat-value">Foundations + 1 core view</span></div>
+  <!-- KPI: utilisation -->
+  <div class="bento bento--kpi c-3">
+    <div class="kpi-row">
+      <div class="kpi-icon kpi-green"><i class="bi bi-arrow-repeat"></i></div>
+      <div>
+        <div class="kpi-label">Physical Utilization</div>
+        <div class="kpi-value">{{ data.pct(kpis().util) }}</div>
+        <div class="text-muted2 small">{{ kpis().onRent }} of {{ kpis().fleet }} on rent</div>
+      </div>
+    </div>
   </div>
 
-  <div class="card">
-    <div class="card-header">Port roadmap</div>
-    <ul class="ms-list">
-      @for (m of milestones; track m.route) {
-        <li class="ms-row">
-          <span class="ms-state" [class.done]="m.done">{{ m.done ? '✔' : '◌' }}</span>
-          @if (m.done) {
-            <a class="ms-title" routerLink="{{ m.route }}">{{ m.title }}</a>
-          } @else {
-            <span class="ms-title muted">{{ m.title }}</span>
-          }
-          <span class="ms-note">{{ m.note }}</span>
-        </li>
-      }
-    </ul>
+  <!-- KPI: geofence alerts (module-gated, as in the prototype) -->
+  @if (telemetryOn()) {
+    <div class="bento bento--kpi c-3">
+      <div class="kpi-row">
+        <div class="kpi-icon kpi-red"><i class="bi bi-sign-stop"></i></div>
+        <div>
+          <div class="kpi-label">Out-of-Geofence Alerts</div>
+          <div class="kpi-value">{{ telemetry.breachCount() }}</div>
+          <div class="text-muted2 small">live breach stream</div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- KPI: revenue run-rate -->
+  <div class="bento bento--kpi c-3">
+    <div class="kpi-row">
+      <div class="kpi-icon kpi-purple"><i class="bi bi-graph-up-arrow"></i></div>
+      <div>
+        <div class="kpi-label">Revenue Run-Rate</div>
+        <div class="kpi-value">{{ data.money(kpis().run) }}</div>
+        <div class="text-muted2 small">annualised from active orders</div>
+      </div>
+    </div>
   </div>
-</section>
+
+  <!-- Active orders + margin -->
+  <div class="bento c-8">
+    <div class="bento-head">
+      <span class="bento-title"><i class="bi bi-folder2-open"></i> Active Orders &amp; Margin</span>
+      <span class="badge-status st-on">{{ activeOrders().length }} active</span>
+    </div>
+    <div class="bento-body">
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Order</th><th>Project</th><th class="num">Days</th>
+              <th class="num">Gross</th><th class="num">Net</th><th class="num">Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of activeOrders(); track row.order.orderId) {
+              <tr>
+                <td class="strong mono">{{ row.order.orderId }}</td>
+                <td>
+                  {{ row.order.projectName }}
+                  <div class="text-muted2 small">{{ row.order.party }}</div>
+                </td>
+                <td class="num">{{ row.days }}</td>
+                <td class="num">{{ data.money(row.gross) }}</td>
+                <td class="num" [class.text-danger]="row.net < 0">{{ data.money(row.net) }}</td>
+                <td class="num"><span [class]="marginBadge(row.margin)">{{ data.pct(row.margin) }}</span></td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="text-center text-muted2 py-3">No active orders</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent geofence alerts -->
+  @if (telemetryOn()) {
+    <div class="bento c-4">
+      <div class="bento-head">
+        <span class="bento-title"><i class="bi bi-broadcast"></i> Recent Geofence Alerts</span>
+        <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openView('telemetry')">Open</button>
+      </div>
+      <div class="bento-body">
+        @for (a of recentAlerts(); track $index) {
+          <div class="mini-alert">
+            <i class="bi bi-exclamation-triangle-fill"></i><span>{{ a.msg }}</span>
+          </div>
+        } @empty {
+          <p class="text-muted2 py-2">No alerts yet.</p>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Reorder warnings -->
+  <div class="bento c-8">
+    <div class="bento-head">
+      <span class="bento-title"><i class="bi bi-exclamation-triangle"></i> Reorder Warnings — Consumables &amp; Stock</span>
+      <span class="badge-status st-reorder">{{ reorders().length }}</span>
+    </div>
+    <div class="bento-body">
+      @for (r of reorders(); track r.ref) {
+        <div class="list-line">
+          <span class="l">{{ r.ref }} · {{ r.label }}</span>
+          <span class="r d-flex align-items-center gap-2">
+            <span class="text-danger">{{ data.int(r.qtyOnHand) }} / &#64; {{ data.int(r.reorderPoint) }}</span>
+            <button class="btn btn-ims btn-sm2" type="button" (click)="triggerReorder(r.type, r.ref)">
+              <i class="bi bi-arrow-repeat"></i> Reorder
+            </button>
+          </span>
+        </div>
+      } @empty {
+        <p class="text-muted2 py-2">All stock above reorder point.</p>
+      }
+    </div>
+  </div>
+
+  <!-- Fleet status -->
+  <div class="bento c-4">
+    <div class="bento-head">
+      <span class="bento-title"><i class="bi bi-pie-chart"></i> Fleet Status</span>
+    </div>
+    <div class="bento-body">
+      @for (s of fleetStatusOrder; track s) {
+        <div class="list-line">
+          <span class="l"><span [class]="badge(s)"><i class="bi bi-circle-fill"></i>{{ s }}</span></span>
+          <span class="r strong">{{ fleetByStatus(s) }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Bulk out -->
+  <div class="bento c-12">
+    <div class="bento-head">
+      <span class="bento-title"><i class="bi bi-boxes"></i> Items (Bulk) Out</span>
+    </div>
+    <div class="bento-body">
+      @for (b of bulkOut(); track b.id) {
+        <div class="list-line">
+          <span class="l">{{ b.id }} · {{ b.name }}</span>
+          <span class="r strong">{{ data.int(b.qtyOut) }} / {{ data.int(b.totalOwned) }} out</span>
+        </div>
+      }
+    </div>
+  </div>
+</div>

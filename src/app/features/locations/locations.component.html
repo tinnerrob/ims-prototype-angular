@@ -1,73 +1,79 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Locations</h1>
-      <p class="page-sub">Core location hierarchy — yards, branches, warehouses, bins.</p>
-    </div>
-    <span class="core-tag">Core · always on</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="card">
-    <div class="card-body">
-      <div class="toolbar">
-        <button class="btn btn-primary" (click)="openForm()">+ New Location</button>
-      </div>
-      <table class="table">
-        <thead>
-          <tr><th>ID</th><th>Name</th><th>Type</th><th>Address</th><th>Parent</th><th class="th-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @for (loc of locations(); track loc.id) {
-            <tr>
-              <td class="mono strong">{{ loc.id }}</td>
-              <td>{{ loc.name }}</td>
-              <td><span class="status">{{ typeLabel[loc.type] }}</span></td>
-              <td>{{ loc.address }}</td>
-              <td>{{ parentName(loc) }}</td>
-              <td class="td-end">
-                <button class="btn btn-ghost btn-sm" (click)="openForm(loc)">Edit</button>
-                <button class="btn btn-danger-ghost btn-sm" (click)="remove(loc)">Remove</button>
-              </td>
-            </tr>
-          } @empty {
-            <tr><td colspan="6" class="empty">No locations yet.</td></tr>
-          }
-        </tbody>
-      </table>
-    </div>
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-buildings"></i> Branch / Yard Profiles</span>
+    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+      <i class="bi bi-plus-lg"></i> New Branch
+    </button>
   </div>
-</section>
-
-@if (formOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">{{ editingId ? 'Edit Location' : 'New Location' }}</span>
-        <button class="icon-btn" (click)="closeForm()" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="field"><label>Name *</label><input class="input" [(ngModel)]="form.name" /></div>
-        <div class="row2">
-          <div class="field">
-            <label>Type</label>
-            <select class="input" [(ngModel)]="form.type">
-              @for (t of types; track t) { <option [value]="t">{{ typeLabel[t] }}</option> }
-            </select>
-          </div>
-          <div class="field">
-            <label>Parent (yard/branch)</label>
-            <select class="input" [(ngModel)]="form.parentId">
-              <option value="">— none —</option>
-              @for (p of parents(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
-            </select>
+  <div class="card-body">
+    @for (b of branches(); track b.id) {
+      <div class="card branch-card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="strong"><i class="bi bi-buildings me-1"></i>{{ b.id }} — {{ b.name }}</div>
+              <div class="text-muted2 text-12">{{ b.address }}</div>
+              <div class="text-muted2 text-12">{{ b.phone }} · {{ b.tz }}</div>
+            </div>
+            <div class="d-flex gap-1">
+              <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openForm(b)">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(b)">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </div>
           </div>
         </div>
-        <div class="field"><label>Address</label><input class="input" [(ngModel)]="form.address" /></div>
       </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="closeForm()">Cancel</button>
-        <button class="btn btn-primary" (click)="save()" [disabled]="!form.name.trim()">Save</button>
+    } @empty {
+      <p class="text-muted2 py-3">No branches configured.</p>
+    }
+  </div>
+</div>
+
+@if (modalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-buildings"></i>{{ editingId ? 'Edit' : 'New' }} Branch / Yard Profile
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="close()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">Branch ID *</label>
+            <input class="form-control" [(ngModel)]="form.id" [disabled]="editingId !== null" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Name</label>
+            <input class="form-control" [(ngModel)]="form.name" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Address</label>
+            <input class="form-control" [(ngModel)]="form.address" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Phone</label>
+            <input class="form-control" [(ngModel)]="form.phone" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Time Zone</label>
+            <input class="form-control" [(ngModel)]="form.tz" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="close()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!form.name.trim()" (click)="save()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
       </div>
     </div>
   </div>
+  <div class="modal-backdrop show d-block"></div>
 }

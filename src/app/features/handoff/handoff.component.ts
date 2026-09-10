@@ -1,77 +1,142 @@
 import { Component } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { Item, MOVEMENT_KIND_LABEL, Movement } from '../../core/models';
+import { Item, MOVEMENT_KIND_LABEL, statusClass } from '../../core/models';
 
+/** One row on the hand-off day board. */
+interface BoardRow {
+  orderId: string;
+  project: string;
+  itemId: string;
+  model: string;
+  start: string;
+  end: string;
+  custodian: string;
+  outAt: string | null;
+  kind: 'out' | 'in';
+  overdue: boolean;
+}
+
+/**
+ * Item Hand-Off & Custody (core) — port of the prototype's `renderHandoff`
+ * (js/pages/handoff.js): an outbound / incoming day board for a selected day
+ * with Check-Out / Check-In, plus the immutable chain-of-custody log.
+ */
 @Component({
   selector: 'ims-handoff',
   standalone: true,
-  imports: [FormsModule],
   templateUrl: './handoff.component.html',
   styleUrl: './handoff.component.scss',
 })
 export class HandoffComponent {
   readonly kindLabel = MOVEMENT_KIND_LABEL;
 
-  /** Issue form state. */
-  orderId: string;
-  itemId = '';
-  note = '';
+  /** Selected board day (ISO), defaults to today. */
+  day = new Date().toISOString().slice(0, 10);
 
-  constructor(readonly data: DataService) {
-    this.orderId = data.listOrders().filter((o) => o.status === 'active')[0]?.orderId ?? '';
+  constructor(readonly data: DataService) {}
+
+  dayLabel(): string {
+    return this.data.parseDT(this.day).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
   }
 
-  orders() {
-    return this.data.listOrders().filter((o) => o.status === 'active');
+  moveDay(n: number): void {
+    const d = this.data.parseDT(this.day);
+    d.setDate(d.getDate() + n);
+    this.day = d.toISOString().slice(0, 10);
   }
 
-  available() {
-    return this.data.availableItems();
+  today(): void {
+    this.day = new Date().toISOString().slice(0, 10);
   }
 
-  custody() {
+  private rows(kind: 'out' | 'in'): BoardRow[] {
+    const rows: BoardRow[] = [];
+    for (const order of this.data.activeOrders()) {
+      for (const li of order.lineItems) {
+        if (li.type !== 'serialized') continue;
+        const start = (li.startDate ?? order.startDate).slice(0, 10);
+        const end = (li.endDate ?? order.endDate).slice(0, 10);
+        const item = this.data.getItem('serialized', li.refId);
+        const out = this.data.outInfo(li.refId);
+        const base = {
+          orderId: order.orderId,
+          project: order.projectName,
+          itemId: li.refId,
+          model: this.data.mkName(item),
+          start,
+          end,
+          custodian: this.data.partyName(order.partyId),
+          outAt: out?.at ?? null,
+        };
+        if (kind === 'out' && !out && start <= this.day && this.day <= end) {
+          rows.push({ ...base, kind: 'out', overdue: start < this.day });
+        }
+        if (kind === 'in' && out && end <= this.day) {
+          rows.push({ ...base, kind: 'in', overdue: end < this.day });
+        }
+      }
+    }
+    return rows;
+  }
+
+  outbound(): BoardRow[] {
+    return this.rows('out');
+  }
+
+  incoming(): BoardRow[] {
+    return this.rows('in');
+  }
+
+  custody(): Item[] {
     return this.data.custodyItems();
   }
 
-  movements(): Movement[] {
-    return this.data.listMovements().slice(0, 30);
+  movements() {
+    return this.data.listMovements().slice(0, 40);
   }
 
-  issue(): void {
-    if (!this.itemId || !this.orderId) return;
-    const order = this.data.getOrder(this.orderId);
+  badge(status: string): string {
+    return 'badge-status st-' + statusClass(status);
+  }
+
+  /** Check a unit out to its order (prototype `hoCheckOut`). */
+  checkOut(row: BoardRow): void {
+    const item = this.data.getItem('serialized', row.itemId);
     this.data.logMovement({
       type: 'serialized',
-      refId: this.itemId,
+      refId: row.itemId,
       kind: 'issue',
       qty: 1,
-      orderId: order?.orderId,
-      party: order?.party,
-      note: this.note || `Issued to ${order?.orderId ?? ''}`.trim(),
+      orderId: row.orderId,
+      party: row.custodian,
+      note: `Checked out to ${row.orderId}`,
     });
-    this.itemId = '';
-    this.note = '';
+    if (item) this.data.updateItem('serialized', row.itemId, { status: 'On Rent', orderId: row.orderId });
   }
 
-  returnItem(item: Item): void {
+  /** Return a unit to the yard (prototype `hoCheckIn`). */
+  checkIn(row: BoardRow): void {
+    const item = this.data.getItem('serialized', row.itemId);
     this.data.logMovement({
       type: 'serialized',
-      refId: item.id,
+      refId: row.itemId,
       kind: 'return',
       qty: 1,
       party: 'Main yard',
-      note: 'Returned to yard / available',
+      note: 'Returned to yard / available.',
     });
+    if (item) this.data.updateItem('serialized', row.itemId, { status: 'Available', orderId: null });
   }
 
-  /** Where a custody item is currently out (latest movement order/party). */
+  /** Where a custody item is out to. */
   outFor(item: Item): string {
-    const latest = this.data
-      .listMovements()
-      .find((m) => m.type === 'serialized' && m.refId === item.id);
-    if (!latest) return '—';
-    return latest.orderId ?? latest.party ?? '—';
+    const info = this.data.outInfo(item.id);
+    return info?.orderId ?? info?.party ?? '—';
   }
 }

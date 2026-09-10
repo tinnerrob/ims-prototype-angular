@@ -1,92 +1,149 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Item Hand-Off &amp; Custody</h1>
-      <p class="page-sub">Core: issue serialized items out to an order and return them — every step writes an immutable chain-of-custody movement.</p>
-    </div>
-    <span class="core-tag">Core · always on</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="stat-row">
-    <div class="card stat"><span class="stat-label">Out (custody)</span><span class="stat-value">{{ custody().length }}</span></div>
-    <div class="card stat"><span class="stat-label">Available to issue</span><span class="stat-value">{{ available().length }}</span></div>
-    <div class="card stat"><span class="stat-label">Movements logged</span><span class="stat-value">{{ data.listMovements().length }}</span></div>
-  </div>
-
-  <div class="split">
-    <!-- ISSUE -->
-    <div class="card">
-      <div class="card-header">Issue out to an order</div>
-      <div class="card-body">
-        <div class="field">
-          <label>Order</label>
-          <select class="input" [(ngModel)]="orderId">
-            @for (o of orders(); track o.orderId) {
-              <option [value]="o.orderId">{{ o.orderId }} · {{ o.projectName }}</option>
-            }
-          </select>
-        </div>
-        <div class="field">
-          <label>Available item</label>
-          <select class="input" [(ngModel)]="itemId">
-            <option value="" disabled>Choose an available item…</option>
-            @for (it of available(); track it.id) {
-              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
-            }
-          </select>
-        </div>
-        <div class="field"><label>Note</label><input class="input" [(ngModel)]="note" placeholder="Optional" /></div>
-        <button class="btn btn-primary" (click)="issue()" [disabled]="!itemId || !orderId || available().length === 0">Issue / Check Out</button>
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-arrow-left-right"></i> Item Hand-Off &amp; Custody</span>
+    <div class="d-flex align-items-center gap-2">
+      <div class="btn-group">
+        <button class="btn btn-sm2" type="button" (click)="moveDay(-1)"><i class="bi bi-chevron-left"></i></button>
+        <span class="tl-range">{{ dayLabel() }}</span>
+        <button class="btn btn-sm2" type="button" (click)="moveDay(1)"><i class="bi bi-chevron-right"></i></button>
       </div>
+      <button class="btn btn-ims-outline btn-sm2" type="button" (click)="today()">Today</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="strong mb-2"><i class="bi bi-box-arrow-up-right me-1"></i>Outbound — to check out</div>
+    <div class="table-wrap mb-3">
+      <table class="table">
+        <thead>
+          <tr><th>Asset</th><th>Contract</th><th>Model</th><th>Rental window</th><th>Custodian</th><th>Status</th><th class="text-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (r of outbound(); track r.itemId) {
+            <tr>
+              <td class="strong mono">{{ r.itemId }}</td>
+              <td class="mono">{{ r.orderId }}</td>
+              <td class="text-muted2">{{ r.model }}</td>
+              <td>{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
+              <td>{{ r.custodian }}</td>
+              <td>
+                @if (r.overdue) {
+                  <span class="badge-status st-reorder">Go out (overdue)</span>
+                } @else {
+                  <span class="badge-status st-out">Pick-up today</span>
+                }
+              </td>
+              <td class="text-end">
+                <button class="btn btn-ims btn-sm2" type="button" (click)="checkOut(r)">
+                  <i class="bi bi-box-arrow-up-right"></i> Check Out
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="7" class="text-center text-muted2 py-4">No units to check out on {{ dayLabel() }}.</td></tr>
+          }
+        </tbody>
+      </table>
     </div>
 
-    <!-- CUSTODY -->
+    <div class="strong mb-2"><i class="bi bi-box-arrow-in-down me-1"></i>Incoming — to check in</div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>Asset</th><th>Contract</th><th>Model</th><th>Rental window</th><th>Custodian</th><th>Status</th><th class="text-end">Actions</th></tr>
+        </thead>
+        <tbody>
+          @for (r of incoming(); track r.itemId) {
+            <tr>
+              <td class="strong mono">{{ r.itemId }}</td>
+              <td class="mono">{{ r.orderId }}</td>
+              <td class="text-muted2">{{ r.model }}</td>
+              <td>{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
+              <td>
+                {{ r.custodian }}
+                <div class="text-muted2 small">out {{ data.fmtDT(r.outAt) }}</div>
+              </td>
+              <td>
+                @if (r.overdue) {
+                  <span class="badge-status st-reorder">Overdue return</span>
+                } @else {
+                  <span class="badge-status st-out">Due back today</span>
+                }
+              </td>
+              <td class="text-end">
+                <button class="btn btn-ims btn-sm2" type="button" (click)="checkIn(r)">
+                  <i class="bi bi-box-arrow-in-down"></i> Check In
+                </button>
+              </td>
+
+<div class="split-layout">
+  <div>
     <div class="card">
-      <div class="card-header">Active custody</div>
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-person-badge"></i> Active Custody</span>
+        <span class="badge-status st-out">{{ custody().length }} out</span>
+      </div>
       <div class="card-body">
-        @if (custody().length === 0) {
-          <p class="empty">Nothing is out right now.</p>
-        } @else {
-          <ul class="ho-list">
-            @for (it of custody(); track it.id) {
-              <li class="ho-row">
-                <div>
-                  <div class="strong">{{ it.id }} · {{ it.name }}</div>
-                  <div class="sub">Out to {{ outFor(it) }}</div>
-                </div>
-                <button class="btn btn-ghost btn-sm" (click)="returnItem(it)">Return</button>
-              </li>
-            }
-          </ul>
+        @for (item of custody(); track item.id) {
+          <div class="list-line">
+            <span class="l">
+              <span class="strong">{{ item.id }}</span> · {{ item.name }}
+              <div class="text-muted2 small">Out to {{ outFor(item) }}</div>
+            </span>
+            <span class="r">
+              <button class="btn btn-ims-outline btn-sm2" type="button"
+                (click)="checkIn({ itemId: item.id, orderId: '', project: '', model: '', start: '', end: '', custodian: '', outAt: null, kind: 'in', overdue: false })">
+                <i class="bi bi-box-arrow-in-down"></i> Return
+              </button>
+            </span>
+          </div>
+        } @empty {
+          <p class="text-muted2 py-2">Nothing is out right now.</p>
         }
       </div>
     </div>
   </div>
 
-  <!-- MOVEMENT LOG -->
-  <div class="card log-card">
-    <div class="card-header">Chain-of-custody log</div>
-    <div class="card-body">
-      <table class="table">
-        <thead>
-          <tr><th>ID</th><th>Kind</th><th>Item</th><th>Order / party</th><th>Qty</th><th>When</th><th>Note</th></tr>
-        </thead>
-        <tbody>
-          @for (m of movements(); track m.id) {
-            <tr>
-              <td class="mono">{{ m.id }}</td>
-              <td><span class="status">{{ kindLabel[m.kind] }}</span></td>
-              <td>{{ data.itemLabel(m.type, m.refId) }}</td>
-              <td>{{ m.orderId || m.party || '—' }}</td>
-              <td>{{ m.qty }}</td>
-              <td>{{ m.at }}</td>
-              <td>{{ m.note || '—' }}</td>
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-journal-text"></i> Chain-of-Custody Log</span>
+        <span class="badge-status st-on">{{ movements().length }}</span>
+      </div>
+      <div class="card-body table-wrap">
+        <table class="table">
+          <thead><tr><th>ID</th><th>Kind</th><th>Item</th><th>Order / party</th><th>When</th><th>Note</th></tr></thead>
+          <tbody>
+            @for (m of movements(); track m.id) {
+              <tr>
+                <td class="mono">{{ m.id }}</td>
+                <td>
+                  <span [class]="m.kind === 'issue' ? 'badge-status st-out' : 'badge-status st-available'">
+                    {{ kindLabel[m.kind] }}
+                  </span>
+                </td>
+                <td class="strong">{{ m.refId }}</td>
+                <td>{{ m.orderId || m.party || '—' }}</td>
+                <td class="mono text-muted2">{{ data.fmtDT(m.at) }}</td>
+                <td class="text-muted2">{{ m.note || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="text-center text-muted2 py-4">No movements logged.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
             </tr>
           } @empty {
-            <tr><td colspan="7" class="empty">No movements yet.</td></tr>
+            <tr><td colspan="7" class="text-center text-muted2 py-4">No units due back on {{ dayLabel() }}.</td></tr>
           }
         </tbody>
       </table>
     </div>
   </div>
-</section>
+</div>

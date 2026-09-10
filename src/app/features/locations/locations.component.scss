@@ -1,1 +1,14 @@
-/* Locations styles — reuses the shared table / panel styles. */
+/* Locations page: the branch profile cards live in one scrolling column
+   (the global design system styles the cards themselves). */
+:host > .card > .card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.branch-card {
+  flex: 0 0 auto;
+}

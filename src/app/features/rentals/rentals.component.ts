@@ -4,16 +4,11 @@ import { FormsModule } from '@angular/forms';
 import { DataService } from '../../core/data.service';
 import { RentalSub } from '../../core/models';
 
-interface RentForm {
-  itemId: string; // '' = no catalog mapping
-  assetName: string;
-  vendor: string;
-  vendorCost: number;
-  retailRate: number;
-  qty: number;
-  note: string;
-}
-
+/**
+ * Rentals / Sub-Rentals (module) — port of the prototype's `renderRerents`
+ * (js/pages/rerents.js): vendor wholesale / retail revenue / net spread KPIs
+ * plus the sub-rental ledger and the New Sub-Rental modal.
+ */
 @Component({
   selector: 'ims-rentals',
   standalone: true,
@@ -22,8 +17,8 @@ interface RentForm {
   styleUrl: './rentals.component.scss',
 })
 export class RentalsComponent {
-  formOpen = false;
-  form: RentForm = this.emptyForm();
+  modalOpen = false;
+  form = this.emptyForm();
 
   constructor(readonly data: DataService) {}
 
@@ -35,42 +30,66 @@ export class RentalsComponent {
     return this.data.listItems('serialized');
   }
 
+  orders() {
+    return this.data.listOrders();
+  }
+
+  totalCost(): number {
+    return this.rentals().reduce((s, r) => s + r.vendorCost * r.qty, 0);
+  }
+
+  totalRetail(): number {
+    return this.rentals().reduce((s, r) => s + r.retailRate * r.qty, 0);
+  }
+
   totalSpread(): number {
-    return this.data.listRentals().reduce((s, r) => s + this.data.rentalSpread(r), 0);
+    return this.rentals().reduce((s, r) => s + this.data.rentalSpread(r), 0);
+  }
+
+  margin(): number {
+    const retail = this.totalRetail();
+    return retail ? (this.totalSpread() / retail) * 100 : 0;
   }
 
   openForm(): void {
     this.form = this.emptyForm();
-    this.formOpen = true;
-  }
-
-  onItemChange(): void {
-    const it = this.data.getItem('serialized', this.form.itemId);
-    this.form.assetName = it ? `${it.id} · ${it.name}` : '';
+    this.modalOpen = true;
   }
 
   save(): void {
     const f = this.form;
     const item = f.itemId ? this.data.getItem('serialized', f.itemId) : null;
-    const assetName = item ? `${item.id} · ${item.name}` : f.assetName.trim();
+    const assetName = item ? item.name : f.assetName.trim();
     if (!assetName || !f.vendor.trim()) return;
     this.data.createRental({
       itemId: item?.id ?? null,
       assetName,
+      orderId: f.orderId || null,
       vendor: f.vendor,
-      vendorCost: f.vendorCost,
-      retailRate: f.retailRate,
-      qty: f.qty,
-      note: f.note,
+      vendorCost: Number(f.vendorCost) || 0,
+      retailRate: Number(f.retailRate) || 0,
+      qty: Number(f.qty) || 1,
     });
-    this.formOpen = false;
+    this.closeForm();
   }
 
   remove(r: RentalSub): void {
-    if (confirm(`Remove sub-rental ${r.id}?`)) this.data.removeRental(r.id);
+    this.data.removeRental(r.id);
   }
 
-  private emptyForm(): RentForm {
-    return { itemId: '', assetName: '', vendor: '', vendorCost: 0, retailRate: 0, qty: 1, note: '' };
+  closeForm(): void {
+    this.modalOpen = false;
+  }
+
+  private emptyForm() {
+    return {
+      itemId: '',
+      assetName: '',
+      orderId: this.data.listOrders()[0]?.orderId ?? '',
+      vendor: '',
+      vendorCost: 0,
+      retailRate: 0,
+      qty: 1,
+    };
   }
 }

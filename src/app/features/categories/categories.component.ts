@@ -2,12 +2,27 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { CatalogType, CATALOG_TYPES, CATALOG_TYPE_KEYS } from '../../core/models';
+import { CatalogType, CategoryOption } from '../../core/models';
+
+interface CategoryTab {
+  key: CatalogType;
+  label: string;
+  icon: string;
+}
+
+/** Tab strip from the prototype's `CAT_TYPES` (js/pages/categories.js). */
+const CAT_TYPES: CategoryTab[] = [
+  { key: 'serialized', label: 'Items (Serialized)', icon: 'bi-truck-front' },
+  { key: 'bulk', label: 'Items (Bulk)', icon: 'bi-boxes' },
+  { key: 'consumable', label: 'Consumables', icon: 'bi-capsule' },
+  { key: 'labor', label: 'Labor / Employees', icon: 'bi-person-badge' },
+  { key: 'part', label: 'Stock Inventory', icon: 'bi-wrench-adjustable' },
+];
 
 /**
- * Categories & Types (core) — first ported vertical slice.
- * Demonstrates the shared pattern for every future feature:
- *   DataService (typed store) -> component state -> list + CRUD UI.
+ * Categories & Types (core) — port of the prototype's `renderCategories`
+ * (js/pages/categories.js): a type tab strip with counts, a category grid
+ * (Active / Items / rename / remove) and the add + rename modals.
  */
 @Component({
   selector: 'ims-categories',
@@ -17,52 +32,72 @@ import { CatalogType, CATALOG_TYPES, CATALOG_TYPE_KEYS } from '../../core/models
   styleUrl: './categories.component.scss',
 })
 export class CategoriesComponent {
-  readonly types = CATALOG_TYPES;
+  readonly tabs = CAT_TYPES;
 
   type: CatalogType = 'serialized';
 
-  /** Live view of names for the selected type (kept in sync after each op). */
-  get names(): string[] {
-    return this.data.categoriesFor(this.type);
+  /** Add / rename modal state. */
+  modalOpen = false;
+  renameFrom: string | null = null;
+  formName = '';
+  formActive = true;
+
+  constructor(readonly data: DataService) {}
+
+  records(): CategoryOption[] {
+    return this.data.categoryRecordsFor(this.type);
   }
 
-  draft = '';
-  /** Inline-edit state: index currently editing, plus its working value. */
-  editIndex: number | null = null;
-  editValue = '';
+  label(): string {
+    return this.tabs.find((t) => t.key === this.type)?.label ?? this.type;
+  }
 
-  constructor(private readonly data: DataService) {}
+  count(): number {
+    return this.records().length;
+  }
 
   selectType(t: CatalogType): void {
     this.type = t;
-    this.cancelEdit();
+    this.close();
   }
 
-  add(): void {
-    this.data.addCategory(this.type, this.draft);
-    this.draft = '';
+  itemsIn(name: string): number {
+    return this.data.categoryCount(this.type, name);
   }
 
-  beginEdit(i: number, name: string): void {
-    this.editIndex = i;
-    this.editValue = name;
+  openAdd(): void {
+    this.renameFrom = null;
+    this.formName = '';
+    this.formActive = true;
+    this.modalOpen = true;
   }
 
-  saveEdit(i: number, name: string): void {
-    this.data.renameCategory(this.type, name, this.editValue);
-    this.cancelEdit();
+  openRename(c: CategoryOption): void {
+    this.renameFrom = c.name;
+    this.formName = c.name;
+    this.formActive = c.active !== false;
+    this.modalOpen = true;
   }
 
-  cancelEdit(): void {
-    this.editIndex = null;
-    this.editValue = '';
-  }
-
-  remove(i: number, name: string): void {
-    if (confirm(`Remove category "${name}" from ${this.type}?`)) {
-      this.data.removeCategory(this.type, name);
+  save(): void {
+    const name = this.formName.trim();
+    if (!name) return;
+    if (this.renameFrom) {
+      this.data.renameCategory(this.type, this.renameFrom, name, this.formActive);
+    } else {
+      this.data.addCategory(this.type, name, this.formActive);
     }
+    this.close();
   }
 
-  protected readonly CATALOG_TYPE_KEYS = CATALOG_TYPE_KEYS;
+  remove(c: CategoryOption): void {
+    this.data.removeCategory(this.type, c.name);
+  }
+
+  close(): void {
+    this.modalOpen = false;
+    this.renameFrom = null;
+    this.formName = '';
+    this.formActive = true;
+  }
 }

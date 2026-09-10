@@ -1,90 +1,161 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Field Service &amp; Maintenance</h1>
-      <p class="page-sub">Industry module: maintenance work orders against item instances (service).</p>
-    </div>
-    <span class="mod-tag">MODULE · service</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="card">
-    <div class="card-body">
-      <div class="toolbar">
-        <button class="btn btn-primary" (click)="openForm()">+ New Work Order</button>
-      </div>
-      <table class="table">
-        <thead>
-          <tr><th>WO</th><th>Item</th><th>Title</th><th>Type</th><th>Priority</th><th>Status</th><th>Opened</th><th class="th-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @for (wo of workOrders(); track wo.id) {
-            <tr>
-              <td class="mono strong">{{ wo.id }}</td>
-              <td>{{ data.itemLabel('serialized', wo.itemId) }}</td>
-              <td>{{ wo.title }}</td>
-              <td>{{ wo.serviceType }}</td>
-              <td><span class="status prio-{{ wo.priority }}">{{ wo.priority }}</span></td>
-              <td>
-                <select class="input status-sel" [value]="wo.status" (change)="setStatus(wo, $any($event.target).value)">
-                  @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
-                </select>
-              </td>
-              <td>{{ wo.openedAt }}</td>
-              <td class="td-end">
-                <button class="btn btn-danger-ghost btn-sm" (click)="remove(wo)">Remove</button>
-              </td>
-            </tr>
-          } @empty {
-            <tr><td colspan="8" class="empty">No work orders yet.</td></tr>
-          }
-        </tbody>
-      </table>
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-tools"></i> Work Order Grid</span>
+    <div class="d-flex align-items-center gap-2">
+      <select class="form-select form-select-sm w-auto" [value]="filter" (change)="filter = $any($event.target).value">
+        <option value="all">All</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Completed">Completed</option>
+        <option value="Scheduled">Scheduled</option>
+        <option value="Pending">Pending</option>
+      </select>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+        <i class="bi bi-plus-lg"></i> New Work Order
+      </button>
     </div>
   </div>
-</section>
+  <div class="card-body table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>WO #</th><th>Asset</th><th>Service Type</th><th class="num">Meter Reading</th>
+          <th>Status</th><th>Parts Used</th><th class="num">Labor Hrs</th>
+          <th class="num">Parts Cost</th><th class="num">Labor Cost</th><th class="num">Total Cost</th>
+          <th>Date</th><th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (w of workOrders(); track w.id) {
+          <tr>
+            <td class="strong mono">{{ w.id }}</td>
+            <td class="strong">{{ assetLabel(w) }}</td>
+            <td>{{ w.type }}</td>
+            <td class="num">{{ data.int(w.meterReading) }}</td>
+            <td><span [class]="badge(w.status)"><i class="bi bi-circle-fill"></i>{{ w.status }}</span></td>
+            <td>
+              @for (p of w.parts; track p.refId) {
+                <span class="badge-status st-inshop">{{ partLabel(p) }}</span>
+              } @empty {
+                <span class="text-muted2">—</span>
+              }
+            </td>
+            <td class="num">{{ w.laborHours }}</td>
+            <td class="num">{{ data.money(cost(w).partsCost) }}</td>
+            <td class="num">{{ data.money(cost(w).laborCost) }}</td>
+            <td class="num strong">{{ data.money(cost(w).total) }}</td>
+            <td class="mono text-muted2">{{ data.fmtDate(w.date) }}</td>
+            <td class="text-end text-nowrap">
+              <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
+                @for (s of statuses; track s) {
+                  <option [value]="s">{{ s }}</option>
+                }
+              </select>
+              <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(w)">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            </td>
+          </tr>
+        } @empty {
+          <tr><td colspan="12" class="text-center text-muted2 py-4">No records — add one with "New Work Order".</td></tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
 
-@if (formOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">New Work Order</span>
-        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label>Serialized item *</label>
-          <select class="input" [(ngModel)]="form.itemId">
-            @for (it of serialized(); track it.id) {
-              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
-            }
-          </select>
+@if (modalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-tools"></i>New Service Work Order</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeForm()"></button>
         </div>
-        <div class="field"><label>Title *</label><input class="input" [(ngModel)]="form.title" /></div>
-        <div class="row2">
-          <div class="field">
-            <label>Service type</label>
-            <input class="input" [(ngModel)]="form.serviceType" list="svcTypes" />
-            <datalist id="svcTypes">
-              <option value="Repair"></option>
-              <option value="Preventive"></option>
-              <option value="Inspection"></option>
-            </datalist>
-          </div>
-          <div class="field">
-            <label>Priority</label>
-            <select class="input" [(ngModel)]="form.priority">
-              <option value="low">Low</option>
-              <option value="normal">Normal</option>
-              <option value="high">High</option>
+        <div class="modal-body">
+          <div class="strong mb-2">Work Order Details</div>
+          <div class="field-group">
+            <label class="form-label">Asset</label>
+            <select class="form-select" [(ngModel)]="form.itemId">
+              @for (a of serialized(); track a.id) {
+                <option [value]="a.id">{{ a.id }} — {{ data.mkName(a) }} ({{ a.status }})</option>
+              }
             </select>
           </div>
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Service Type</label>
+              <select class="form-select" [(ngModel)]="form.type">
+                @for (t of serviceTypes; track t) {
+                  <option [value]="t">{{ t }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Current Meter Reading</label>
+              <input class="form-control" type="number" [(ngModel)]="form.meterReading" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" [(ngModel)]="form.status">
+                @for (s of statuses; track s) {
+                  <option [value]="s">{{ s }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Labor Hours</label>
+              <input class="form-control" type="number" [(ngModel)]="form.laborHours" />
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="strong mb-2">Parts &amp; Technician</div>
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Part (from Consumables)</label>
+              <select class="form-select" [(ngModel)]="form.consumableId">
+                @for (c of consumables(); track c.id) {
+                  <option [value]="c.id">{{ c.id }} — {{ c.name }} ({{ data.money(c.costPrice) }}/ea)</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Consumable Qty (0 = none)</label>
+              <input class="form-control" type="number" [(ngModel)]="form.consumableQty" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Service Part (Stock Inventory)</label>
+              <select class="form-select" [(ngModel)]="form.partId">
+                @for (p of parts(); track p.id) {
+                  <option [value]="p.id">{{ p.id }} — {{ p.name }} ({{ data.money(p.costPrice) }}/ea)</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Stock Part Qty (0 = none)</label>
+              <input class="form-control" type="number" [(ngModel)]="form.partQty" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Technician</label>
+              <select class="form-select" [(ngModel)]="form.technicianId">
+                @for (e of technicians(); track e.id) {
+                  <option [value]="e.id">{{ e.id }} — {{ e.name }} ({{ e.role }})</option>
+                }
+              </select>
+            </div>
+          </div>
         </div>
-        <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
-      </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
-        <button class="btn btn-primary" (click)="save()" [disabled]="!form.title.trim()">Create</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeForm()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!form.itemId" (click)="save()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
       </div>
     </div>
   </div>
+  <div class="modal-backdrop show d-block"></div>
 }
+

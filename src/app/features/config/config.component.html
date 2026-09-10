@@ -1,34 +1,73 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Feature Modules</h1>
-      <p class="page-sub">Administration: toggle industry modules over the always-on inventory core.</p>
-    </div>
+<div class="page-head"></div>
+
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-sliders2"></i> Industry / Vertical</span>
   </div>
-
-  <div class="card">
-    <div class="card-body">
-      <div class="strong mb-2">Core · always on</div>
-      <p class="empty">Inventory, Parties &amp; Orders, Hand-Off, Locations, Receiving/Inspections, Categories, Dashboard.</p>
-      <div class="divider"></div>
-      <div class="strong mb-2">Optional modules</div>
-
-      <table class="table">
-        <thead><tr><th>Module</th><th>Description</th><th class="th-end">Enabled</th></tr></thead>
-        <tbody>
-          @for (m of modules; track m.key) {
-            <tr>
-              <td class="strong">{{ m.label }}</td>
-              <td class="muted-cell">{{ m.desc }}</td>
-              <td class="td-end">
-                <span class="switch" [class.on]="on(m.key)" role="switch" [attr.aria-checked]="on(m.key)" tabindex="0"
-                  (click)="toggle(m.key)" (keydown.enter)="toggle(m.key)"></span>
-              </td>
-            </tr>
+  <div class="card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-6 field-group mb-0">
+        <label class="form-label">Active vertical</label>
+        <select class="form-select" [value]="data.vertical" (change)="setVertical($any($event.target).value)">
+          @for (k of verticalKeys; track k) {
+            <option [value]="k">{{ verticals[k] }}</option>
           }
-        </tbody>
-      </table>
-      <p class="empty mt">Turning a module off hides its nav entry and blocks its route (a disabled route falls back to the dashboard). Core is never affected.</p>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <span class="text-muted2 text-12">
+          Selects which catalog types appear on <strong>Items &amp; Stock</strong> (e.g. Healthcare
+          shows a different catalog tab set).
+        </span>
+      </div>
     </div>
   </div>
-</section>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-toggles"></i> Feature Modules</span>
+    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="enableAll()">
+      <i class="bi bi-arrow-counterclockwise"></i> Enable All
+    </button>
+  </div>
+  <div class="card-body">
+    <p class="text-muted2 small mb-3">
+      Industry modules sit on an always-on inventory core. Turning a module off hides its entry
+      points; the core never depends on a module, so nothing else breaks.
+    </p>
+
+    <div class="strong mb-2">Core · always on</div>
+    <div class="d-flex flex-wrap gap-1 mb-3">
+      @for (c of core; track c) {
+        <span class="badge-status st-available">{{ c }}</span>
+      }
+    </div>
+
+    <div class="divider"></div>
+    <div class="strong mb-2">Optional modules</div>
+
+    @for (m of modules; track m.key) {
+      <div class="list-line">
+        <span class="l">
+          <span class="strong">{{ m.label }}</span>
+          <div class="text-muted2 small">{{ m.desc }}</div>
+        </span>
+        <span class="r">
+          <div class="form-check form-switch mb-0">
+            <input
+              class="form-check-input"
+              type="checkbox"
+              [id]="'mod-' + m.key"
+              [checked]="on(m.key)"
+              (change)="toggle(m.key)"
+            />
+            <label class="form-check-label small" [for]="'mod-' + m.key">{{ on(m.key) ? 'On' : 'Off' }}</label>
+          </div>
+        </span>
+      </div>
+    } @empty {
+      <p class="text-muted2">No modules registered.</p>
+    }
+  </div>
+</div>

@@ -1,45 +1,76 @@
 import { Component } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 
 import { DataService } from '../../core/data.service';
+import { ModulesService } from '../../core/modules.service';
+import { CatalogType, statusClass } from '../../core/models';
+import { TelemetryService } from '../../core/telemetry.service';
 
-interface Milestone {
-  route: string;
-  title: string;
-  done: boolean;
-  note: string;
-}
-
+/**
+ * Operations Dashboard — port of the prototype's `renderDashboard`
+ * (js/pages/dashboard.js): a bento grid of fleet KPIs, the active-order margin
+ * table, live geofence alerts, reorder warnings, fleet status and bulk out.
+ */
 @Component({
   selector: 'ims-dashboard',
   standalone: true,
-  imports: [RouterLink],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent {
-  milestones: Milestone[] = [
-    { route: '/categories', title: 'Categories & Types', done: true, note: 'Ported (list + add/rename/remove + persistence).' },
-    { route: '/orders', title: 'Parties & Orders', done: true, note: 'Ported (party CRUD + order headers + detail + persistence).' },
-    { route: '/items', title: 'Items & Stock', done: true, note: 'Ported (typed catalog: list + CRUD per type).' },
-    { route: '/handoff', title: 'Item Hand-Off & Custody', done: true, note: 'Ported (movements: issue/return + chain-of-custody log).' },
-    { route: '/locations', title: 'Locations', done: true, note: 'Ported (yard/branch/warehouse/bin CRUD).' },
-    { route: '/inspections', title: 'Receiving / Inspections', done: true, note: 'Ported (check in/out with meter/fuel log).' },
-    { route: '/maintenance', title: 'Field Service & Maintenance (module)', done: true, note: 'Ported (work orders on items, gated by ModulesService).' },
-    { route: '/timesheet', title: 'Labor & Timesheets (module)', done: true, note: 'Ported (time records vs orders/shop, gated).' },
-    { route: '/rentals', title: 'Rentals & Sub-Rentals (module)', done: true, note: 'Ported (vendor sub-rentals with spread, gated).' },
-    { route: '/logistics', title: 'Logistics & Dispatch (module)', done: true, note: 'Ported (truck dispatch by status, gated).' },
-    { route: '/invoicing', title: 'Billing & Invoicing (module)', done: true, note: 'Ported (invoices from priced orders, gated).' },
-    { route: '/admin', title: 'Feature Modules (admin)', done: true, note: 'Ported (toggle industry modules).' },
-    { route: '/scheduler', title: 'Allocations & Scheduling (module)', done: true, note: 'Ported (week timeline + conflicts + booking).' },
-    { route: '/telemetry', title: 'Fleet Telemetry (module)', done: true, note: 'Ported (live GPS sim + geofence feed).' },
-    { route: '/scheduler', title: 'Allocations & Scheduling (module)', done: true, note: 'Ported (week timeline + conflicts + booking).' },
-    { route: '/invoicing', title: 'Billing (module)', done: false, note: 'Industry module over core.' },
-  ];
+  readonly fleetStatusOrder = ['Available', 'On Rent', 'In Shop', 'Staged'];
 
-  constructor(readonly data: DataService) {}
+  constructor(
+    readonly data: DataService,
+    readonly telemetry: TelemetryService,
+    readonly mods: ModulesService,
+    private readonly router: Router,
+  ) {}
 
-  partyCount(): number {
-    return this.data.listParties().length;
+  kpis() {
+    return this.data.fleetKpis();
+  }
+
+  telemetryOn(): boolean {
+    return this.mods.isEnabled('telemetry');
+  }
+
+  /** Alert panel is only shown while the telemetry module is enabled. */
+  recentAlerts() {
+    return this.telemetryOn() ? this.telemetry.recentAlerts().slice(0, 6) : [];
+  }
+
+  activeOrders() {
+    return this.data.activeOrderTotals();
+  }
+
+  reorders() {
+    return this.data.reorders();
+  }
+
+  fleetByStatus(status: string): number {
+    return this.data.fleetByStatus()[status] ?? 0;
+  }
+
+  bulkOut() {
+    return this.data.listItems('bulk');
+  }
+
+  badge(status: string): string {
+    return 'badge-status st-' + statusClass(status);
+  }
+
+  /** Margin pill colour band (prototype: >=30 green, >=10 amber, else red). */
+  marginBadge(margin: number): string {
+    const cls = margin >= 30 ? 'st-available' : margin >= 10 ? 'st-reorder' : 'st-out';
+    return 'badge-status ' + cls;
+  }
+
+  triggerReorder(type: CatalogType, ref: string): void {
+    this.data.triggerReorder(type, ref);
+  }
+
+  openView(id: string): void {
+    this.router.navigate(['/' + id]);
   }
 }

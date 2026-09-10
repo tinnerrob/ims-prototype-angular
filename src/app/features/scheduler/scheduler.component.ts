@@ -1,7 +1,7 @@
 import { Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DataService } from '../../core/data.service';
-import { CatalogType, CATALOG_TYPES, Item, Order, OrderLine } from '../../core/models';
+import { DataService, hmMin } from '../../core/data.service';
+import { CatalogType, CATALOG_TYPES, ITEM_STATUSES, Item, Order, OrderLine } from '../../core/models';
 
 const DAY_MS = 86400000;
 const DAY_W = 90;
@@ -15,10 +15,46 @@ const TYPE_COLORS: Record<string, string> = {
 type View = 'day' | 'week' | 'month';
 interface DayCol { start: number; label: string; sub: string; }
 interface BarGeom { left: number; width: number; }
-interface BarModel { orderId: string; liId: string | null; label: string; sub: string; color: string; conflict: boolean; geom: BarGeom; }
+interface BarModel {
+  orderId: string;
+  liId: string | null;
+  type: CatalogType | 'order';
+  label: string;
+  /** Short label shown in the row gutter (prototype `shortItemLabel`). */
+  short: string;
+  sub: string;
+  color: string;
+  conflict: boolean;
+  geom: BarGeom;
+}
 interface OrderModel { order: Order; isExpanded: boolean; orderBar: BarModel | null; lines: BarModel[]; }
 interface ResizeState { orderId: string; liId: string | null; edge: 'l' | 'r'; track: HTMLElement; }
+/** Pool-card availability state (prototype `resCard` `avail.key`). */
+interface Availability { key: 'free' | 'partial' | 'busy' | 'inactive'; blocked: boolean; badge: string; note: string; }
+
 const POOL_TYPES = CATALOG_TYPES.map((t) => ({ key: t.key, label: 'Items (' + t.label + ')' }));
+
+/** Short type labels used by `.type-chip` / row gutters (prototype `TYPE_LABEL`). */
+const TYPE_LABEL: Record<string, string> = {
+  serialized: 'Serialized',
+  bulk: 'Bulk',
+  consumable: 'Consumable',
+  labor: 'Labor',
+  part: 'Part',
+  kit: 'Kit',
+  attachment: 'Attachment',
+};
+
+/** "New <resource>" button copy per pool tab (prototype `poolAddLabel`). */
+const POOL_ADD_LABEL: Record<string, string> = {
+  serialized: 'New Item (Serialized)',
+  bulk: 'New Bulk Item',
+  consumable: 'New Consumable',
+  part: 'New Stock Part',
+  labor: 'New Labor / Crew',
+  kit: 'New Kit',
+  attachment: 'New Attachment',
+};
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
@@ -28,6 +64,8 @@ const POOL_TYPES = CATALOG_TYPES.map((t) => ({ key: t.key, label: 'Items (' + t.
 })
 export class SchedulerComponent implements OnDestroy {
   readonly poolTypes = POOL_TYPES;
+  /** Per-type status options, exposed for the New Resource modal. */
+  readonly statuses = ITEM_STATUSES;
   view: View = 'week';
   anchor: number = this.startOfDay(new Date());
   poolType: CatalogType = 'serialized';
@@ -36,7 +74,26 @@ export class SchedulerComponent implements OnDestroy {
   dragging: { type: CatalogType; refId: string } | null = null;
   resizing: ResizeState | null = null;
 
-  constructor(readonly data: DataService, private cdr: ChangeDetectorRef) {}
+  /** "New Order" modal (prototype `orderModal` → `openOrderModal`). */
+  orderOpen = false;
+  orderForm = this.emptyOrder();
+
+  /** "New <resource>" modal (prototype `addPoolResource` → `openAddModal`). */
+  resOpen = false;
+  resForm = this.emptyRes();
+
+  constructor(readonly data: DataService, private cdr: ChangeDetectorRef) {
+    // Anchor the calendar on the first active order's start week (prototype
+    // `renderScheduler`), so the seeded orders are on screen immediately.
+    const starts = this.orders()
+      .map((o) => Date.parse(o.startDate + 'T00:00:00'))
+      .filter((t) => !Number.isNaN(t))
+      .sort((a, b) => a - b);
+    this.anchor = this.view === 'month'
+      ? this.startOfDay(new Date(new Date(starts[0] ?? Date.now()).getFullYear(), new Date(starts[0] ?? Date.now()).getMonth(), 1))
+      : this.mondayOf(starts[0] ?? Date.now());
+    this.selectedOrderId = this.orders()[0]?.orderId ?? '';
+  }
 
   ngOnDestroy(): void {
     this.detachResize();
@@ -71,12 +128,16 @@ export class SchedulerComponent implements OnDestroy {
   tlWidth(): number { return 170 + this.colCount() * DAY_W; }
 
   rangeLabel(): string {
-    if (this.view === 'day') return new Date(this.anchor).toLocaleDateString() + ' · 24h';
+    if (this.view === 'day') {
+      return (
+        new Date(this.anchor).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) + ' · 24h'
+      );
+    }
     const c = this.columns();
     const a = new Date(c[0].start);
-    if (this.view === 'month') return MONTHS[a.getMonth()] + ' ' + a.getFullYear();
+    if (this.view === 'month') return a.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
     const b = new Date(c[c.length - 1].start);
-    return a.toLocaleDateString() + ' - ' + b.toLocaleDateString();
+    return 'Week of ' + a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' - ' + b.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
 
   shift(dir: number): void {
@@ -90,6 +151,16 @@ export class SchedulerComponent implements OnDestroy {
     this.selectedOrderId = '';
   }
 
+  /** Switch Day/Week/Month, re-anchoring so the new period contains the cursor
+   *  date (prototype `setLabView` / `#viewToggle`). */
+  setView(v: View): void {
+    this.view = v;
+    const a = new Date(this.anchor);
+    if (v === 'month') this.anchor = this.startOfDay(new Date(a.getFullYear(), a.getMonth(), 1));
+    else if (v === 'week') this.anchor = this.mondayOf(a.getTime());
+    else this.anchor = this.startOfDay(a);
+  }
+
   orders(): Order[] { return this.data.listOrders().filter((o) => o.status === 'active'); }
   lanes(): Item[] { return this.data.listItems(this.poolType); }
   selectOrder(id: string): void { this.selectedOrderId = this.selectedOrderId === id ? '' : id; }
@@ -98,6 +169,222 @@ export class SchedulerComponent implements OnDestroy {
   lineStart(li: OrderLine, order: Order): string { return li.startDate ?? order.startDate; }
   lineEnd(li: OrderLine, order: Order): string { return li.endDate ?? order.endDate; }
   itemName(type: CatalogType, refId: string): string { return this.data.itemLabel(type, refId); }
+
+  /** Short type label for chips / row gutters (prototype `TYPE_LABEL`). */
+  typeLabel(type: string): string { return TYPE_LABEL[type] ?? type; }
+
+  /** Short item label used in a line row's gutter (prototype `shortItemLabel`). */
+  shortItemLabel(li: OrderLine): string {
+    const it = this.data.getItem(li.type, li.refId);
+    return it ? this.data.mkName(it) || it.name : li.refId;
+  }
+
+  /* ------------------------------- header ------------------------------- */
+
+  /** Header grid template — month/week columns shrink so the view fits the pane. */
+  headColumns(): string {
+    if (this.view === 'day') return '120px 1fr';
+    if (this.view === 'month') return '120px repeat(' + this.colCount() + ',minmax(0,1fr))';
+    return '120px repeat(' + this.colCount() + ',minmax(44px,1fr))';
+  }
+
+  cornerLabel(): string {
+    return this.view === 'day' ? 'Day' : this.view === 'month' ? 'Month' : 'Week';
+  }
+
+  /** Minimum timeline width. Month always fits; week/day scroll only if cramped. */
+  minWidth(): number {
+    if (this.view === 'week') return 120 + this.colCount() * 44;
+    return 120;
+  }
+
+  /** Order bar sub-line: gross · items · days (prototype). */
+  orderSub(o: Order): string {
+    return `${this.data.money(this.data.orderAmount(o))} · ${o.lineItems.length} items · ${this.data.orderDays(o)}d`;
+  }
+
+  /** Tooltip for an order bar (prototype `cTitle`). */
+  orderTitle(o: Order): string {
+    return (
+      `${o.orderId}\n${o.projectName}\n` +
+      `${this.data.fmtDate(o.startDate)} ${this.fmtMin(this.orderT0(o))} →\n` +
+      `${this.data.fmtDate(o.endDate)} ${this.fmtMin(this.orderT1(o))}`
+    );
+  }
+
+  /* ---------------------------- pool cards ------------------------------ */
+
+  /** Availability of a pool resource for the visible period (prototype `capAvailUI`). */
+  availability(item: Item): Availability {
+    // Custody wins: a serialized unit that is out on order is not bookable.
+    const out = this.data.outInfo(item.id);
+    if (out) {
+      return { key: 'busy', blocked: true, badge: ('On site · ' + (out.orderId ?? '')).trim(), note: '' };
+    }
+    if (item.status === 'In Shop') {
+      return { key: 'inactive', blocked: true, badge: 'In Shop', note: '' };
+    }
+    if (item.active === false) {
+      return { key: 'inactive', blocked: true, badge: 'Inactive', note: '' };
+    }
+    const booked = this.bookedCount(item);
+    if (booked > 0) {
+      return { key: 'partial', blocked: false, badge: booked + ' booked', note: '' };
+    }
+    return { key: 'free', blocked: false, badge: '', note: '' };
+  }
+
+  /** How many active orders already book this resource. */
+  private bookedCount(item: Item): number {
+    let n = 0;
+    for (const o of this.orders()) {
+      for (const li of o.lineItems) {
+        if (li.type === item.type && li.refId === item.id) n++;
+      }
+    }
+    return n;
+  }
+
+  /** Jump the calendar to an order's start period and expand it (prototype `focusOrder`). */
+  focusOrder(id: string): void {
+    const o = this.data.getOrder(id);
+    if (!o) return;
+    this.selectedOrderId = id;
+    const stDate = new Date(o.startDate + 'T00:00:00');
+    const st = this.startOfDay(stDate);
+    if (this.view === 'month') {
+      this.anchor = this.startOfDay(new Date(stDate.getFullYear(), stDate.getMonth(), 1));
+    } else if (this.view === 'week') {
+      this.anchor = this.mondayOf(st);
+    } else {
+      this.anchor = st;
+    }
+    this.expanded.add(id);
+  }
+
+  /* ------------------------------- create ------------------------------- */
+
+  /** Pool add-button copy, switching with the tab (prototype `poolAddLabel`). */
+  poolAddLabel(): string {
+    return POOL_ADD_LABEL[this.poolType] ?? 'New Resource';
+  }
+
+  /** First day of the visible period (ISO) — the new-order window default. */
+  private periodStartISO(): string {
+    return this.view === 'day' ? this.dateAt(this.anchor) : this.dateAt(this.viewStart());
+  }
+
+  private addDaysISO(iso: string, days: number): string {
+    const d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() + days);
+    return this.dateAt(d.getTime());
+  }
+
+  /** Open the New Order editor (prototype `orderModal`). */
+  openOrder(): void {
+    const start = this.periodStartISO();
+    const party = this.data.listParties()[0];
+    this.orderForm = {
+      active: true,
+      partyId: party?.id ?? '',
+      projectName: '',
+      jobSite: party?.billingAddress ?? '',
+      geofenceRadius: 300,
+      siteLat: this.data.yard.lat,
+      siteLng: this.data.yard.lng,
+      startDate: start,
+      startTime: '07:00',
+      endDate: this.addDaysISO(start, 14),
+      endTime: '17:00',
+    };
+    this.orderOpen = true;
+  }
+
+  /** Create the order and focus it on the timeline (prototype `c-save`). */
+  saveOrder(): void {
+    const f = this.orderForm;
+    const party = this.data.getParty(f.partyId);
+    if (!party || !f.projectName.trim()) return;
+    const created = this.data.createOrder({
+      partyId: party.id,
+      party: party.name,
+      projectName: f.projectName.trim(),
+      jobSite: f.jobSite.trim() || party.billingAddress || '—',
+      startDate: f.startDate,
+      endDate: f.endDate,
+      geofenceRadius: Number(f.geofenceRadius) || 300,
+      siteLat: Number(f.siteLat) || this.data.yard.lat,
+      siteLng: Number(f.siteLng) || this.data.yard.lng,
+      t0: hmMin(f.startTime),
+      t1: hmMin(f.endTime),
+    });
+    if (!f.active) this.data.updateOrderStatus(created.orderId, 'closed');
+    this.orderOpen = false;
+    this.focusOrder(created.orderId);
+  }
+
+  closeOrder(): void {
+    this.orderOpen = false;
+  }
+
+  /** Open the New <resource> editor for the active pool tab (prototype `addPoolResource`). */
+  openRes(): void {
+    this.resForm = {
+      ...this.emptyRes(),
+      category: this.data.categoriesFor(this.poolType)[0] ?? '',
+      status: ITEM_STATUSES[this.poolType][0],
+      lat: this.data.yard.lat,
+      lng: this.data.yard.lng,
+    };
+    this.resOpen = true;
+  }
+
+  /** Create the resource so it lands in the pool immediately (prototype `itemWrite`). */
+  saveRes(): void {
+    const f = this.resForm;
+    if (!f.name.trim()) return;
+    const patch: Record<string, unknown> = {
+      name: f.name.trim(),
+      category: f.category,
+      status: f.status,
+      qty: Number(f.qty) || 0,
+      rateDaily: Number(f.rateDaily) || 0,
+    };
+    if (this.poolType === 'serialized') {
+      Object.assign(patch, {
+        make: f.make,
+        model: f.model,
+        serial: f.serial,
+        meterHours: Number(f.meterHours) || 0,
+        fuelType: f.fuelType,
+        purchaseValue: Number(f.purchaseValue) || 0,
+        lat: Number(f.lat) || this.data.yard.lat,
+        lng: Number(f.lng) || this.data.yard.lng,
+      });
+    }
+    if (this.poolType === 'consumable' || this.poolType === 'part') {
+      Object.assign(patch, {
+        qtyOnHand: Number(f.qtyOnHand) || 0,
+        reorderPoint: Number(f.reorderPoint) || 0,
+        costPrice: Number(f.costPrice) || 0,
+        retailPrice: Number(f.retailPrice) || 0,
+        bin: f.bin,
+      });
+    }
+    if (this.poolType === 'labor') {
+      Object.assign(patch, {
+        role: f.role,
+        hourlyCost: Number(f.hourlyCost) || 0,
+        hourlyBillable: Number(f.hourlyBillable) || 0,
+      });
+    }
+    this.data.createItem(this.poolType, patch as unknown as Omit<Item, 'type' | 'id'>);
+    this.resOpen = false;
+  }
+
+  closeRes(): void {
+    this.resOpen = false;
+  }
   dateAt(ms: number): string {
     const d = new Date(ms);
     const p = (n: number) => String(n).padStart(2, '0');
@@ -182,7 +469,17 @@ export class SchedulerComponent implements OnDestroy {
         og = this.geom(o.startDate, o.endDate);
       }
       const orderBar: BarModel | null = og
-        ? { orderId: o.orderId, liId: null, label: o.orderId, sub: oSub, color: '#334155', conflict: false, geom: og }
+        ? {
+            orderId: o.orderId,
+            liId: null,
+            type: 'order',
+            label: o.orderId,
+            short: o.orderId,
+            sub: oSub,
+            color: '#334155',
+            conflict: false,
+            geom: og,
+          }
         : null;
       const lines: BarModel[] = [];
       for (const li of o.lineItems) {
@@ -204,7 +501,9 @@ export class SchedulerComponent implements OnDestroy {
         lines.push({
           orderId: o.orderId,
           liId: li.id,
+          type: li.type,
           label: this.itemName(li.type, li.refId),
+          short: this.shortItemLabel(li),
           sub: sub + (conflict ? ' - CONFLICT' : ''),
           color: TYPE_COLORS[li.type] ?? '#334155',
           conflict,
@@ -219,6 +518,20 @@ export class SchedulerComponent implements OnDestroy {
     let n = 0;
     for (const m of this.models()) for (const l of m.lines) if (l.conflict) n++;
     return n;
+  }
+
+  /** Flat conflict list for the inspector pane (prototype `renderInspector`). */
+  conflicts(): { type: CatalogType; refId: string; orderId: string; label: string }[] {
+    const out: { type: CatalogType; refId: string; orderId: string; label: string }[] = [];
+    for (const m of this.models()) {
+      for (const line of m.lines) {
+        if (!line.conflict) continue;
+        const li = m.order.lineItems.find((l) => l.id === line.liId);
+        if (!li) continue;
+        out.push({ type: li.type, refId: li.refId, orderId: m.order.orderId, label: line.label });
+      }
+    }
+    return out;
   }
 
   onPoolStart(e: Event, item: Item): void {
@@ -237,6 +550,9 @@ export class SchedulerComponent implements OnDestroy {
     const t = type as CatalogType;
     const order = this.data.getOrder(orderId);
     if (!order) return;
+    // Blocked resources (out on order, in the shop, inactive) can't be booked.
+    const item = this.data.getItem(t, refId);
+    if (item && this.availability(item).blocked) return;
     if (order.lineItems.some((li) => li.type === t && li.refId === refId)) return;
     this.data.addOrderLine(order.orderId, { type: t, refId, qty: 1 });
     this.selectedOrderId = order.orderId;
@@ -246,7 +562,8 @@ export class SchedulerComponent implements OnDestroy {
   startResize(e: PointerEvent, bar: BarModel, edge: 'l' | 'r'): void {
     e.preventDefault();
     e.stopPropagation();
-    const track = (e.target as Element).closest('.tl-track') as HTMLElement | null;
+    // The track carries the geometry for both the order bar and the line bars.
+    const track = (e.target as Element).closest('.tl-row-track') as HTMLElement | null;
     if (!track) return;
     this.resizing = { orderId: bar.orderId, liId: bar.liId, edge, track };
     const move = (ev: PointerEvent) => this.onResizeMove(ev);
@@ -309,6 +626,50 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   detachResize(): void { this.resizing = null; }
+
+  /** Blank New Order form (no service access — safe as a field initializer). */
+  private emptyOrder() {
+    return {
+      active: true,
+      partyId: '',
+      projectName: '',
+      jobSite: '',
+      geofenceRadius: 300,
+      siteLat: 33.749,
+      siteLng: -84.388,
+      startDate: '',
+      startTime: '07:00',
+      endDate: '',
+      endTime: '17:00',
+    };
+  }
+
+  /** Blank New Resource form (no service access — safe as a field initializer). */
+  private emptyRes() {
+    return {
+      name: '',
+      category: '',
+      status: 'Available' as Item['status'],
+      qty: 1,
+      rateDaily: 0,
+      make: '',
+      model: '',
+      serial: '',
+      meterHours: 0,
+      fuelType: 'Diesel',
+      purchaseValue: 0,
+      qtyOnHand: 0,
+      reorderPoint: 0,
+      costPrice: 0,
+      retailPrice: 0,
+      bin: '',
+      role: '',
+      hourlyCost: 0,
+      hourlyBillable: 0,
+      lat: 33.749,
+      lng: -84.388,
+    };
+  }
   private startOfDay(d: Date): number {
     const x = new Date(d);
     x.setHours(0, 0, 0, 0);

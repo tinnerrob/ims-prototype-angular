@@ -1,190 +1,534 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Allocations &amp; Scheduling</h1>
-      <p class="page-sub">Orders sit on top of the calendar — expand one to see and resize its inventory.</p>
-    </div>
-    <span class="mod-tag">MODULE · scheduling</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="scheduler-3col">
-    <!-- ================= LEFT ================= -->
-    <aside class="sched-side">
+<div class="scheduler-3col">
+  <!-- ======================= LEFT: queue + pool ======================= -->
+  <aside class="sched-side">
+    <div class="sched-queue">
       <div class="card">
-        <div class="card-header"><i class="bi bi-folder2-open"></i> Orders &amp; Allocations <span class="count-pill">{{ orders().length }} active</span></div>
-        <div class="card-body queue">
+        <div class="card-header">
+          <span class="card-title"><i class="bi bi-stack"></i> Orders &amp; Allocations</span>
+          <span class="badge-status st-onrent">{{ orders().length }} active</span>
+        </div>
+        <div class="card-body queue-scroll">
           @for (o of orders(); track o.orderId) {
-            <div
-              class="queue-order"
-              [class.active]="selectedOrderId === o.orderId"
-              (dragover)="allowDrop($event)"
-              (drop)="onDropOrder($event, o.orderId)"
-              (click)="selectOrder(o.orderId)"
-            >
-              <div class="qc-head"><span class="mono strong">{{ o.orderId }}</span><span class="badge">{{ o.lineItems.length }}</span></div>
-              <div class="qc-sub">{{ o.projectName }}</div>
-              <div class="qc-dates">{{ o.startDate }} → {{ o.endDate }}</div>
+            <div class="queue-order" [class.active]="selectedOrderId === o.orderId" (click)="focusOrder(o.orderId)">
+              <div class="qc-head">
+                <i class="bi bi-briefcase"></i><span class="strong">{{ o.orderId }}</span>
+              </div>
+              <div class="qc-party">{{ o.party }}</div>
+              <div class="qc-dates">{{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}</div>
             </div>
+          } @empty {
+            <p class="text-muted2 py-2">No active orders.</p>
           }
+        </div>
+        <div class="card-body pt-2">
+          <button class="btn btn-ims btn-create btn-sm2 w-100" type="button" (click)="openOrder()">
+            <i class="bi bi-plus-lg"></i> New Order
+          </button>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-header"><i class="bi bi-box-seam"></i> Inventory Pool <span class="pool-hint">drag to an order</span></div>
+        <div class="card-header">
+          <span class="card-title"><i class="bi bi-box-seam"></i> Inventory Pool</span>
+          <span class="text-muted2 text-xs">drag to a block</span>
+        </div>
         <div class="card-body">
-          <select class="input" [(ngModel)]="poolType">
+          <select class="form-select mb-2" [(ngModel)]="poolType">
             @for (t of poolTypes; track t.key) {
               <option [value]="t.key">{{ t.label }}</option>
             }
           </select>
-          <div class="pool-list">
+          <div class="text-muted2 mb-2 pool-scope text-105">
+            <i class="bi bi-calendar-range me-1"></i>Availability for {{ rangeLabel() }}
+          </div>
+          <div class="queue-scroll">
             @for (it of lanes(); track it.id) {
               <div
-                class="res-card"
+                class="res-card res-{{ availability(it).key }}"
+                [class.inactive]="availability(it).blocked"
+                [class.partial]="availability(it).key === 'partial'"
                 draggable="true"
+                [title]="availability(it).blocked ? 'Booked for the visible period — free at other times' : 'Drag to an order block'"
                 (dragstart)="onPoolStart($event, it)"
                 (dragend)="onDragEnd()"
-                [class.dragging]="dragging?.refId === it.id"
               >
+                <div class="res-card-head">
+                  <span class="type-chip tc-{{ it.type }}">{{ typeLabel(it.type) }}</span>
+                  @if (availability(it).badge) {
+                    <span class="badge-status st-out">{{ availability(it).badge }}</span>
+                  }
+                </div>
                 <div class="res-name">{{ it.name }}</div>
-                <div class="res-meta mono">{{ it.id }} · ${{ it.rateDaily }}/day</div>
-              </div>
-            } @empty {
-              <p class="empty">No {{ poolType }} items yet.</p>
-            }
-          </div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- ================= MIDDLE CALENDAR ================= -->
-    <div class="sched-timeline">
-      <div class="tl-nav">
-        <button class="btn btn-ghost btn-sm" (click)="shift(-1)"><i class="bi bi-chevron-left"></i></button>
-        <span class="week-label">{{ rangeLabel() }}</span>
-        <button class="btn btn-ghost btn-sm" (click)="shift(1)"><i class="bi bi-chevron-right"></i></button>
-        <div class="view-toggle">
-          <button class="btn btn-sm" [class.active]="view === 'day'" (click)="view = 'day'">Day</button>
-          <button class="btn btn-sm" [class.active]="view === 'week'" (click)="view = 'week'">Week</button>
-          <button class="btn btn-sm" [class.active]="view === 'month'" (click)="view = 'month'">Month</button>
-        </div>
-      </div>
-
-      <div class="tl-scroll">
-        <div class="tl">
-          <div class="tl-head" [style.gridTemplateColumns]="'170px repeat(' + colCount() + ', minmax(44px, 1fr))'">
-            <div class="tl-corner">Resource</div>
-            @for (c of columns(); track c.start) {
-              <div class="tl-day"><div class="tl-day-name">{{ c.label }}</div><div class="tl-day-sub">{{ c.sub }}</div></div>
-            }
-          </div>
-          <!-- order rows -->
-          @for (m of models(); track m.order.orderId) {
-            <div
-              class="tl-row tl-order"
-              [class.selected]="selectedOrderId === m.order.orderId"
-              (dragover)="allowDrop($event)"
-              (drop)="onDropOrder($event, m.order.orderId)"
-              (click)="onOrderClick(m.order.orderId)"
-            >
-              <div class="tl-label">
-                <div class="row-head"><span class="mono strong">{{ m.order.orderId }}</span><span class="chips-mini">{{ m.order.lineItems.length }} item(s)</span></div>
-                <div class="row-sub">{{ m.order.projectName }}</div>
-                <div class="row-dates">{{ m.order.startDate }} → {{ m.order.endDate }}</div>
-              </div>
-              <div class="tl-track">
-                @if (m.orderBar) {
-                  <div
-                    class="tl-block order"
-                    [class.selected]="selectedOrderId === m.order.orderId"
-                    [style.left.%]="m.orderBar.geom.left"
-                    [style.width.%]="m.orderBar.geom.width"
-                  >
-                    <span class="tl-block-title">{{ m.order.projectName }} · {{ m.order.orderId }}</span>
-                    <span class="tl-block-sub">{{ m.orderBar.sub }} — click to expand/collapse</span>
-                    <span class="h h-l" (pointerdown)="startResize($event, m.orderBar, 'l')" title="Drag to change order start"></span>
-                    <span class="h h-r" (pointerdown)="startResize($event, m.orderBar, 'r')" title="Drag to change order end"></span>
-                  </div>
+                <div class="res-meta">{{ it.id }} · {{ data.money(it.rateDaily) }}/d</div>
+                @if (availability(it).note) {
+                  <div class="res-note">{{ availability(it).note }}</div>
                 }
               </div>
-            </div>
+            } @empty {
+              <p class="text-muted2 py-2">No resources in this pool.</p>
+            }
+          </div>
+          <button class="btn btn-ims btn-create btn-sm2 w-100 mt-2" type="button" (click)="openRes()">
+            <i class="bi bi-plus-lg"></i> {{ poolAddLabel() }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </aside>
 
-            @if (m.isExpanded) {
-              @if (m.lines.length === 0) {
-                <div class="tl-row tl-empty">
-                  <div class="tl-label"></div>
-                  <div class="tl-track"><span class="tl-hint">Drag pool items onto this order to book them.</span></div>
-                </div>
+  <!-- ======================= MIDDLE: timeline ======================= -->
+  <div class="sched-timeline">
+    <div class="tl-nav">
+      <div class="period-pager">
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shift(-1)">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <span class="tl-range">{{ rangeLabel() }}</span>
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shift(1)">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+      <div class="btn-group">
+        @for (v of ['day', 'week', 'month']; track v) {
+          <button
+            class="btn btn-sm2"
+            type="button"
+            [class.btn-ims]="view === v"
+            [class.btn-ims-outline]="view !== v"
+            (click)="setView($any(v))"
+          >
+            {{ v[0].toUpperCase() + v.slice(1) }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="tl-week">
+      <div class="tl-inner" [style.min-width.px]="minWidth()">
+        <!-- period header -->
+        <div class="tl-head" [class.month-head]="view === 'month'" [style.grid-template-columns]="headColumns()">
+          <div class="tl-corner">{{ cornerLabel() }}</div>
+          @if (view === 'day') {
+            <div class="tl-day-head tl-day-hours">
+              @for (h of columns(); track $index) {
+                <div>{{ h.label }}</div>
               }
-              @for (line of m.lines; track line.liId) {
-                <div class="tl-row tl-res" [class.conflict]="line.conflict">
-                  <div class="tl-label res">
-                    <div class="row-head"><span class="dot" [style.background]="line.color"></span><span class="mono">{{ line.liId }}</span></div>
-                    <div class="row-sub">{{ line.label }}</div>
-                  </div>
-                  <div class="tl-track">
+            </div>
+          } @else {
+            @for (c of columns(); track $index) {
+              <div class="tl-day-head">
+                {{ c.label }}
+                <div class="text-muted2 text-10">{{ c.sub }}</div>
+              </div>
+            }
+          }
+        </div>
+
+        <!-- order lanes -->
+        <div class="tl-body">
+          @for (m of models(); track m.order.orderId) {
+            <div class="tl-lane" [class.expanded]="m.isExpanded">
+              <div
+                class="tl-row tl-row-order"
+                [class.selected]="selectedOrderId === m.order.orderId"
+                (dragover)="allowDrop($event)"
+                (drop)="onDropOrder($event, m.order.orderId)"
+                (click)="onOrderClick(m.order.orderId)"
+              >
+                <div class="tl-row-label">
+                  {{ m.order.orderId }}
+                  <div class="text-muted2 text-10">{{ m.order.party }}</div>
+                </div>
+                <div class="tl-row-track">
+                  @if (m.orderBar) {
                     <div
-                      class="tl-block res"
-                      [class.conflict]="line.conflict"
+                      class="tl-block"
                       [class.selected]="selectedOrderId === m.order.orderId"
-                      [style.left.%]="line.geom.left"
-                      [style.width.%]="line.geom.width"
-                      [style.background]="line.color"
-                      (click)="selectOrder(m.order.orderId)"
+                      [style.left.%]="m.orderBar.geom.left"
+                      [style.width.%]="m.orderBar.geom.width"
+                      [title]="orderTitle(m.order)"
                     >
-                      <span class="tl-block-title">{{ line.label }}</span>
-                      <span class="tl-block-sub">{{ line.sub }}</span>
-                      <span class="h h-l" (pointerdown)="startResize($event, line, 'l')" title="Drag to change start"></span>
-                      <span class="h h-r" (pointerdown)="startResize($event, line, 'r')" title="Drag to change end"></span>
+                      <span class="tl-block-chev" (click)="$event.stopPropagation(); toggleExpand(m.order.orderId)">
+                        <i class="bi" [class.bi-chevron-up]="m.isExpanded" [class.bi-chevron-down]="!m.isExpanded"></i>
+                      </span>
+                      <span class="tl-block-title">{{ m.order.projectName }}</span>
+                      <span class="tl-block-sub">{{ orderSub(m.order) }}</span>
+                      <span class="tl-h tl-h-l" title="Drag to change order start" (pointerdown)="startResize($event, m.orderBar, 'l')"></span>
+                      <span class="tl-h tl-h-r" title="Drag to change order end" (pointerdown)="startResize($event, m.orderBar, 'r')"></span>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              <!-- expanded: one row per booked item -->
+              @if (m.isExpanded) {
+                @if (m.lines.length === 0) {
+                  <div class="tl-row">
+                    <div class="tl-row-label">&nbsp;</div>
+                    <div class="tl-row-track">
+                      <div class="tl-empty-wrap">Drag resources onto the order block.</div>
                     </div>
                   </div>
-                </div>
+                }
+                @for (line of m.lines; track line.liId) {
+                  <div class="tl-row" [class.conflict]="line.conflict">
+                    <div class="tl-row-label res">
+                      {{ typeLabel(line.type) }}
+                      <div class="text-muted2 text-10">{{ line.short }}</div>
+                    </div>
+                    <div class="tl-row-track">
+                      <div
+                        class="tl-block tl-res tl-res-{{ line.type }}"
+                        [class.conflict]="line.conflict"
+                        [style.left.%]="line.geom.left"
+                        [style.width.%]="line.geom.width"
+                        [title]="line.label + ' · ' + line.sub"
+                      >
+                        <span class="tl-block-title">{{ line.label }}</span>
+                        <span class="tl-block-sub">{{ line.sub }}</span>
+                        <span class="tl-h tl-h-l" title="Drag to change start" (pointerdown)="startResize($event, line, 'l')"></span>
+                        <span class="tl-h tl-h-r" title="Drag to change end" (pointerdown)="startResize($event, line, 'r')"></span>
+                      </div>
+                    </div>
+                  </div>
+                }
               }
-            }
+            </div>
+          } @empty {
+            <p class="text-muted2 py-3 text-center">No active orders this period.</p>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ======================= RIGHT: conflicts + detail ======================= -->
+  <aside class="sched-inspector">
+    <div class="card mb-3">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-exclamation-triangle"></i> Scheduling Conflicts</span>
+        <span
+          class="badge-status"
+          [class.st-out]="conflictCount() > 0"
+          [class.st-available]="conflictCount() === 0"
+        >{{ conflictCount() }}</span>
+      </div>
+      <div class="card-body">
+        <div class="text-muted2 mb-2 text-xs">
+          @if (conflictCount()) {
+            Red rows on the timeline mark each conflicted booking.
+          } @else {
+            All resources are uniquely scheduled.
+          }
+        </div>
+        <div class="conflict-list">
+          @for (c of conflicts(); track $index) {
+            <div class="conflict-item shared">
+              <div class="ci-head">
+                <span class="type-chip tc-{{ c.type }}">{{ typeLabel(c.type) }}</span>
+                <span class="strong">{{ c.label }}</span>
+                <span class="badge-status st-reorder">Overbooked</span>
+              </div>
+              <div class="ci-orders">
+                <span class="mono">{{ c.orderId }}</span>
+              </div>
+            </div>
+          } @empty {
+            <p class="text-muted2 py-3">No scheduling conflicts.</p>
           }
         </div>
       </div>
     </div>
 
-    <!-- ================= RIGHT ================= -->
-    <aside class="sched-inspector">
-      <div class="card">
-        <div class="card-header">
-          <i class="bi bi-exclamation-triangle"></i> Conflicts
-          <span class="count-pill danger" [hidden]="conflictCount() === 0">{{ conflictCount() }}</span>
-        </div>
-        <div class="card-body">
-          @if (conflictCount() === 0) {
-            <p class="empty">No conflicts.</p>
-          }
-          @for (m of models(); track m.order.orderId) {
-            @for (line of m.lines; track line.liId) {
-              @if (line.conflict) {
-                <div class="conflict-row"><span class="conflict-dot"></span>{{ line.label }} on {{ m.order.orderId }} is double-booked.</div>
-              }
-            }
-          }
-        </div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-clipboard-data"></i> Order Details</span>
       </div>
+      <div class="card-body">
+        @if (data.getOrder(selectedOrderId); as o) {
+          <div class="strong">{{ o.orderId }}</div>
+          <div class="text-muted2 text-xs">{{ o.projectName }}</div>
+          <div class="text-muted2 text-105">
+            {{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}
+          </div>
+          <div class="divider"></div>
+          <div class="list-line">
+            <span class="l">Days</span><span class="r strong">{{ data.orderDays(o) }}</span>
+          </div>
+          <div class="list-line">
+            <span class="l">Gross</span><span class="r strong">{{ data.money(data.orderAmount(o)) }}</span>
+          </div>
+          <div class="list-line">
+            <span class="l">Items booked</span><span class="r">{{ o.lineItems.length }}</span>
+          </div>
+          <div class="divider"></div>
+          @for (li of o.lineItems; track li.id) {
+            <div class="list-line">
+              <span class="l">
+                <span class="type-chip tc-{{ li.type }}">{{ typeLabel(li.type) }}</span>
+                {{ itemName(li.type, li.refId) }}
+              </span>
+              <span class="r mono text-105">
+                {{ data.fmtDate(li.startDate ?? o.startDate) }} → {{ data.fmtDate(li.endDate ?? o.endDate) }}
+              </span>
+            </div>
+          } @empty {
+            <p class="text-muted2 py-2">No booked inventory yet — drag a pool item onto this order.</p>
+          }
+        } @else {
+          <p class="text-muted2 py-2">Click an order row or queue card to inspect it.</p>
+        }
+      </div>
+    </div>
+  </aside>
+</div>
 
-      <div class="card">
-        <div class="card-header"><i class="bi bi-clipboard-data"></i> Order details</div>
-        <div class="card-body">
-          @if (data.getOrder(selectedOrderId); as o) {
-            <div class="strong">{{ o.orderId }}</div>
-            <div class="qc-sub">{{ o.projectName }}</div>
-            <div class="qc-dates">{{ o.startDate }} → {{ o.endDate }}</div>
-            <div class="divider"></div>
-            @for (li of o.lineItems; track li.id) {
-              <div class="line"><span>{{ itemName(li.type, li.refId) }}</span><span class="r">{{ li.startDate ?? o.startDate }} → {{ li.endDate ?? o.endDate }}</span></div>
-            } @empty {
-              <p class="empty">No booked inventory yet — drag a pool item onto this order.</p>
-            }
-          } @else {
-            <p class="empty">Click an order row or queue card to inspect it.</p>
-          }
+
+<!-- ================= New Order (prototype `orderModal` → `openOrderModal`) ================= -->
+@if (orderOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-file-earmark-text"></i>New Order / Job</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeOrder()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="c-active" [(ngModel)]="orderForm.active" />
+              <label class="form-check-label" for="c-active"><strong>Active</strong></label>
+            </div>
+            <span class="text-muted2 text-xs2">Active orders bill normally; inactive are closed/archived</span>
+          </div>
+
+          <div class="divider"></div>
+          <div class="strong mb-2"><i class="bi bi-file-earmark-text me-1"></i> Order / Job Details</div>
+          <div class="row g-3">
+            <div class="col-md-4 field-group">
+              <label class="form-label">Order ID</label>
+              <input class="form-control" [value]="data.previewOrderId()" disabled />
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Customer</label>
+              <select class="form-select" [(ngModel)]="orderForm.partyId">
+                @for (p of data.listParties(); track p.id) {
+                  <option [value]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Project Name</label>
+              <input class="form-control" [(ngModel)]="orderForm.projectName" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Job Site Address</label>
+              <input class="form-control" [(ngModel)]="orderForm.jobSite" />
+            </div>
+            <div class="col-md-3 field-group">
+              <label class="form-label">Geofence Radius (m)</label>
+              <input class="form-control" type="number" [(ngModel)]="orderForm.geofenceRadius" />
+            </div>
+            <div class="col-md-3 field-group">
+              <label class="form-label">Site Lat</label>
+              <input class="form-control" type="number" step="0.0001" [(ngModel)]="orderForm.siteLat" />
+            </div>
+            <div class="col-md-3 field-group">
+              <label class="form-label">Site Lng</label>
+              <input class="form-control" type="number" step="0.0001" [(ngModel)]="orderForm.siteLng" />
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="strong mb-2"><i class="bi bi-calendar-range me-1"></i> Rental Window</div>
+          <div class="row g-3">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Rental Start</label>
+              <input class="form-control mb-1" type="date" [(ngModel)]="orderForm.startDate" />
+              <input class="form-control" type="time" [(ngModel)]="orderForm.startTime" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Expected Return</label>
+              <input class="form-control mb-1" type="date" [(ngModel)]="orderForm.endDate" />
+              <input class="form-control" type="time" [(ngModel)]="orderForm.endTime" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeOrder()">Cancel</button>
+          <button
+            type="button"
+            class="btn btn-ims"
+            [disabled]="!orderForm.projectName.trim()"
+            (click)="saveOrder()"
+          >
+            <i class="bi bi-check2"></i> Save Order
+          </button>
         </div>
       </div>
-    </aside>
+    </div>
   </div>
-</section>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+
+<!-- ============ New <resource> (prototype `addPoolResource` → `openAddModal`) ============ -->
+@if (resOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-plus-circle"></i>{{ poolAddLabel() }}</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeRes()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="strong mb-2">Identity</div>
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Name *</label>
+              <input class="form-control" [(ngModel)]="resForm.name" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Category</label>
+              <select class="form-select" [(ngModel)]="resForm.category">
+                @for (c of data.categoriesFor(poolType); track c) {
+                  <option [value]="c">{{ c }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" [(ngModel)]="resForm.status">
+                @for (s of statuses[poolType]; track s) {
+                  <option [value]="s">{{ s }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Quantity</label>
+              <input class="form-control" type="number" [(ngModel)]="resForm.qty" />
+            </div>
+          </div>
+
+          @if (poolType === 'serialized') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Usage &amp; Availability</div>
+            <div class="row g-2">
+              <div class="col-md-6 field-group">
+                <label class="form-label">Serial / VIN</label>
+                <input class="form-control" [(ngModel)]="resForm.serial" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Make</label>
+                <input class="form-control" [(ngModel)]="resForm.make" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Model</label>
+                <input class="form-control" [(ngModel)]="resForm.model" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Current Meter Hours</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.meterHours" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Fuel Type</label>
+                <select class="form-select" [(ngModel)]="resForm.fuelType">
+                  @for (f of ['Diesel', 'Gasoline', 'Electric', 'LPG']; track f) {
+                    <option [value]="f">{{ f }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Latitude</label>
+                <input class="form-control" type="number" step="0.0001" [(ngModel)]="resForm.lat" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Longitude</label>
+                <input class="form-control" type="number" step="0.0001" [(ngModel)]="resForm.lng" />
+              </div>
+            </div>
+            <div class="divider"></div>
+            <div class="strong mb-2">Rates &amp; Pricing</div>
+            <div class="row g-2">
+              <div class="col-md-6 field-group">
+                <label class="form-label">Purchase Value ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.purchaseValue" />
+              </div>
+              <div class="col-md-6 field-group">
+                <label class="form-label">Base Daily Rate ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.rateDaily" />
+              </div>
+            </div>
+          }
+
+
+          @if (poolType === 'consumable' || poolType === 'part') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Stock Levels</div>
+            <div class="row g-2">
+              <div class="col-md-3 field-group">
+                <label class="form-label">On Hand</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.qtyOnHand" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Reorder Point</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.reorderPoint" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Cost Price ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.costPrice" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Retail Price ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.retailPrice" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Bin</label>
+                <input class="form-control" [(ngModel)]="resForm.bin" />
+              </div>
+            </div>
+          }
+
+          @if (poolType === 'labor') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Labor Rates</div>
+            <div class="row g-2">
+              <div class="col-md-4 field-group">
+                <label class="form-label">Role</label>
+                <input class="form-control" [(ngModel)]="resForm.role" />
+              </div>
+              <div class="col-md-4 field-group">
+                <label class="form-label">Cost / hr ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.hourlyCost" />
+              </div>
+              <div class="col-md-4 field-group">
+                <label class="form-label">Billable / hr ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="resForm.hourlyBillable" />
+              </div>
+            </div>
+          }
+
+          @if (poolType === 'bulk' || poolType === 'kit' || poolType === 'attachment') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Rates &amp; Pricing</div>
+            <div class="field-group">
+              <label class="form-label">Daily Rate ($)</label>
+              <input class="form-control" type="number" [(ngModel)]="resForm.rateDaily" />
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeRes()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!resForm.name.trim()" (click)="saveRes()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+

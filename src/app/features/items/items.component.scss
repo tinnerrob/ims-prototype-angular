@@ -1,6 +1,4 @@
-.count {
-  margin-right: auto;
-  color: var(--muted);
-  font-size: 12.5px;
-  align-self: center;
+/* Items & Stock: the toolbar search field is narrower than the pool filter. */
+.filter-input.search {
+  max-width: 320px;
 }

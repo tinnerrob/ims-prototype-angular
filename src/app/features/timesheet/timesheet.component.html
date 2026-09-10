@@ -1,82 +1,432 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Labor &amp; Timesheets</h1>
-      <p class="page-sub">Industry module: drag a task chip onto an employee row to clock them in.</p>
+<div class="page-head"></div>
+
+<div class="ts-page">
+  <!-- ============== LEFT: dragging pool ============== -->
+  <aside class="sched-side">
+    <div class="ts-side">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="bi bi-briefcase"></i> Active Contracts</span>
+          <span class="badge-status st-onrent">{{ activeOrders().length }}</span>
+        </div>
+        <div class="card-body ts-order-list">
+          @for (o of activeOrders(); track o.orderId) {
+            <div
+              class="queue-order lab-poolrow ts-order"
+              draggable="true"
+              title="Drag onto an employee row to clock in"
+              (dragstart)="startChip($event, 'order', o.orderId)"
+              (dragend)="endChip()"
+            >
+              <div class="lab-prow-head">
+                <span class="strong mono">{{ o.orderId }}</span>
+                <span class="badge-status st-onrent">Active</span>
+              </div>
+              <div class="lab-prow-name">{{ o.projectName }}</div>
+              <div class="text-muted2 text-105">
+                {{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}
+              </div>
+            </div>
+          } @empty {
+            <p class="text-muted2">None active.</p>
+          }
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title"><i class="bi bi-lightning-charge"></i> Quick Tasks</span>
+        </div>
+        <div class="card-body ts-chips">
+          <div class="ts-chip-label">Overhead / other</div>
+          @for (t of quickTasks(); track t) {
+            <button
+              type="button"
+              class="lab-chip {{ kind[t].cls }}"
+              draggable="true"
+              title="Drag onto an employee row to clock in"
+              (dragstart)="startChip($event, t, null)"
+              (dragend)="endChip()"
+            >
+              {{ kind[t].label }}
+            </button>
+          }
+          @if (openWorkOrders().length) {
+            <div class="ts-chip-label">Work orders</div>
+            @for (w of openWorkOrders(); track w.id) {
+              <button
+                type="button"
+                class="lab-chip ts-wo"
+                draggable="true"
+                title="Drag onto an employee row to clock in"
+                (dragstart)="startChip($event, 'workorder', w.id)"
+                (dragend)="endChip()"
+              >
+                {{ w.id }}
+              </button>
+            }
+          }
+        </div>
+      </div>
+
+      <div class="text-muted2 ts-side-note">
+        Drag a contract or task onto an employee's row to clock them in. Click the
+        <i class="bi bi-stopwatch"></i> on a row to punch (includes Lunch).
+      </div>
     </div>
-    <span class="mod-tag">MODULE · labor</span>
-  </div>
+  </aside>
 
-  <div class="stat-row">
-    <div class="card stat"><span class="stat-label">Employees</span><span class="stat-value">{{ employees().length }}</span></div>
-    <div class="card stat"><span class="stat-label">Total hours</span><span class="stat-value">{{ data.totalHours() }}</span></div>
-    <div class="card stat"><span class="stat-label">Punches</span><span class="stat-value">{{ punches().length }}</span></div>
-  </div>
+  <!-- ============== MIDDLE: employee timeline ============== -->
+  <div class="sched-timeline">
+    <div class="tl-nav">
+      <div class="period-pager">
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="nav(-1)">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <span class="tl-range">{{ rangeLabel() }}</span>
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="nav(1)">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+      <div class="btn-group">
+        @for (v of ['day', 'week', 'month']; track v) {
+          <button
+            class="btn btn-sm2"
+            type="button"
+            [class.btn-ims]="view === v"
+            [class.btn-ims-outline]="view !== v"
+            (click)="setView($any(v))"
+          >
+            {{ v[0].toUpperCase() + v.slice(1) }}
+          </button>
+        }
+      </div>
+    </div>
 
-  <!-- TASK POOL (drag source) -->
-  <div class="pool-tasks">
-    <span class="pool-hint">Drag a task to an employee to log time</span>
-    <div class="task-chips">
-      @for (c of tasks(); track c.key) {
-        <div
-          class="task-chip {{ chipClass(c) }}"
-          draggable="true"
-          (dragstart)="onDragStart($event, c)"
-          (dragend)="onDragEnd()"
-          [class.dragging]="draggingKey === c.key"
-        >{{ c.label }}</div>
+    <div class="ts-hint">
+      <i class="bi bi-arrow-down-left-circle"></i>
+      Drag a contract or task onto an employee row to clock in · drag a bar to move/resize · click a bar to edit ·
+      clock icon = punch
+    </div>
+
+    <div class="tl-week">
+      <div class="tl-inner" [style.min-width.px]="minWidth()">
+        <!-- header row -->
+        <div class="tl-head" [style.grid-template-columns]="gridTemplate()">
+          <div class="tl-corner">Employee</div>
+          @if (isDay()) {
+            @for (h of hourLabels(); track $index) {
+              <div class="tl-day-head">{{ h }}</div>
+            }
+          } @else {
+            @for (d of days(); track d.getTime()) {
+              <div class="tl-day-head" [class.today]="isToday(d)">
+                {{ view === 'month' ? d.getDate() : d.toLocaleDateString('en-US', { weekday: 'short' }) }}
+                <div class="text-muted2 text-10">{{ d.getMonth() + 1 }}/{{ d.getDate() }}</div>
+              </div>
+            }
+          }
+          <div class="tl-gutter"></div>
+        </div>
+
+        <!-- employee lanes -->
+        <div class="tl-body">
+          @for (lane of lanes(); track lane.emp.id) {
+            <div
+              class="tl-row lab-row"
+              [class.active]="lane.emp.id === selectedEmp"
+              (click)="selectedEmp = lane.emp.id"
+              (dragover)="$event.preventDefault()"
+              (drop)="onRowDrop($event, lane.emp.id)"
+            >
+              <div class="tl-row-label res lab-lbl">
+                <div class="lab-l-name">
+                  {{ lane.emp.name }}
+                  @if (lane.open) {
+                    <i class="lab-live-dot" [title]="'On ' + segShort(lane.open) + ' since ' + lane.open.clockIn"></i>
+                  }
+                </div>
+                <div class="lab-l-code">{{ lane.emp.id }}</div>
+                <div class="lab-l-title">{{ lane.emp.role }}</div>
+                <div class="lab-l-hours">{{ rounded(lane.logged) }} hr logged</div>
+              </div>
+
+              <div class="tl-row-track lab-track" [style.min-height.px]="lane.trackHeight">
+                @for (bar of lane.bars; track bar.ts.id) {
+                  <div
+                    class="ts-block {{ segClass(bar.ts) }}"
+                    [class.ts-live]="bar.live"
+                    [class.draggable]="!bar.live"
+                    [title]="tip(bar.ts)"
+                    [style.left.%]="bar.left"
+                    [style.width.%]="bar.width"
+                    [style.top.px]="bar.top"
+                    [style.height.px]="bar.height"
+                    (click)="onBarClick(bar.ts)"
+                    (mousedown)="beginMove($event, bar.ts)"
+                  >
+                    @if (isDay() && !bar.live) {
+                      <span class="ts-h ts-h-l" title="Drag to resize" (mousedown)="beginResize($event, bar.ts, 'l')"></span>
+                    }
+                    <span class="ts-block-title">{{ segShort(bar.ts) }}</span>
+                    <span class="ts-block-sub">
+                      {{
+                        bar.live
+                          ? 'running'
+                          : bar.ts.clockOut
+                            ? bar.ts.clockIn + '–' + bar.ts.clockOut
+                            : data.segmentHours(bar.ts) + 'h'
+                      }}
+                    </span>
+                    @if (isDay() && !bar.live) {
+                      <span class="ts-h ts-h-r" title="Drag to resize" (mousedown)="beginResize($event, bar.ts, 'r')"></span>
+                    }
+                  </div>
+                } @empty {
+                  <span class="text-muted2 lab-empty">No time</span>
+                }
+                @if (isDay()) {
+                  <div class="lab-nowline" [style.left.%]="nowLeft()"></div>
+                }
+              </div>
+
+              <div class="lab-row-clock">
+                <button
+                  class="btn btn-ims-outline btn-sm2"
+                  type="button"
+                  [title]="'Punch ' + lane.emp.name"
+                  (click)="$event.stopPropagation(); openPunch(lane.emp.id)"
+                >
+                  <i class="bi bi-stopwatch"></i>
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ============== bottom: time-allocation summary ============== -->
+<div class="lab-summary">
+  <div class="lab-sum-title"><i class="bi bi-bar-chart"></i> Time allocation — {{ rangeLabel() }}</div>
+  <div class="lab-sum-body">
+    <div class="lab-sum-left">
+      @for (row of summaryByKind(); track row.kind) {
+        <div class="list-line">
+          <span class="l">
+            <i class="bi {{ kind[row.kind].icon }} me-1 {{ kind[row.kind].cls }}"></i>{{ kind[row.kind].label }}
+          </span>
+          <span class="r">
+            <span class="mini-bar">
+              <span class="{{ kind[row.kind].cls }}" [style.width.%]="row.pct"></span>
+            </span>
+            {{ rounded(row.hours) }} hr
+          </span>
+        </div>
+      } @empty {
+        <p class="text-muted2">No time logged.</p>
       }
     </div>
-  </div>
-
-  <div class="split">
-    <!-- EMPLOYEE ROWS (drop targets) -->
-    <div class="card">
-      <div class="card-header">Employees — drop a task to clock in</div>
-      <div class="card-body">
-        <table class="table">
-          <thead><tr><th>Employee</th><th class="th-end">Hours</th><th>Today</th></tr></thead>
-          <tbody>
-            @for (e of employees(); track e.id) {
-              <tr
-                class="emp-row"
-                (dragover)="allowDrop($event)"
-                (drop)="onDropEmp($event, e.id)"
-                [class.drop-active]="draggingKey !== ''"
-              >
-                <td class="strong">{{ empName(e.id) }}</td>
-                <td class="td-end">{{ empHours(e.id) }}</td>
-                <td>
-                  <span class="status" [class.off]="empHours(e.id) === 0">{{ empHours(e.id) ? 'Clocked in' : 'Not clocked' }}</span>
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+    <div class="lab-sum-right">
+      <div class="list-line">
+        <span class="l">Total hours</span>
+        <span class="r strong">{{ rounded(summaryTotals().hours) }} hr</span>
+      </div>
+      <div class="list-line">
+        <span class="l">Direct labor cost</span>
+        <span class="r">{{ data.money(summaryTotals().cost) }}</span>
+      </div>
+      <div class="list-line">
+        <span class="l">Billable value</span>
+        <span class="r">{{ data.money(summaryTotals().bill) }}</span>
+      </div>
+      <div class="list-line">
+        <span class="l">Contribution</span>
+        <span class="r text-success">{{ data.money(summaryTotals().bill - summaryTotals().cost) }}</span>
       </div>
     </div>
+  </div>
+</div>
 
-    <!-- LOG -->
-    <div class="card">
-      <div class="card-header">Recent punches</div>
-      <div class="card-body">
-        <table class="table">
-          <thead><tr><th>ID</th><th>Employee</th><th>Target</th><th class="th-end">Hrs</th><th class="th-end"></th></tr></thead>
-          <tbody>
-            @for (p of punches(); track p.id) {
-              <tr>
-                <td class="mono strong">{{ p.id }}</td>
-                <td>{{ empName(p.empId) }}</td>
-                <td>{{ p.targetLabel }}</td>
-                <td class="td-end">{{ p.hours }}</td>
-                <td class="td-end"><button class="btn btn-danger-ghost btn-sm" (click)="remove(p)">Remove</button></td>
-              </tr>
+<div class="lab-legend-bottom">
+  <span class="lab-legend-item"><i class="bi bi-arrow-down-left-circle"></i>Drag a chip onto a row to clock in</span>
+  @for (k of kinds; track k) {
+    <span class="lab-legend-item"><i class="bi bi-square-fill {{ kind[k].cls }}"></i>{{ kind[k].label }}</span>
+  }
+</div>
+
+
+<!-- ============== segment editor ============== -->
+@if (editOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square"></i>Edit Time — {{ editEmployee() }}</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeEdit()"></button>
+        </div>
+        <div class="modal-body">
+          @if (editingLive()) {
+            <div class="alert-text mb-2">
+              <i class="bi bi-stopwatch"></i> Running since {{ editIn }}. Set an end time below, or Clock Out now.
+            </div>
+          }
+          <div class="field-group">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" [(ngModel)]="editDate" />
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label">Clock in</label>
+              <input class="form-control" type="time" [(ngModel)]="editIn" />
+            </div>
+            <div class="col-6">
+              <label class="form-label">Clock out{{ editingLive() ? ' (blank = still running)' : '' }}</label>
+              <input class="form-control" type="time" [(ngModel)]="editOut" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Assigned to</label>
+            <select class="form-control" [(ngModel)]="editTarget">
+              @for (g of targetGroups(); track g) {
+                <optgroup [label]="g">
+                  @for (o of optionsIn(g); track o.value) {
+                    <option [value]="o.value">{{ o.label }}</option>
+                  }
+                </optgroup>
+              }
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-danger me-auto" (click)="deleteEdit()">
+            <i class="bi bi-trash"></i> Delete
+          </button>
+          @if (editingLive()) {
+            <button type="button" class="btn btn-ims" (click)="clockOutNow()">
+              <i class="bi bi-stop-circle"></i> Clock Out Now
+            </button>
+          }
+          <button type="button" class="btn btn-ims-outline" (click)="closeEdit()">Cancel</button>
+          <button type="button" class="btn btn-ims" (click)="saveEdit()"><i class="bi bi-check2"></i> Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+
+<!-- ============== punch (clock in / out) ============== -->
+@if (punchOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-stopwatch"></i>Clock In / Out</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="punchOpen = false"></button>
+        </div>
+        <div class="modal-body">
+          <div class="lab-punch-head">
+            <div>
+              <span class="strong">{{ punchEmployee()?.name }}</span>
+              <div class="text-muted2">{{ punchEmployee()?.role }} · {{ punchEmpId }}</div>
+            </div>
+            <span
+              class="badge-status"
+              [class.st-staged]="punchOnLunch()"
+              [class.st-reorder]="punchOpenSegment() && !punchOnLunch()"
+              [class.st-out]="!punchOpenSegment()"
+            >
+              {{
+                punchOpenSegment()
+                  ? (punchOnLunch() ? 'On lunch' : 'Clocked in on ' + data.segmentLabel(punchOpenSegment()!))
+                  : 'Clocked out'
+              }}
+            </span>
+          </div>
+
+          <div class="text-muted2 text-12 mb-2">
+            @if (punchOnLunch()) {
+              You're on lunch. Set the time above (lunch-in), then use the lunch button or pick a target to resume.
+            } @else if (punchOpenSegment()) {
+              On <strong>{{ data.segmentLabel(punchOpenSegment()!) }}</strong> since {{ punchOpenSegment()!.clockIn }}.
+              Choosing below switches jobs (closing it at the time above).
+            } @else {
+              Clock into a job, work order, shop, overhead or idle at the time above.
+            }
+          </div>
+
+          <div class="row g-2 mb-2">
+            <div class="col-5">
+              <label class="form-label">Work date</label>
+              <input class="form-control" type="date" [(ngModel)]="punchDate" />
+            </div>
+            <div class="col-7">
+              <label class="form-label">
+                {{ punchOnLunch() ? 'Lunch-in time' : punchOpenSegment() ? 'Clock-out time for current' : 'Punch time' }}
+              </label>
+              <input class="form-control" type="time" [(ngModel)]="punchTime" />
+            </div>
+          </div>
+
+          @if (punchOnLunch()) {
+            <button type="button" class="btn btn-ims btn-sm2 w-100 mb-3" (click)="punchLunchIn()">
+              <i class="bi bi-cup-hot"></i> Clock In from Lunch (at the time above)
+            </button>
+          } @else {
+            <button type="button" class="btn btn-ims-outline btn-sm2 w-100 mb-3" (click)="punchLunchOut()">
+              <i class="bi bi-cup-hot"></i> Clock Out for Lunch (at the time above)
+            </button>
+          }
+
+          <div class="punch-label">Job</div>
+          <div class="punch-grid">
+            @for (o of activeOrders(); track o.orderId) {
+              <button type="button" class="punch-tgt ts-order" (click)="punchTo('order', o.orderId)">
+                <span class="strong">{{ o.orderId }} · {{ o.projectName }}</span>
+              </button>
+            }
+          </div>
+
+          <div class="punch-label">Work order</div>
+          <div class="punch-grid">
+            @for (w of openWorkOrders(); track w.id) {
+              <button type="button" class="punch-tgt ts-wo" (click)="punchTo('workorder', w.id)">
+                <span class="strong">{{ w.id }} · {{ w.itemId }}</span>
+              </button>
             } @empty {
-              <tr><td colspan="5" class="empty">No time logged yet — drag a task onto an employee above.</td></tr>
+              <span class="text-muted2 text-12">None open.</span>
             }
-          </tbody>
-        </table>
+          </div>
+
+          <div class="punch-label">Other</div>
+          <div class="punch-grid">
+            <button type="button" class="punch-tgt ts-shop" (click)="punchTo('shop', null)">
+              <span class="strong">Shop</span>
+            </button>
+            <button type="button" class="punch-tgt ts-overhead" (click)="punchTo('overhead', null)">
+              <span class="strong">Overhead</span>
+            </button>
+            <button type="button" class="punch-tgt ts-idle" (click)="punchTo('idle', null)">
+              <span class="strong">Idle</span>
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          @if (punchOpenSegment()) {
+            <button type="button" class="btn btn-outline-danger me-auto" (click)="punchClockOut()">
+              <i class="bi bi-stop-circle"></i> Clock Out
+            </button>
+          }
+          <button type="button" class="btn btn-ims-outline" (click)="punchOpen = false">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
-</section>
+  <div class="modal-backdrop show d-block"></div>
+}
+

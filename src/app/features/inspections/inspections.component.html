@@ -1,86 +1,206 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Receiving / Inspections</h1>
-      <p class="page-sub">Core: check items in/out at the yard with meter + fuel readings.</p>
-    </div>
-    <span class="core-tag">Core · always on</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="card">
-    <div class="card-body">
-      <div class="toolbar">
-        <span class="count">{{ inspections().length }} record(s)</span>
-        <button class="btn btn-primary" (click)="openForm()">+ New Inspection</button>
+<div class="split-layout">
+  <!-- inspection form -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-clipboard-check"></i> Asset In / Out Inspection</span>
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="log()">
+          <i class="bi bi-check2-square"></i> Log Inspection
+        </button>
       </div>
-      <table class="table">
-        <thead>
-          <tr><th>ID</th><th>Item</th><th>Date</th><th>Dir</th><th class="th-end">Meter</th><th class="th-end">Fuel</th><th>Status</th><th>Notes</th><th class="th-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @for (r of inspections(); track r.id) {
-            <tr>
-              <td class="mono strong">{{ r.id }}</td>
-              <td>{{ data.itemLabel('serialized', r.itemId) }}</td>
-              <td>{{ r.date }}</td>
-              <td><span class="status">{{ r.direction === 'out' ? 'Out' : 'In' }}</span></td>
-              <td class="td-end">{{ r.meter }}</td>
-              <td class="td-end">{{ r.fuel }}</td>
-              <td><span class="status" [class.off]="r.status === 'Closed'">{{ r.status }}</span></td>
-              <td>{{ r.notes || '—' }}</td>
-              <td class="td-end">
-                @if (r.status === 'Open') {
-                  <button class="btn btn-ghost btn-sm" (click)="close(r)">Close</button>
-                }
-                <button class="btn btn-danger-ghost btn-sm" (click)="remove(r)">Remove</button>
-              </td>
-            </tr>
-          } @empty {
-            <tr><td colspan="9" class="empty">No inspections yet.</td></tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-@if (formOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">New Inspection</span>
-        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label>Serialized item *</label>
-          <select class="input" [(ngModel)]="form.itemId">
-            <option value="" disabled>Choose an item…</option>
-            @for (it of items(); track it.id) {
-              <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
-            }
-          </select>
-        </div>
-        <div class="row2">
-          <div class="field"><label>Date</label><input class="input" type="date" [(ngModel)]="form.date" /></div>
-          <div class="field">
-            <label>Direction</label>
-            <select class="input" [(ngModel)]="form.direction">
-              <option value="in">In (return)</option>
-              <option value="out">Out (issue)</option>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-md-6 field-group">
+            <label class="form-label">Asset</label>
+            <select class="form-select" [(ngModel)]="itemId">
+              <option value="" disabled>Choose an asset…</option>
+              @for (a of serialized(); track a.id) {
+                <option [value]="a.id">{{ a.id }} — {{ data.mkName(a) }}</option>
+              }
             </select>
           </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Contract</label>
+            <select class="form-select" [(ngModel)]="orderId">
+              <option value="">— none —</option>
+              @for (o of orders(); track o.orderId) {
+                <option [value]="o.orderId">{{ o.orderId }} — {{ o.projectName }}</option>
+              }
+            </select>
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Direction</label>
+            <select class="form-select" [(ngModel)]="direction">
+              <option value="Check-Out">Check-Out</option>
+              <option value="Check-In">Check-In</option>
+            </select>
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Date</label>
+            <input class="form-control" type="date" [(ngModel)]="date" />
+          </div>
         </div>
-        <div class="row2">
-          <div class="field"><label>Meter hours</label><input class="input" type="number" min="0" [(ngModel)]="form.meter" /></div>
-          <div class="field"><label>Fuel %</label><input class="input" type="number" min="0" max="100" [(ngModel)]="form.fuel" /></div>
+
+        <div class="strong mb-2">Telemetry Verification</div>
+        <div class="row g-2 mb-2">
+          @for (k of checkKeys; track k) {
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" [id]="'i-' + k" [(ngModel)]="checks[k]" />
+                <label class="form-check-label" [for]="'i-' + k">{{ checkLabel[k] }}</label>
+              </div>
+            </div>
+          }
         </div>
-        <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
-      </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
-        <button class="btn btn-primary" (click)="save()" [disabled]="!form.itemId">Save</button>
+
+        <div class="row g-2">
+          <div class="col-md-6 field-group">
+            <label class="form-label">Current Meter Hours</label>
+            <input class="form-control" type="number" [(ngModel)]="meter" />
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Fuel Level %</label>
+            <input class="form-control" type="number" min="0" max="100" [(ngModel)]="fuel" />
+          </div>
+        </div>
+
+        @if (overage(); as o) {
+          @if (o.overage > 0) {
+            <div class="alert-line breach mt-2">
+              <span class="ts">LIVE</span>
+              <span>
+                <strong>Overage Fees Apply:</strong> {{ data.int(o.overage) }} Hours Overage Detected
+                ({{ data.int(o.used) }} used vs {{ data.int(o.allowed) }} allowed)
+              </span>
+            </div>
+          } @else {
+            <div class="alert-line info mt-2">
+              <span class="ts">LIVE</span>
+              <span>
+                Within limit — {{ data.int(o.allowed - o.used) }} hrs remaining
+                ({{ data.int(o.used) }} of {{ data.int(o.allowed) }} allowed)
+              </span>
+            </div>
+          }
+        }
       </div>
     </div>
   </div>
+
+  <!-- inspection log -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-journal-check"></i> Inspection Log</span>
+        <span class="badge-status st-on">{{ inspections().length }}</span>
+      </div>
+      <div class="card-body table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
+              <th class="num">Meter Out</th><th class="num">Meter In</th>
+              <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of inspections(); track r.id) {
+              <tr>
+                <td class="strong mono">
+                  <button class="btn btn-link p-0 mono strong" type="button" (click)="openEdit(r)">{{ r.id }}</button>
+                </td>
+                <td class="strong">{{ r.itemId }}</td>
+                <td>{{ r.direction }}</td>
+                <td class="mono text-muted2">{{ data.fmtDate(r.date) }}</td>
+                <td class="num">{{ r.meterOut ?? '—' }}</td>
+                <td class="num">{{ r.meterIn ?? '—' }}</td>
+                <td class="num">{{ r.fuelOut ?? '—' }}</td>
+                <td class="num">{{ r.fuelIn ?? '—' }}</td>
+                <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
+              </tr>
+
+<!-- edit inspection modal (prototype `inspectionModal`) -->
+@if (editOpen && editRecord; as r) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-clipboard-check"></i>Edit Inspection {{ r.id }}</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeEdit()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="strong mb-2">Routing</div>
+          <div class="field-group">
+            <label class="form-label">Asset</label>
+            <select class="form-select" [(ngModel)]="editRecord.itemId">
+              @for (a of serialized(); track a.id) {
+                <option [value]="a.id">{{ a.id }} — {{ data.mkName(a) }}</option>
+              }
+            </select>
+          </div>
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Direction</label>
+              <select class="form-select" [(ngModel)]="editRecord.direction">
+                <option value="Check-Out">Check-Out</option>
+                <option value="Check-In">Check-In</option>
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" [(ngModel)]="editRecord.status">
+                <option value="Open">Open</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="strong mb-2">Meters &amp; Fuel</div>
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Meter Out</label>
+              <input class="form-control" type="number" [(ngModel)]="editRecord.meterOut" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Meter In</label>
+              <input class="form-control" type="number" [(ngModel)]="editRecord.meterIn" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Fuel Out %</label>
+              <input class="form-control" type="number" [(ngModel)]="editRecord.fuelOut" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Fuel In %</label>
+              <input class="form-control" type="number" [(ngModel)]="editRecord.fuelIn" />
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="strong mb-2">Condition Checks</div>
+          @for (k of checkKeys; track k) {
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" [id]="'e-' + k" [(ngModel)]="editRecord.checks[k]" />
+              <label class="form-check-label" [for]="'e-' + k">{{ checkLabel[k] }}</label>
+            </div>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeEdit()">Cancel</button>
+          <button type="button" class="btn btn-ims" (click)="saveEdit()"><i class="bi bi-check2"></i> Save Record</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
 }
+
+            } @empty {
+              <tr><td colspan="9" class="text-center text-muted2 py-4">No inspections logged.</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

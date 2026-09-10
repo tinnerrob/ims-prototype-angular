@@ -2,48 +2,15 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import {
-  CatalogType,
-  CATALOG_TYPES,
-  Order,
-  ORDER_STATUS_LABEL,
-  Party,
-} from '../../core/models';
-
-type Tab = 'parties' | 'orders';
-
-/** Editing form shape for a party. */
-interface PartyForm {
-  name: string;
-  contact: string;
-  phone: string;
-  email: string;
-  billingAddress: string;
-  billingCycle: string;
-  notes: string;
-}
-
-const EMPTY_FORM: PartyForm = {
-  name: '',
-  contact: '',
-  phone: '',
-  email: '',
-  billingAddress: '',
-  billingCycle: 'monthly',
-  notes: '',
-};
+import { Order, ORDER_STATUS_LABEL, Party, statusClass } from '../../core/models';
 
 const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
 
-/** New-order header form (no line items yet — item booking comes with the Items & Stock slice). */
-interface OrderForm {
-  partyId: string;
-  projectName: string;
-  jobSite: string;
-  startDate: string;
-  endDate: string;
-}
-
+/**
+ * Parties & Orders (core) — port of the prototype's `renderOrdersParties`
+ * (js/pages/contracts.js): Customers / Contracts sub-tabs with counts, the
+ * active/closed contract filter, and the customer / contract editors.
+ */
 @Component({
   selector: 'ims-orders',
   standalone: true,
@@ -55,75 +22,42 @@ export class OrdersComponent {
   readonly cycles = BILLING_CYCLES;
   readonly statusLabel = ORDER_STATUS_LABEL;
 
-  tab: Tab = 'parties';
+  tab: 'customers' | 'orders' = 'customers';
+  filter: 'active' | 'closed' = 'active';
 
-  partyFormOpen = false;
-  editingId: string | null = null;
-  form: PartyForm = { ...EMPTY_FORM };
+  customerOpen = false;
+  editingCustomerId: string | null = null;
+  customerForm = this.emptyCustomer();
 
-  orderFormOpen = false;
-  orderForm: OrderForm = {
+  orderOpen = false;
+  orderForm = {
     partyId: '',
     projectName: '',
     jobSite: '',
-    startDate: this.todayStr(),
-    endDate: this.addDays(this.todayStr(), 7),
+    startDate: new Date().toISOString().slice(0, 10),
+    endDate: '',
   };
-  openOrderId: string | null = null;
-
-  /** Add-line booking state. */
-  addType: CatalogType = 'serialized';
-  addItemId = '';
-  addQty = 1;
+  detail: Order | null = null;
 
   constructor(readonly data: DataService) {}
-
-  types() {
-    return CATALOG_TYPES;
-  }
-
-  lineCandidates() {
-    return this.data.listItems(this.addType);
-  }
-
-  lineName(type: CatalogType, refId: string): string {
-    return this.data.itemLabel(type, refId);
-  }
-
-  onTypeChange(): void {
-    this.addItemId = '';
-  }
-
-  addLine(order: Order): void {
-    if (!this.addItemId || !order) return;
-    this.data.addOrderLine(order.orderId, {
-      type: this.addType,
-      refId: this.addItemId,
-      qty: this.addQty,
-    });
-    this.addItemId = '';
-    this.addQty = 1;
-  }
-
-  removeLine(order: Order, lineId: string): void {
-    this.data.removeOrderLine(order.orderId, lineId);
-  }
 
   parties(): Party[] {
     return this.data.listParties();
   }
 
   orders(): Order[] {
-    return this.data.listOrders();
+    return this.data.listOrders().filter((o) => o.status === this.filter);
   }
 
-  activeOrder(): Order | undefined {
-    return this.openOrderId ? this.data.getOrder(this.openOrderId) : undefined;
+  badge(status: string): string {
+    return 'badge-status st-' + statusClass(status);
   }
 
-  openPartyForm(p?: Party): void {
-    this.editingId = p ? p.id : null;
-    this.form = p
+  /* ------------------------------ customers ----------------------------- */
+
+  openCustomer(p?: Party): void {
+    this.editingCustomerId = p ? p.id : null;
+    this.customerForm = p
       ? {
           name: p.name,
           contact: p.contact,
@@ -132,36 +66,54 @@ export class OrdersComponent {
           billingAddress: p.billingAddress,
           billingCycle: p.billingCycle,
           notes: p.notes,
+          active: p.active !== false,
         }
-      : { ...EMPTY_FORM };
-    this.partyFormOpen = true;
+      : this.emptyCustomer();
+    this.customerOpen = true;
   }
 
-  saveParty(): void {
-    const f = this.form;
+  saveCustomer(): void {
+    const f = this.customerForm;
     if (!f.name.trim()) return;
-    if (this.editingId) {
-      this.data.updateParty(this.editingId, f);
-    } else {
-      this.data.createParty(f);
-    }
-    this.closePartyForm();
+    const patch = {
+      name: f.name,
+      contact: f.contact,
+      phone: f.phone,
+      email: f.email,
+      billingAddress: f.billingAddress,
+      billingCycle: f.billingCycle,
+      notes: f.notes,
+    };
+    if (this.editingCustomerId) this.data.updateParty(this.editingCustomerId, { ...patch, active: f.active });
+    else this.data.createParty(patch);
+    this.closeCustomer();
   }
 
-  closePartyForm(): void {
-    this.partyFormOpen = false;
-    this.editingId = null;
+  toggleActive(p: Party): void {
+    this.data.togglePartyActive(p.id);
   }
 
-  removeParty(p: Party): void {
-    if (confirm(`Remove party "${p.name}"?`)) {
-      this.data.removeParty(p.id);
-    }
+  removeCustomer(p: Party): void {
+    this.data.removeParty(p.id);
   }
+
+  closeCustomer(): void {
+    this.customerOpen = false;
+    this.editingCustomerId = null;
+  }
+
+  /* ------------------------------- orders ------------------------------ */
 
   newOrder(): void {
-    this.orderForm.partyId = this.data.listParties()[0]?.id ?? '';
-    this.orderFormOpen = true;
+    const party = this.data.listParties()[0];
+    this.orderForm = {
+      partyId: party?.id ?? '',
+      projectName: '',
+      jobSite: party?.billingAddress ?? '',
+      startDate: new Date().toISOString().slice(0, 10),
+      endDate: '',
+    };
+    this.orderOpen = true;
   }
 
   saveOrder(): void {
@@ -174,23 +126,33 @@ export class OrdersComponent {
       projectName: f.projectName,
       jobSite: f.jobSite || party.billingAddress || '—',
       startDate: f.startDate,
-      endDate: f.endDate,
+      endDate: f.endDate || f.startDate,
     });
-    this.orderFormOpen = false;
-    this.openOrderId = this.data.listOrders().slice(-1)[0]?.orderId ?? null;
+    this.orderOpen = false;
   }
 
-  lineCount(o: Order): number {
-    return o.lineItems.length;
+  openDetail(o: Order): void {
+    this.detail = o;
   }
 
-  private todayStr(): string {
-    return new Date().toISOString().slice(0, 10);
+  closeDetail(): void {
+    this.detail = null;
   }
 
-  private addDays(iso: string, days: number): string {
-    const d = new Date(iso + 'T00:00:00');
-    d.setDate(d.getDate() + days);
-    return d.toISOString().slice(0, 10);
+  gross(o: Order): number {
+    return this.data.orderAmount(o);
+  }
+
+  private emptyCustomer() {
+    return {
+      name: '',
+      contact: '',
+      phone: '',
+      email: '',
+      billingAddress: '',
+      billingCycle: 'monthly',
+      notes: '',
+      active: true,
+    };
   }
 }

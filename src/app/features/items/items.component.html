@@ -1,92 +1,220 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Items &amp; Stock</h1>
-      <p class="page-sub">Core typed catalog across serialized, bulk, consumable, parts, labor, kits &amp; attachments.</p>
-    </div>
-    <span class="core-tag">Core · always on</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="card">
-    <div class="type-tabs">
-      @for (t of types; track t.key) {
-        <button type="button" class="type-tab" [class.active]="type === t.key" (click)="type = t.key">
-          {{ t.label }}
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-box-seam"></i> Inventory &amp; Assets</span>
+    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+      <i class="bi bi-plus-lg"></i> {{ activeTab()?.addLabel }}
+    </button>
+  </div>
+  <div class="card-body">
+    <!-- per-vertical tab strip -->
+    <div class="subtabs">
+      @for (t of tabs(); track t.key) {
+        <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
+          <i class="bi {{ t.icon }}"></i>{{ t.label }}
+          <span class="count-pill">{{ count(t.key) }}</span>
         </button>
       }
     </div>
 
-    <div class="card-body">
-      <div class="toolbar">
-        <span class="count">{{ items().length }} record(s)</span>
-        <button class="btn btn-primary" (click)="openForm()">+ New {{ type }}</button>
-      </div>
+    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+      <input class="filter-input search" placeholder="Search ID, name, category…" [(ngModel)]="search" />
+      <span class="text-muted2">{{ rows().length }} record(s)</span>
+    </div>
 
+    <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
-            <th>ID</th><th>Name</th><th>Category</th><th>Status</th><th class="th-end">Qty</th><th class="th-end">Daily $</th><th class="th-end">Actions</th>
+            @for (c of columns(); track c[0]) {
+              <th [class.num]="c[2] === 'num'">{{ c[1] }}</th>
+            }
+            <th class="text-end">Actions</th>
           </tr>
         </thead>
         <tbody>
-          @for (it of items(); track it.id) {
+          @for (item of rows(); track item.id) {
             <tr>
-              <td class="mono strong">{{ it.id }}</td>
-              <td>{{ it.name }}</td>
-              <td>{{ it.category }}</td>
-              <td><span class="status">{{ it.status }}</span></td>
-              <td class="td-end">{{ it.qty }}</td>
-              <td class="td-end">{{ it.rateDaily ? '$' + it.rateDaily : '—' }}</td>
-              <td class="td-end">
-                <button class="btn btn-ghost btn-sm" (click)="openForm(it)">Edit</button>
-                <button class="btn btn-danger-ghost btn-sm" (click)="remove(it)">Remove</button>
+              @for (c of columns(); track c[0]) {
+                <td [class.num]="c[2] === 'num'">
+                  @if (isStatus(c[0])) {
+                    <span [class]="badge(item)"><i class="bi bi-circle-fill"></i>{{ item.status }}</span>
+                  } @else if (c[0] === 'id') {
+                    <span class="strong mono">{{ cell(item, c[0]) }}</span>
+                    @if (reorder(item)) {
+                      <span class="badge-status st-reorder ms-1" title="At or below reorder point">Reorder</span>
+                    }
+                  } @else {
+                    {{ cell(item, c[0]) }}
+                  }
+                </td>
+              }
+              <td class="text-end text-nowrap">
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openForm(item)">
+                  <i class="bi bi-pencil"></i> Edit
+                </button>
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(item)">
+                  <i class="bi bi-x-lg"></i>
+                </button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="7" class="empty">No {{ type }} items yet — add one above.</td></tr>
+            <tr>
+              <td [attr.colspan]="columns().length + 1" class="text-center text-muted2 py-4">
+                No records — add one with "{{ activeTab()?.addLabel }}".
+              </td>
+            </tr>
           }
         </tbody>
       </table>
     </div>
   </div>
-</section>
+</div>
 
-@if (formOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">{{ editingId ? 'Edit ' + editingId : 'New ' + type }}</span>
-        <button class="icon-btn" (click)="closeForm()" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        @if (editingId) {
-          <div class="field"><label>ID (read-only)</label><input class="input" [value]="editingId" disabled /></div>
-        }
-        <div class="field"><label>Name *</label><input class="input" [(ngModel)]="form.name" /></div>
-        <div class="row2">
-          <div class="field">
-            <label>Category</label>
-            <select class="input" [(ngModel)]="form.category">
-              @for (c of categories(); track c) { <option [value]="c">{{ c }}</option> }
-            </select>
-          </div>
-          <div class="field">
-            <label>Status</label>
-            <select class="input" [(ngModel)]="form.status">
-              @for (s of statuses[type]; track s) { <option [value]="s">{{ s }}</option> }
-            </select>
-          </div>
+@if (modalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-box-seam"></i>{{ editingId ? 'Edit' : activeTab()?.addLabel }} — {{ type }}
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeForm()"></button>
         </div>
-        <div class="row2">
-          <div class="field"><label>Quantity</label><input class="input" type="number" min="0" [(ngModel)]="form.qty" /></div>
-          <div class="field"><label>Daily rate ($)</label><input class="input" type="number" min="0" [(ngModel)]="form.rateDaily" /></div>
+        <div class="modal-body">
+          @if (editingId) {
+            <div class="field-group">
+              <label class="form-label">ID</label>
+              <input class="form-control" [value]="editingId" disabled />
+            </div>
+          }
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Name *</label>
+              <input class="form-control" [(ngModel)]="form.name" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Category</label>
+              <select class="form-select" [(ngModel)]="form.category">
+                @for (c of categories(); track c) {
+                  <option [value]="c">{{ c }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" [(ngModel)]="form.status">
+                @for (s of statusesForType(); track s) {
+                  <option [value]="s">{{ s }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Quantity</label>
+              <input class="form-control" type="number" [(ngModel)]="form.qty" />
+            </div>
+          </div>
+
+          @if (type === 'serialized') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Fleet Details</div>
+            <div class="row g-2">
+              <div class="col-md-6 field-group">
+                <label class="form-label">Serial / VIN</label>
+                <input class="form-control" [(ngModel)]="form.serial" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Make</label>
+                <input class="form-control" [(ngModel)]="form.make" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Model</label>
+                <input class="form-control" [(ngModel)]="form.model" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Meter Hours</label>
+                <input class="form-control" type="number" [(ngModel)]="form.meterHours" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Fuel Type</label>
+                <input class="form-control" [(ngModel)]="form.fuelType" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Purchase Value ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="form.purchaseValue" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Daily Rate ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="form.rateDaily" />
+              </div>
+            </div>
+          }
+
+
+          @if (type === 'consumable' || type === 'part') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Stock Levels</div>
+            <div class="row g-2">
+              <div class="col-md-3 field-group">
+                <label class="form-label">On Hand</label>
+                <input class="form-control" type="number" [(ngModel)]="form.qtyOnHand" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Reorder Point</label>
+                <input class="form-control" type="number" [(ngModel)]="form.reorderPoint" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Cost Price ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="form.costPrice" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Retail Price ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="form.retailPrice" />
+              </div>
+              <div class="col-md-3 field-group">
+                <label class="form-label">Bin</label>
+                <input class="form-control" [(ngModel)]="form.bin" />
+              </div>
+            </div>
+          }
+
+          @if (type === 'labor') {
+            <div class="divider"></div>
+            <div class="strong mb-2">Labor Rates</div>
+            <div class="row g-2">
+              <div class="col-md-4 field-group">
+                <label class="form-label">Role</label>
+                <input class="form-control" [(ngModel)]="form.role" />
+              </div>
+              <div class="col-md-4 field-group">
+                <label class="form-label">Cost / hr ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="form.hourlyCost" />
+              </div>
+              <div class="col-md-4 field-group">
+                <label class="form-label">Billable / hr ($)</label>
+                <input class="form-control" type="number" [(ngModel)]="form.hourlyBillable" />
+              </div>
+            </div>
+          }
+
+          @if (type === 'bulk' || type === 'kit' || type === 'attachment') {
+            <div class="divider"></div>
+            <div class="field-group">
+              <label class="form-label">Daily Rate ($)</label>
+              <input class="form-control" type="number" [(ngModel)]="form.rateDaily" />
+            </div>
+          }
         </div>
-        <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
-      </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="closeForm()">Cancel</button>
-        <button class="btn btn-primary" (click)="save()" [disabled]="!form.name.trim()">Save</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeForm()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!form.name.trim()" (click)="save()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
       </div>
     </div>
   </div>
+  <div class="modal-backdrop show d-block"></div>
 }
+

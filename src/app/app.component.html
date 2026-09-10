@@ -1,39 +1,76 @@
 <div class="app-shell">
-  <aside class="sidebar">
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
-      <span class="brand-mark">IMS</span>
+      <div class="brand-mark"><i class="bi bi-layers-half"></i></div>
       <div class="brand-text">
-        <span class="brand-name">Universal Inventory Suite</span>
-        <span class="brand-sub">Angular port</span>
+        <span class="brand-name">IMS</span>
+        <span class="brand-sub">Universal Inventory Suite</span>
       </div>
     </div>
-
     <nav class="side-nav">
       @for (g of groups; track g.title) {
         <div class="nav-section">{{ g.title }}</div>
-        @for (item of g.items; track item.route) {
+        @for (item of navItems(g); track item.id) {
           <a
-            class="nav-link"
-            routerLink="{{ item.route }}"
+            class="nav-item"
+            [routerLink]="'/' + item.id"
             routerLinkActive="active"
-            [class.disabled]="item.soon"
-            (click)="item.soon && $event.preventDefault()"
-          >{{ item.label }}{{ item.soon ? ' · soon' : '' }}</a>
+            [routerLinkActiveOptions]="{ exact: false }"
+          >
+            <i class="bi {{ item.icon }}"></i><span>{{ item.nav }}</span>
+            @if (item.modTag) {
+              <span class="nav-mod-tag">MOD</span>
+            }
+            @if (item.id === 'telemetry' && geoAlerts() > 0) {
+              <span class="nav-badge badge-alert" title="Open geofence alerts">{{ geoAlerts() }}</span>
+            }
+          </a>
         }
       }
     </nav>
-
     <div class="sidebar-footer">
-      <div class="sim-status"><span class="pulse-dot"></span> Local prototype data</div>
+      <div class="sim-status"><span class="pulse-dot"></span> GPS Link LIVE</div>
+      <div class="user-chip">
+        <div class="avatar">DR</div>
+        <div class="user-meta">
+          <span class="user-name">D. Reynolds</span>
+          <span class="user-role">Dispatch Manager</span>
+        </div>
+        <i class="bi bi-three-dots"></i>
+      </div>
     </div>
   </aside>
 
+  <!-- ============ MAIN ============ -->
   <main class="main">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="topbar-title">IMS</span>
+        <button class="btn btn-link d-lg-none" id="menuToggle" type="button" (click)="toggleSidebar()">
+          <i class="bi bi-list"></i>
+        </button>
+        <div class="topbar-titles">
+          <h1>{{ view?.title }}</h1>
+          <div class="topbar-sub">{{ subtitle() }}</div>
+        </div>
       </div>
       <div class="topbar-right">
+        <div class="global-search">
+          <i class="bi bi-search"></i>
+          <input
+            type="text"
+            placeholder="Search assets, SKUs, orders, employees..."
+            aria-label="Global search"
+            [(ngModel)]="search"
+            (keydown.enter)="onSearch()"
+          />
+        </div>
+        <button class="icon-btn" type="button" title="Notifications" (click)="openNotifications()">
+          <i class="bi bi-bell"></i>
+          @if (notifications() > 0) {
+            <span class="notif-count">{{ notifications() }}</span>
+          }
+        </button>
         <span class="topbar-date">{{ today }}</span>
       </div>
     </header>
@@ -43,3 +80,4 @@
     </div>
   </main>
 </div>
+

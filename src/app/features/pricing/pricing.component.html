@@ -1,0 +1,272 @@
+<div class="page-head"></div>
+
+<div class="dash-grid">
+  <div>
+    <!-- Pricing rules engine -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-sliders"></i> Advanced Pricing Rules Engine</span>
+        <button class="btn btn-ims btn-create" type="button" (click)="savePricing()">
+          <i class="bi bi-check2"></i> Save Pricing
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-md-6 field-group">
+            <label class="form-label">Daily Minimum Hours</label>
+            <input class="form-control" type="number" [(ngModel)]="form.dailyMinHours" />
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Weekly Limit (hrs)</label>
+            <input class="form-control" type="number" [(ngModel)]="form.weeklyHours" />
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Billing Cycle (days)</label>
+            <input class="form-control" type="number" [(ngModel)]="form.cycleDays" />
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Default Environmental Fee (%)</label>
+            <input class="form-control" type="number" step="0.1" [(ngModel)]="form.envFeePct" />
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Annual Depreciation Factor</label>
+            <input class="form-control" type="number" step="0.01" [(ngModel)]="form.depreciationAnnual" />
+          </div>
+          <div class="col-md-6 field-group">
+            <label class="form-label">Default Weekend Policy</label>
+            <select class="form-select" [(ngModel)]="form.weekendPolicyDefault">
+              @for (w of weekendPolicies; track w) {
+                <option [value]="w">{{ w }}</option>
+              }
+            </select>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="strong mb-2">Risk / Environment Premiums</div>
+        @for (k of riskKeys(); track k) {
+          <div class="list-line">
+            <span class="l">{{ k.charAt(0).toUpperCase() + k.slice(1) }}</span>
+            <span class="r">+{{ riskPct(k) }}%</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Overhead / service fee configurations -->
+    <div class="card mt-3">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-layers"></i> Global Overhead &amp; Service Fee Configurations</span>
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openOverhead()">
+          <i class="bi bi-plus-lg"></i> New Fee
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Fee / Asset Name</th><th>Category</th><th>Charge Type</th>
+                <th class="num">Default Cost</th><th class="num">Default Retail</th>
+                <th>Auto-Inject</th><th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (o of overheads(); track o.id) {
+                <tr>
+                  <td class="strong">{{ o.name }}</td>
+                  <td>{{ o.category }}</td>
+                  <td>
+                    {{ o.chargeType }}
+                    @if (o.chargeType === 'Percent of Equipment Total') {
+                      <span class="text-muted2">{{ o.pct }}%</span>
+                    }
+                  </td>
+                  <td class="num">{{ data.money(o.cost) }}</td>
+                  <td class="num">{{ data.money(o.retail) }}</td>
+                  <td>
+                    @if (o.locked) {
+                      <span class="badge-status st-active"><i class="bi bi-bolt"></i>Auto-inject</span>
+                    } @else {
+                      <span class="badge-status st-closed"><i class="bi bi-slash-circle"></i>Optional</span>
+                    }
+                  </td>
+                  <td class="text-end text-nowrap">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openOverhead(o)">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="removeOverhead(o)">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="7" class="text-center text-muted2 py-4">No overhead / service fees.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sales tax schedules -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-percent"></i> Sales Tax Schedules</span>
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openTax()">
+          <i class="bi bi-plus-lg"></i> New Rate
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>Code</th><th>State</th><th>County</th><th>City</th><th class="num">Rate</th><th class="text-end">Actions</th></tr>
+            </thead>
+            <tbody>
+              @for (t of taxes(); track t.code) {
+                <tr>
+                  <td class="strong mono">{{ t.code }}</td>
+                  <td>{{ t.state || '—' }}</td>
+                  <td>{{ t.county || '—' }}</td>
+                  <td>{{ t.city || '—' }}</td>
+                  <td class="num">{{ (t.rate * 100).toFixed(3) }}%</td>
+                  <td class="text-end text-nowrap">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openTax(t)">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="removeTax(t)">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="text-center text-muted2 py-4">No tax schedules.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- overhead / service fee modal -->
+@if (overheadOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-layers"></i>{{ overheadEditingId ? 'Edit' : 'New' }} Overhead / Service Fee
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeOverhead()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">Fee / Asset Name *</label>
+            <input class="form-control" [(ngModel)]="overheadForm.name" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Category</label>
+            <select class="form-select" [(ngModel)]="overheadForm.category">
+              @for (c of overheadCategories; track c) {
+                <option [value]="c">{{ c }}</option>
+              }
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Charge Type</label>
+            <select class="form-select" [(ngModel)]="overheadForm.chargeType">
+              @for (c of overheadChargeTypes; track c) {
+                <option [value]="c">{{ c }}</option>
+              }
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Percentage of Equipment Total (%)</label>
+            <input class="form-control" type="number" step="0.1" [(ngModel)]="overheadForm.pct" />
+            <div class="form-hint">Used when Charge Type = Percentage</div>
+          </div>
+          <div class="row g-2">
+            <div class="col-6 field-group">
+              <label class="form-label">Default Cost Price ($)</label>
+              <input class="form-control" type="number" [(ngModel)]="overheadForm.cost" />
+            </div>
+            <div class="col-6 field-group">
+              <label class="form-label">Default Billable Retail ($)</label>
+              <input class="form-control" type="number" [(ngModel)]="overheadForm.retail" />
+            </div>
+          </div>
+          <div class="field-group">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="oh-locked" [(ngModel)]="overheadForm.locked" />
+              <label class="form-check-label" for="oh-locked">Auto-inject into new orders</label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeOverhead()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!overheadForm.name.trim()" (click)="saveOverhead()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- tax schedule modal -->
+@if (taxOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-percent"></i>{{ taxEditingCode ? 'Edit' : 'New' }} Tax Schedule
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeTax()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">Code *</label>
+            <input class="form-control" [(ngModel)]="taxForm.code" [disabled]="taxEditingCode !== null" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">State</label>
+            <input class="form-control" [(ngModel)]="taxForm.state" />
+          </div>
+          <div class="row g-2">
+            <div class="col-6 field-group">
+              <label class="form-label">County</label>
+              <input class="form-control" [(ngModel)]="taxForm.county" />
+            </div>
+            <div class="col-6 field-group">
+              <label class="form-label">City</label>
+              <input class="form-control" [(ngModel)]="taxForm.city" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Rate (decimal, e.g. 0.08)</label>
+            <input class="form-control" type="number" step="0.0001" [(ngModel)]="taxForm.rate" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Note</label>
+            <input class="form-control" [(ngModel)]="taxForm.note" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeTax()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!taxForm.code.trim()" (click)="saveTax()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+

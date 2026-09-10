@@ -1,59 +1,112 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Fleet Telemetry</h1>
-      <p class="page-sub">Industry module: live GPS ping simulation with geofence monitoring (yard radius {{ radius }}m).</p>
-    </div>
-    <span class="mod-tag">MODULE · telemetry</span>
-  </div>
+<div class="page-head"></div>
 
-  <div class="stat-row">
-    <div class="card stat"><span class="stat-label">Tracked</span><span class="stat-value">{{ pings.length }}</span></div>
-    <div class="card stat"><span class="stat-label">On site / out</span><span class="stat-value">{{ outCount() }}</span></div>
-    <div class="card stat"><span class="stat-label">Breaches logged</span><span class="stat-value">{{ breachCount() }}</span></div>
-  </div>
-
-  <div class="split">
-    <div class="card">
-      <div class="card-header">Live board</div>
+<div class="geo-layout">
+  <div>
+    <div class="card mb-3">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-list-ul"></i> Fleet Asset Status</span>
+        <span class="text-muted2 fw-medium">{{ totalTracked() }} serialized units</span>
+      </div>
       <div class="card-body">
-        <table class="table">
-          <thead>
-            <tr><th>Asset</th><th>Status</th><th>Location</th><th>Signal</th><th>Battery</th><th>Last ping</th></tr>
-          </thead>
-          <tbody>
-            @for (p of pings; track p.itemId) {
+        <input
+          class="filter-input mb-2"
+          placeholder="Search asset ID, make, model, serial..."
+          [(ngModel)]="filter"
+        />
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
               <tr>
-                <td class="strong">{{ p.itemId }}<div class="sub">{{ p.name }}</div></td>
-                <td><span class="status" [class.off]="!p.inYard">{{ p.status }}</span></td>
-                <td>
-                  <span class="loc" [class.away]="!p.inYard">
-                    <span class="loc-dot"></span>{{ p.inYard ? 'Yard' : 'On site' }}
-                  </span>
-                </td>
-                <td>{{ p.signal }}%</td>
-                <td>{{ p.battery }}%</td>
-                <td class="mono">{{ p.lastSeen }}</td>
+                <th>Asset</th>
+                <th>Status</th>
+                <th>Last Reported</th>
+                <th>Batt</th>
+                <th class="num">Meter Hrs</th>
               </tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (t of rows(); track t.item.id) {
+                <tr>
+                  <td class="strong mono">{{ t.item.id }}</td>
+                  <td>
+                    <span [class]="badge(t.item.status)"><i class="bi bi-circle-fill"></i>{{ t.item.status }}</span>
+                    @if (t.breached) {
+                      <span class="badge-status st-out">Breach</span>
+                    }
+                  </td>
+                  <td class="mono text-muted2 text-xs2">{{ reported(t.item) }}</td>
+                  <td>
+                    <div class="batt-bar">
+                      <div [style.width.%]="t.item.battery ?? 0" [style.background]="batteryColor(t.item)"></div>
+                    </div>
+                    <span class="text-muted2 text-105">{{ t.item.battery ?? '—' }}%</span>
+                  </td>
+                  <td class="num">{{ data.int(meterHours(t.item)) }}</td>
+                </tr>
+              } @empty {
+                <tr><td colspan="5" class="text-center text-muted2 py-4">No matching assets</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-header">Telemetry feed</div>
-      <div class="card-body feed">
-        @for (e of feed; track e.id) {
-          <div class="feed-row">
-            <span class="mono feed-time">{{ e.at }}</span>
-            <span class="feed-kind" [class.breach]="e.kind === 'breach'">{{ e.kind }}</span>
-            <span class="feed-msg">{{ e.msg }}</span>
-          </div>
-        } @empty {
-          <p class="empty">Waiting for the next ping…</p>
-        }
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-broadcast"></i> Geofence Breach Alerts</span>
+        <div>
+          <span class="badge-status st-out">{{ breachCount() }}</span>
+          <button class="btn btn-ims-outline btn-sm2 ms-2" type="button" (click)="clearAlerts()">
+            <i class="bi bi-trash"></i> Clear Alerts
+          </button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="alerts-log">
+          @for (a of alerts(); track $index) {
+            <div class="alert-line {{ a.kind }}">
+              <span class="ts">{{ a.ts }}</span><span>{{ a.msg }}</span>
+            </div>
+          } @empty {
+            <p class="text-muted2 py-2"><i class="bi bi-check-circle"></i> Monitoring… no geofence events yet.</p>
+          }
+        </div>
       </div>
     </div>
   </div>
-</section>
+
+  <div class="geo-map-wrap">
+    <div class="geo-map">
+      <!-- yard hub -->
+      <div class="map-pin yard" [style.left.%]="yardPin().x" [style.top.%]="yardPin().y">
+        <div class="pin-dot"></div>
+        <div class="pin-label">YARD</div>
+      </div>
+
+      <!-- job-site geofence rings -->
+      @for (r of rings(); track r.id) {
+        <div class="geo-ring" [style.left.%]="r.x" [style.top.%]="r.y" [style.width.%]="r.d">
+          <span class="ring-tag">{{ r.label }}</span>
+        </div>
+      }
+
+      <!-- live asset pins -->
+      @for (p of pins(); track p.id) {
+        <div class="map-pin asset" [class.alerting]="p.alerting" [style.left.%]="p.x" [style.top.%]="p.y">
+          <div class="pin-dot"></div>
+          <div class="pin-label">{{ p.id }}</div>
+        </div>
+      }
+    </div>
+
+    <div class="map-legend">
+      <div class="lg-item"><span class="lg-swatch lg-yard"></span>Yard Hub</div>
+      <div class="lg-item"><span class="lg-swatch lg-site"></span>Active Job Site (geofence)</div>
+      <div class="lg-item"><span class="lg-swatch lg-in"></span>Asset in geofence</div>
+      <div class="lg-item"><span class="lg-swatch lg-breach"></span>Asset breach</div>
+    </div>
+
+    <div class="map-scale"><i class="bi bi-rulers"></i> ~1.5 km grid</div>
+  </div>
+</div>

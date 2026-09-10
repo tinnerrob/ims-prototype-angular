@@ -1,64 +1,78 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Parties &amp; Orders</h1>
-      <p class="page-sub">Counterparties (customers / vendors / sites) and the orders placed against inventory.</p>
-    </div>
-    <span class="core-tag">Core · always on</span>
+<div class="page-head"></div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-folder2-open"></i> Customers &amp; Contracts</span>
+    <button class="btn btn-ims btn-create" type="button" (click)="tab === 'customers' ? openCustomer() : newOrder()">
+      <i class="bi bi-plus-lg"></i> {{ tab === 'customers' ? 'New Customer' : 'New Contract' }}
+    </button>
   </div>
-
-  <div class="card">
-    <div class="type-tabs">
-      <button type="button" class="type-tab" [class.active]="tab === 'parties'" (click)="tab = 'parties'">Parties</button>
-      <button type="button" class="type-tab" [class.active]="tab === 'orders'" (click)="tab = 'orders'">Orders</button>
+  <div class="card-body">
+    <div class="subtabs">
+      <button class="subtab" type="button" [class.active]="tab === 'customers'" (click)="tab = 'customers'">
+        <i class="bi bi-people"></i>Customers<span class="count-pill">{{ parties().length }}</span>
+      </button>
+      <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="tab = 'orders'">
+        <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ data.listOrders().length }}</span>
+      </button>
     </div>
 
-    <!-- ============================= PARTIES ============================= -->
-    @if (tab === 'parties') {
-      <div class="card-body">
-        <div class="toolbar">
-          <button class="btn btn-primary" (click)="openPartyForm()">+ New Party</button>
-        </div>
-
+    @if (tab === 'customers') {
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
-              <th>Name</th><th>Contact</th><th>Phone</th><th>Billing</th><th>Status</th><th class="th-end">Actions</th>
+              <th>Customer</th><th>Contact</th><th>Phone</th><th class="num">Active</th>
+              <th class="num">Contracts</th><th>Status</th><th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
             @for (p of parties(); track p.id) {
-              <tr [class.inactive]="p.active === false">
-                <td class="strong">{{ p.name }}</td>
+              <tr>
+                <td>
+                  <span class="strong">{{ p.name }}</span>
+                  @if (p.active === false) {
+                    <span class="badge-status st-out"><i class="bi bi-circle-fill"></i>Inactive</span>
+                  }
+                  <div class="text-muted2 text-xs">{{ p.email }}</div>
+                </td>
                 <td>{{ p.contact }}</td>
-                <td>{{ p.phone }}</td>
-                <td>{{ p.billingCycle }}</td>
-                <td><span class="status" [class.off]="p.active === false">{{ p.active === false ? 'Inactive' : 'Active' }}</span></td>
-                <td class="td-end">
-                  <button class="btn btn-ghost btn-sm" (click)="openPartyForm(p)">Edit</button>
-                  <button class="btn btn-ghost btn-sm" (click)="data.togglePartyActive(p.id)">{{ p.active === false ? 'Activate' : 'Deactivate' }}</button>
-                  <button class="btn btn-danger-ghost btn-sm" (click)="removeParty(p)">Remove</button>
+                <td class="mono text-muted2">{{ p.phone }}</td>
+                <td class="num"><span class="badge-status st-active">{{ data.activeOrderCount(p.id) }} active</span></td>
+                <td class="num">{{ data.orderCount(p.id) }}</td>
+                <td><span [class]="badge(p.active === false ? 'Inactive' : 'Active')">Active</span></td>
+                <td class="text-end text-nowrap">
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openCustomer(p)">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Toggle active" (click)="toggleActive(p)">
+                    <i class="bi bi-power"></i>
+                  </button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeCustomer(p)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="6" class="empty">No parties yet.</td></tr>
+              <tr><td colspan="7" class="text-center text-muted2 py-4">No customers.</td></tr>
             }
           </tbody>
         </table>
       </div>
-    }
-
-    <!-- ============================== ORDERS ============================== -->
-    @if (tab === 'orders') {
-      <div class="card-body">
-        <div class="toolbar">
-          <button class="btn btn-primary" (click)="newOrder()">+ New Order</button>
+    } @else {
+      <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+        <span class="text-muted2">Showing <strong>{{ filter }}</strong> orders (<strong>{{ orders().length }}</strong>)</span>
+        <div class="btn-group">
+          <button class="btn btn-sm2" [class.btn-ims]="filter === 'active'" [class.btn-ims-outline]="filter !== 'active'" type="button" (click)="filter = 'active'">Active</button>
+          <button class="btn btn-sm2" [class.btn-ims]="filter === 'closed'" [class.btn-ims-outline]="filter !== 'closed'" type="button" (click)="filter = 'closed'">Closed</button>
         </div>
-
+      </div>
+      <div class="table-wrap">
         <table class="table">
           <thead>
             <tr>
-              <th>Order</th><th>Party</th><th>Project</th><th>Dates</th><th>Status</th><th class="th-end">Actions</th>
+              <th>Contract</th><th>Customer</th><th>Project</th><th>Job Site</th>
+              <th>Window</th><th class="num">Lines</th><th class="num">Gross</th><th>Status</th><th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -67,130 +81,199 @@
                 <td class="strong mono">{{ o.orderId }}</td>
                 <td>{{ o.party }}</td>
                 <td>{{ o.projectName }}</td>
-                <td>{{ o.startDate }} → {{ o.endDate }}</td>
-                <td><span class="status">{{ statusLabel[o.status] }}</span></td>
-                <td class="td-end">
-                  <button class="btn btn-ghost btn-sm" (click)="openOrderId = openOrderId === o.orderId ? null : o.orderId">
-                    {{ openOrderId === o.orderId ? 'Hide detail' : 'Detail (' + lineCount(o) + ')' }}
+                <td class="text-muted2 text-xs2">{{ o.jobSite }}</td>
+                <td class="mono text-muted2">{{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}</td>
+                <td class="num">{{ o.lineItems.length }}</td>
+                <td class="num">{{ data.money(gross(o)) }}</td>
+                <td><span [class]="badge(o.status === 'active' ? 'Active' : 'Closed')">{{ statusLabel[o.status] }}</span></td>
+                <td class="text-end">
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="View" (click)="openDetail(o)">
+                    <i class="bi bi-eye"></i>
                   </button>
                 </td>
               </tr>
-              @if (openOrderId === o.orderId) {
-                <tr class="detail-row">
-                  <td colspan="6">
-                    <div class="detail">
-                      <div class="detail-meta">
-                        <div><span class="lbl">Job site</span>{{ o.jobSite }}</div>
-                        <div><span class="lbl">Start</span>{{ o.startDate }}</div>
-                        <div><span class="lbl">End</span>{{ o.endDate }}</div>
-                      </div>
-                      <div class="book-row">
-                        <span class="lbl">Add line</span>
-                        <select class="input" [(ngModel)]="addType" (ngModelChange)="onTypeChange()">
-                          @for (t of types(); track t.key) { <option [value]="t.key">{{ t.label }}</option> }
-                        </select>
-                        <select class="input" [(ngModel)]="addItemId">
-                          <option value="" disabled>Choose an item…</option>
-                          @for (it of lineCandidates(); track it.id) {
-                            <option [value]="it.id">{{ it.id }} · {{ it.name }}</option>
-                          }
-                        </select>
-                        <input class="input qty" type="number" min="1" [(ngModel)]="addQty" aria-label="Qty" />
-                        <button class="btn btn-primary btn-sm" (click)="addLine(o)" [disabled]="!addItemId">Add</button>
-                      </div>
-
-                      @if (o.lineItems.length === 0) {
-                        <p class="empty">No line items yet — add a catalog item above.</p>
-                      } @else {
-                        <table class="table inner">
-                          <thead><tr><th>Line</th><th>Item</th><th class="th-end">Qty</th><th class="th-end">Remove</th></tr></thead>
-                          <tbody>
-                            @for (li of o.lineItems; track li.id) {
-                              <tr>
-                                <td class="mono">{{ li.id }}</td>
-                                <td>{{ lineName(li.type, li.refId) }}</td>
-                                <td class="td-end">{{ li.qty }}</td>
-                                <td class="td-end"><button class="btn btn-danger-ghost btn-sm" (click)="removeLine(o, li.id)">Remove</button></td>
-                              </tr>
-                            }
-                          </tbody>
-                        </table>
-                      }
-                    </div>
-                  </td>
-                </tr>
-              }
             } @empty {
-              <tr><td colspan="6" class="empty">No orders yet.</td></tr>
+              <tr><td colspan="9" class="text-center text-muted2 py-4">No {{ filter }} contracts.</td></tr>
             }
           </tbody>
         </table>
       </div>
     }
   </div>
-</section>
+</div>
 
-<!-- ============================ PARTY FORM ============================ -->
-@if (partyFormOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">{{ editingId ? 'Edit Party' : 'New Party' }}</span>
-        <button class="icon-btn" (click)="closePartyForm()" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="field"><label>Name *</label><input class="input" [(ngModel)]="form.name" /></div>
-        <div class="row2">
-          <div class="field"><label>Contact</label><input class="input" [(ngModel)]="form.contact" /></div>
-          <div class="field"><label>Phone</label><input class="input" [(ngModel)]="form.phone" /></div>
+<!-- customer editor -->
+@if (customerOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-pencil-square"></i>{{ editingCustomerId ? 'Edit' : 'New' }} Customer</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeCustomer()"></button>
         </div>
-        <div class="field"><label>Email</label><input class="input" [(ngModel)]="form.email" /></div>
-        <div class="field"><label>Billing address</label><input class="input" [(ngModel)]="form.billingAddress" /></div>
-        <div class="row2">
-          <div class="field">
-            <label>Billing cycle</label>
-            <select class="input" [(ngModel)]="form.billingCycle">
-              @for (c of cycles; track c) { <option [value]="c">{{ c }}</option> }
-            </select>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Name *</label>
+              <input class="form-control" [(ngModel)]="customerForm.name" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Contact</label>
+              <input class="form-control" [(ngModel)]="customerForm.contact" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Phone</label>
+              <input class="form-control" [(ngModel)]="customerForm.phone" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Email</label>
+              <input class="form-control" [(ngModel)]="customerForm.email" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Billing Address</label>
+              <input class="form-control" [(ngModel)]="customerForm.billingAddress" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Billing Cycle</label>
+              <select class="form-select" [(ngModel)]="customerForm.billingCycle">
+                @for (c of cycles; track c) {
+                  <option [value]="c">{{ c }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-12 field-group">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" rows="2" [(ngModel)]="customerForm.notes"></textarea>
+            </div>
           </div>
-          <div class="field"><label>Notes</label><input class="input" [(ngModel)]="form.notes" /></div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="cust-active" [(ngModel)]="customerForm.active" />
+            <label class="form-check-label" for="cust-active">Active</label>
+          </div>
         </div>
-      </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="closePartyForm()">Cancel</button>
-        <button class="btn btn-primary" (click)="saveParty()" [disabled]="!form.name.trim()">Save</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeCustomer()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!customerForm.name.trim()" (click)="saveCustomer()">
+            <i class="bi bi-check2"></i> Save Customer
+          </button>
+        </div>
       </div>
     </div>
   </div>
+  <div class="modal-backdrop show d-block"></div>
 }
 
-<!-- ============================ ORDER FORM ============================ -->
-@if (orderFormOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">New Order</span>
-        <button class="icon-btn" (click)="orderFormOpen = false" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label>Party *</label>
-          <select class="input" [(ngModel)]="orderForm.partyId">
-            @for (p of parties(); track p.id) { <option [value]="p.id">{{ p.name }}</option> }
-          </select>
+
+<!-- new contract -->
+@if (orderOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-folder2-open"></i>New Contract</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="orderOpen = false"></button>
         </div>
-        <div class="field"><label>Project name *</label><input class="input" [(ngModel)]="orderForm.projectName" /></div>
-        <div class="field"><label>Job site</label><input class="input" [(ngModel)]="orderForm.jobSite" /></div>
-        <div class="row2">
-          <div class="field"><label>Start</label><input class="input" type="date" [(ngModel)]="orderForm.startDate" /></div>
-          <div class="field"><label>End</label><input class="input" type="date" [(ngModel)]="orderForm.endDate" /></div>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">Customer *</label>
+            <select class="form-select" [(ngModel)]="orderForm.partyId">
+              @for (p of parties(); track p.id) {
+                <option [value]="p.id">{{ p.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Project Name *</label>
+            <input class="form-control" [(ngModel)]="orderForm.projectName" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">Job Site</label>
+            <input class="form-control" [(ngModel)]="orderForm.jobSite" />
+          </div>
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Start</label>
+              <input class="form-control" type="date" [(ngModel)]="orderForm.startDate" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Expected Return</label>
+              <input class="form-control" type="date" [(ngModel)]="orderForm.endDate" />
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="orderFormOpen = false">Cancel</button>
-        <button class="btn btn-primary" (click)="saveOrder()" [disabled]="!orderForm.projectName.trim()">Create</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="orderOpen = false">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!orderForm.projectName.trim()" (click)="saveOrder()">
+            <i class="bi bi-check2"></i> Save Contract
+          </button>
+        </div>
       </div>
     </div>
   </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- contract detail -->
+@if (detail) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-eye"></i>Contract — {{ detail.orderId }}</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeDetail()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Customer</label>
+              <div class="form-control-plaintext strong">{{ data.partyName(detail.partyId) }}</div>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Project</label>
+              <div class="form-control-plaintext">{{ detail.projectName }}</div>
+            </div>
+            <div class="col-md-12 field-group">
+              <label class="form-label">Job Site</label>
+              <div class="form-control-plaintext">{{ detail.jobSite }}</div>
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Start</label>
+              <div class="form-control-plaintext mono">{{ data.fmtDate(detail.startDate) }}</div>
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Expected Return</label>
+              <div class="form-control-plaintext mono">{{ data.fmtDate(detail.endDate) }}</div>
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Geofence</label>
+              <div class="form-control-plaintext">{{ detail.geofenceRadius ?? 300 }} m</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="strong"><i class="bi bi-diagram-3 me-1"></i>Line Items ({{ detail.lineItems.length }})</span>
+            <span class="strong">Gross {{ data.money(gross(detail)) }}</span>
+          </div>
+          @for (li of detail.lineItems; track li.id) {
+            <div class="list-line">
+              <span class="l">
+                {{ data.itemLabel(li.type, li.refId) }}
+                <span class="type-chip tc-{{ li.type }}">{{ li.type }}</span>
+              </span>
+              <span class="r">
+                {{ data.int(li.qty) }} &#215; {{ data.money(data.getItem(li.type, li.refId)?.rateDaily ?? 0) }}
+              </span>
+            </div>
+          } @empty {
+            <p class="text-muted2 py-2">No line items staged.</p>
+          }
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeDetail()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
 }
 

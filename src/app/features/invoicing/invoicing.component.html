@@ -1,49 +1,172 @@
-<section class="page">
-  <div class="page-head">
+<div class="page-head"></div>
+
+<div class="kpi-grid">
+  <div class="kpi">
+    <div class="kpi-icon kpi-green"><i class="bi bi-receipt"></i></div>
     <div>
-      <h1>Billing &amp; Invoicing</h1>
-      <p class="page-sub">Industry module: invoices derived from priced orders (simple rate × qty × days).</p>
+      <div class="kpi-label">Total Billed</div>
+      <div class="kpi-value">{{ data.money(totalBilled()) }}</div>
     </div>
-    <span class="mod-tag">MODULE · billing</span>
   </div>
-
-  <div class="stat-row">
-    <div class="card stat"><span class="stat-label">Total billed</span><span class="stat-value">${{ data.totalBilled() }}</span></div>
-    <div class="card stat"><span class="stat-label">Invoices</span><span class="stat-value">{{ invoices().length }}</span></div>
+  <div class="kpi">
+    <div class="kpi-icon kpi-red"><i class="bi bi-hourglass-split"></i></div>
+    <div>
+      <div class="kpi-label">Outstanding</div>
+      <div class="kpi-value">{{ data.money(unpaidTotal()) }}</div>
+    </div>
   </div>
+  <div class="kpi">
+    <div class="kpi-icon kpi-purple"><i class="bi bi-list-check"></i></div>
+    <div>
+      <div class="kpi-label">Pending</div>
+      <div class="kpi-value">{{ countBy('pending') }}</div>
+    </div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-icon kpi-blue"><i class="bi bi-check2-circle"></i></div>
+    <div>
+      <div class="kpi-label">Paid</div>
+      <div class="kpi-value">{{ countBy('paid') }}</div>
+    </div>
+  </div>
+</div>
 
-  <div class="card">
-    <div class="card-body">
-      <div class="toolbar">
-        <button class="btn btn-primary" (click)="run()">Run Invoicing</button>
-      </div>
-      @if (lastRun > 0) {
-        <p class="empty">Created {{ lastRun }} invoice(s).</p>
-      }
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-receipt"></i> Invoice Ledger</span>
+    <div class="d-flex align-items-center gap-2">
+      <select class="form-select form-select-sm w-auto" [value]="filter" (change)="filter = $any($event.target).value">
+        <option value="all">All</option>
+        <option value="pending">Pending</option>
+        <option value="invoiced">Invoiced</option>
+        <option value="paid">Paid</option>
+      </select>
+      <button class="btn btn-ims-outline btn-sm2" type="button" title="Download invoice details (CSV)" (click)="exportCsv()">
+        <i class="bi bi-download"></i>
+      </button>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="runNextCycle()">
+        <i class="bi bi-plus-lg"></i> Run Next Cycle
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    @if (lastRun > 0) {
+      <p class="text-muted2 small">Created {{ lastRun }} invoice(s).</p>
+    }
+    <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Invoice</th><th>Order</th><th>Period</th><th class="th-end">Amount</th><th>Status</th><th class="th-end">Actions</th></tr>
+          <tr>
+            <th>Invoice</th><th>Contract</th><th>Customer</th><th class="num">Cycle</th>
+            <th>Period</th><th class="num">Total</th><th>Status</th><th class="text-end">Actions</th>
+          </tr>
         </thead>
         <tbody>
           @for (inv of invoices(); track inv.id) {
             <tr>
-              <td class="mono strong">{{ inv.id }}</td>
-              <td>{{ inv.orderLabel }}</td>
-              <td>{{ inv.periodStart }} → {{ inv.periodEnd }}</td>
-              <td class="td-end strong">${{ inv.amount }}</td>
-              <td><span class="status" [class.off]="inv.status === 'paid'">{{ label[inv.status] }}</span></td>
-              <td class="td-end">
+              <td class="strong mono">{{ inv.id }}</td>
+              <td>
+                <button class="btn btn-link p-0 mono strong" type="button" (click)="openDetail(inv)">
+                  {{ inv.orderId }}
+                </button>
+              </td>
+              <td class="text-muted2 text-xs2">{{ customer(inv) }}</td>
+              <td class="num">{{ inv.cycle }}</td>
+              <td class="mono text-muted2">{{ data.fmtDate(inv.cycleStart) }} → {{ data.fmtDate(inv.cycleEnd) }}</td>
+              <td class="num strong">{{ data.money(totals(inv).total) }}</td>
+              <td><span [class]="badge(inv.status)">{{ label[inv.status] }}</span></td>
+              <td class="text-end text-nowrap">
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Details" (click)="openDetail(inv)">
+                  <i class="bi bi-eye"></i>
+                </button>
                 @if (inv.status !== 'paid') {
-                  <button class="btn btn-ghost btn-sm" (click)="markPaid(inv)">Mark paid</button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Mark paid" (click)="markPaid(inv)">
+                    <i class="bi bi-check2"></i>
+                  </button>
                 }
-                <button class="btn btn-danger-ghost btn-sm" (click)="remove(inv)">Remove</button>
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(inv)">
+                  <i class="bi bi-x-lg"></i>
+                </button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="6" class="empty">No invoices yet — run invoicing to generate them from active orders.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted2 py-4">No invoices.</td></tr>
           }
         </tbody>
       </table>
     </div>
   </div>
-</section>
+</div>
+
+<!-- invoice detail modal (prototype `invoiceDetailModal`) -->
+@if (detail) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-receipt"></i>Invoice {{ detail.id }}</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeDetail()"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <div class="strong">{{ orderLabel(detail) }}</div>
+            <div class="text-muted2 text-12">{{ customer(detail) }}</div>
+            <div class="text-muted2 text-12">
+              Cycle {{ detail.cycle }} · {{ data.fmtDate(detail.cycleStart) }} — {{ data.fmtDate(detail.cycleEnd) }}
+            </div>
+            <div class="row g-3 mt-1">
+              <div class="col-md-6">
+                <div class="strong mb-1">Status</div>
+                <span [class]="badge(detail.status)">{{ label[detail.status] }}</span>
+              </div>
+              <div class="col-md-6 field-group mb-0">
+                <label class="form-label">Change Status</label>
+                <select class="form-select" [value]="detail.status" (change)="setStatus(detail, $any($event.target).value)">
+                  @for (s of statuses; track s) {
+                    <option [value]="s">{{ label[s] }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="strong mb-2"><i class="bi bi-box-seam me-1"></i>Invoiced Items</div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th>Item</th><th class="num">Qty</th><th>Rate</th><th class="num">Amount</th></tr></thead>
+              <tbody>
+                @for (li of detailLines(detail); track li.label) {
+                  <tr>
+                    <td><span class="type-chip tc-{{ li.type }}">{{ li.type }}</span> {{ li.label }}</td>
+                    <td class="num">{{ data.int(li.qty) }}</td>
+                    <td>{{ li.basis.basis }} &#64; {{ data.money(li.basis.rate) }}</td>
+                    <td class="num">{{ data.money(li.amount) }}</td>
+                  </tr>
+                } @empty {
+                  <tr><td colspan="4" class="text-center text-muted2 py-3">No line items on this order.</td></tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="divider"></div>
+          <div class="list-line"><span class="l">Order Gross</span><span class="r">{{ data.money(totals(detail).base) }}</span></div>
+          <div class="list-line"><span class="l">Environmental Fee ({{ detail.envFeePct }}%)</span><span class="r">{{ data.money(totals(detail).envFee) }}</span></div>
+          <div class="list-line"><span class="l">Fuel Charge</span><span class="r">{{ totals(detail).fuel ? data.money(totals(detail).fuel) : '—' }}</span></div>
+          <div class="list-line"><span class="l">Damage Waiver</span><span class="r">{{ totals(detail).waiver ? data.money(totals(detail).waiver) : '—' }}</span></div>
+          <div class="list-line"><span class="l">Tax</span><span class="r">{{ data.money(totals(detail).tax) }}</span></div>
+          <div class="list-line"><span class="l strong">Invoice Total</span><span class="r strong">{{ data.money(totals(detail).total) }}</span></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeDetail()">Close</button>
+          <button type="button" class="btn btn-ims-outline" (click)="exportCsv()">
+            <i class="bi bi-download"></i> Download CSV
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+

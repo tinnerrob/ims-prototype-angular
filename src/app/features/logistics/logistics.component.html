@@ -1,96 +1,138 @@
-<section class="page">
-  <div class="page-head">
-    <div>
-      <h1>Logistics &amp; Dispatch</h1>
-      <p class="page-sub">Industry module: assign trucks and track deliveries for orders.</p>
+<div class="page-head"></div>
+
+<div class="split-layout">
+  <!-- pending staged dispatches -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-inbox"></i> Pending Dispatches</span>
+        <span class="badge-status st-reorder">{{ staged().length }} staged</span>
+      </div>
+      <div class="card-body">
+        @for (d of staged(); track d.id) {
+          <div class="staged-item">
+            <div>
+              <span class="tag">{{ d.id }}</span> <span class="strong">{{ d.assetId }}</span><br />
+              <span class="text-muted2 text-xs2">{{ jobSiteOf(d) }}</span><br />
+              <span class="mono text-muted2 text-xs">{{ coords(d) }}</span>
+            </div>
+            <div class="text-end">
+              <div class="text-muted2 text-xs">{{ d.orderId }}</div>
+              <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="assign(d)">Assign</button>
+            </div>
+          </div>
+        } @empty {
+          <p class="text-muted2 py-3 text-center">No pending staged dispatches.</p>
+        }
+      </div>
     </div>
-    <span class="mod-tag">MODULE · dispatch</span>
   </div>
 
-  <div class="card">
-    <div class="card-body">
-      <div class="toolbar">
-        <button class="btn btn-primary" (click)="openForm()">+ New Dispatch</button>
+  <!-- driver / truck / status assignment grid -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-truck"></i> Driver Assignment Grid</span>
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="applyAssignments()">
+          <i class="bi bi-check2-all"></i> Apply Assignments
+        </button>
       </div>
-      <table class="table">
-        <thead>
-          <tr><th>ID</th><th>Order</th><th>Vehicle</th><th>Status</th><th class="th-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @for (d of dispatches(); track d.id) {
+      <div class="card-body table-wrap">
+        <table class="table">
+          <thead>
             <tr>
-              <td class="mono strong">{{ d.id }}</td>
-              <td>{{ d.orderLabel }}</td>
-              <td>{{ data.vehicleName(d.vehicleId) }}</td>
-              <td>
-                <select class="input status-sel" [value]="d.status" (change)="setStatus(d, $any($event.target).value)">
-                  @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
-                </select>
-              </td>
-              <td class="td-end"><button class="btn btn-danger-ghost btn-sm" (click)="remove(d)">Remove</button></td>
+              <th class="num">Route</th><th>Dispatch</th><th>Asset</th><th>Site</th>
+              <th>Driver (CDL)</th><th>Truck</th><th>Status</th><th class="text-end"></th>
             </tr>
-          } @empty {
-            <tr><td colspan="5" class="empty">No dispatches yet.</td></tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card log-card">
-    <div class="card-header">Fleet (vehicles)</div>
-    <div class="card-body">
-      <table class="table">
-        <thead><tr><th>ID</th><th>Name</th><th>Plate</th><th>Status</th></tr></thead>
-        <tbody>
-          @for (v of vehicles(); track v.id) {
-            <tr><td class="mono strong">{{ v.id }}</td><td>{{ v.name }}</td><td class="mono">{{ v.plate }}</td><td>{{ v.status }}</td></tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-@if (formOpen) {
-  <div class="overlay">
-    <div class="panel">
-      <div class="panel-head">
-        <span class="panel-title">New Dispatch</span>
-        <button class="icon-btn" (click)="formOpen = false" aria-label="Close">×</button>
-      </div>
-      <div class="panel-body">
-        <div class="field">
-          <label>Order *</label>
-          <select class="input" [(ngModel)]="form.orderId">
-            <option value="" disabled>Choose an order…</option>
-            @for (o of orders(); track o.orderId) {
-              <option [value]="o.orderId">{{ o.orderId }} · {{ o.projectName }}</option>
+          </thead>
+          <tbody>
+            @for (d of dispatches(); track d.id) {
+              <tr>
+                <td class="num">{{ d.routeSeq }}</td>
+                <td class="strong mono">{{ d.id }}</td>
+                <td class="strong">{{ d.assetId }}</td>
+                <td class="text-muted2 text-xs2">{{ siteOf(d) }}</td>
+                <td>
+                  <select class="form-select" [value]="driverValue(d)" (change)="onDriver(d, $any($event.target).value)">
+                    <option value="">— none —</option>
+                    @for (e of drivers(); track e.id) {
+                      <option [value]="e.id">{{ e.id }} — {{ e.name }}</option>
+                    }
+                  </select>
+                </td>
+                <td>
+                  <select class="form-select" [value]="vehicleValue(d)" (change)="onVehicle(d, $any($event.target).value)">
+                    <option value="">— none —</option>
+                    @for (v of vehicles(); track v.id) {
+                      <option [value]="v.id">{{ v.id }} — {{ v.name }}</option>
+                    }
+                  </select>
+                </td>
+                <td>
+                  <select class="form-select" [value]="statusValue(d)" (change)="onStatus(d, $any($event.target).value)">
+                    @for (s of statuses; track s) {
+                      <option [value]="s">{{ s }}</option>
+                    }
+                  </select>
+                </td>
+                <td class="text-end">
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(d)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </td>
+              </tr>
             }
-          </select>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+@if (modalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-truck"></i>New Dispatch</h5>
+          <button type="button" class="btn-close" aria-label="Close" (click)="closeForm()"></button>
         </div>
-        <div class="row2">
-          <div class="field">
-            <label>Vehicle *</label>
-            <select class="input" [(ngModel)]="form.vehicleId">
-              <option value="" disabled>Choose a truck…</option>
-              @for (v of vehicles(); track v.id) {
-                <option [value]="v.id">{{ v.name }} ({{ v.plate }})</option>
+        <div class="modal-body">
+          <div class="field-group">
+            <label class="form-label">Order *</label>
+            <select class="form-select" [(ngModel)]="form.orderId">
+              <option value="" disabled>Choose an order…</option>
+              @for (o of orders(); track o.orderId) {
+                <option [value]="o.orderId">{{ o.orderId }} · {{ o.projectName }}</option>
               }
             </select>
           </div>
-          <div class="field">
-            <label>Status</label>
-            <select class="input" [(ngModel)]="form.status">
-              @for (s of statuses; track s) { <option [value]="s">{{ s }}</option> }
+          <div class="field-group">
+            <label class="form-label">Truck *</label>
+            <select class="form-select" [(ngModel)]="form.vehicleId">
+              <option value="" disabled>Choose a truck…</option>
+              @for (v of vehicles(); track v.id) {
+                <option [value]="v.id">{{ v.id }} — {{ v.name }}</option>
+              }
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Status</label>
+            <select class="form-select" [(ngModel)]="form.status">
+              @for (s of statuses; track s) {
+                <option [value]="s">{{ s }}</option>
+              }
             </select>
           </div>
         </div>
-      </div>
-      <div class="panel-foot">
-        <button class="btn btn-ghost" (click)="formOpen = false">Cancel</button>
-        <button class="btn btn-primary" (click)="save()" [disabled]="!form.orderId || !form.vehicleId">Create</button>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims-outline" (click)="closeForm()">Cancel</button>
+          <button type="button" class="btn btn-ims" [disabled]="!form.orderId || !form.vehicleId" (click)="save()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
       </div>
     </div>
   </div>
+  <div class="modal-backdrop show d-block"></div>
 }
