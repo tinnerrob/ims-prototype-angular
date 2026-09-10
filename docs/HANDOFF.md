@@ -116,6 +116,21 @@ detail right**, with orders as the top rows.
   consumable, part, labor, kit, attachment), then name/date. The lists re-render
   from data, so the moment a conflict is resolved (bar moved/resized, booking
   dropped) the like types fall back together.
+- **Order Details line rows are two rows, led by a type dot** — no type badge:
+
+  ```
+  ● SS-204 · CAT 320 Excavator   ← code · name, one line
+  ● 8/20/26 → 8/24/26            ← compact M/D/YY range under it
+  ```
+
+  The `.type-chip` is gone from these rows: the **dot carries the type**, filled
+  from the shared resource-type palette (`.tl-res-*`'s `--tint-accent`, the same
+  hue as that type's timeline bar; `--slate-400` for a type the palette doesn't
+  name) and repeated on the date row so the two read as one item. Hovering a dot
+  names the type (`typeLabel()`) — the only place the badge's text survives. The
+  "dbl-click a booking" header hint is gone (the row keeps its own `title`, and
+  double-click still opens the viewer). `lineDates()` → `fmtDay()` gives the
+  compact M/D/YY range, matching the pool cards. The conflicts pane keeps its chip.
 - **Double-click to view (read-only):** pool cards, resource bars and Order
   Details booking rows open the shared `ims-record-view` **asset** viewer;
   order bars and queue cards open the **order/contract** viewer. The conflicts

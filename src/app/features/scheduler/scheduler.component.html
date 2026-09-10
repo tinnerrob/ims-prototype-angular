@@ -262,7 +262,6 @@
     <div class="card">
       <div class="card-header">
         <span class="card-title"><i class="bi bi-clipboard-data"></i> Order Details</span>
-        <span class="text-muted2 text-xs">dbl-click a booking</span>
       </div>
       <div class="card-body">
         @if (data.getOrder(selectedOrderId); as o) {
@@ -283,14 +282,15 @@
           </div>
           <div class="divider"></div>
           @for (li of sortedLines(o); track li.id) {
-            <div class="list-line booking-line" title="Double-click to view this asset" (dblclick)="showBookingView(li, o)">
-              <span class="l">
-                <span class="type-chip tc-{{ li.type }}">{{ typeLabel(li.type) }}</span>
-                {{ itemName(li.type, li.refId) }}
-              </span>
-              <span class="r mono text-105">
-                {{ data.fmtDate(li.startDate ?? o.startDate) }} → {{ data.fmtDate(li.endDate ?? o.endDate) }}
-              </span>
+            <div class="booking-line" title="Double-click to view this asset" (dblclick)="showBookingView(li, o)">
+              <div class="bl-main">
+                <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
+                <span>{{ itemName(li.type, li.refId) }}</span>
+              </div>
+              <div class="bl-when">
+                <span class="type-dot tl-res-{{ li.type }}" [title]="typeLabel(li.type)"></span>
+                <span class="mono text-105">{{ lineDates(li, o) }}</span>
+              </div>
             </div>
           } @empty {
             <p class="text-muted2 py-2">No booked inventory yet — drag a pool item onto this order.</p>

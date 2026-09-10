@@ -305,6 +305,16 @@ export class SchedulerComponent implements OnDestroy {
   }
   lineStart(li: OrderLine, order: Order): string { return li.startDate ?? order.startDate; }
   lineEnd(li: OrderLine, order: Order): string { return li.endDate ?? order.endDate; }
+
+  /**
+   * The Order Details line's range in the compact form (`8/20/26 → 8/24/26`) — it
+   * sits on its own row under `code · name`, where `data.fmtDate()`'s
+   * 08/24/2026 form made the row as wide as the item label above it.
+   */
+  lineDates(li: OrderLine, order: Order): string {
+    return this.fmtDay(this.lineStart(li, order)) + ' → ' + this.fmtDay(this.lineEnd(li, order));
+  }
+
   itemName(type: CatalogType, refId: string): string { return this.data.itemLabel(type, refId); }
 
   /** Short type label for chips / row gutters (prototype `TYPE_LABEL`). */
@@ -412,9 +422,10 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   /**
-   * M/D/YY — the compact date for the pool cards' booking row. `data.fmtDate()`
+   * M/D/YY — the compact date for the narrow panel rows: the pool cards' booking
+   * row and the Order Details line items (via `lineDates()`). `data.fmtDate()`
    * prints leading zeros and a 4-digit year (08/24/2026), which is right for the
-   * panels but pushed "· 08/24/2026 → 09/04/2026" onto a second row here.
+   * order headers but pushed those rows onto a second line.
    */
   private fmtDay(iso: string): string {
     const d = this.data.parseDT(iso);
