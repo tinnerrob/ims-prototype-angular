@@ -106,7 +106,7 @@
     </div>
 
     <div class="tl-week">
-      <div class="tl-inner" [style.min-width.px]="minWidth()">
+      <div class="tl-inner" [class.day-view]="view === 'day'" [style.min-width.px]="minWidth()">
         <!-- period header -->
         <div class="tl-head" [class.month-head]="view === 'month'" [style.grid-template-columns]="headColumns()">
           <div class="tl-corner">{{ cornerLabel() }}</div>

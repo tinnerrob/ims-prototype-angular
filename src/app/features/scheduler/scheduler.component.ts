@@ -181,20 +181,19 @@ export class SchedulerComponent implements OnDestroy {
 
   /* ------------------------------- header ------------------------------- */
 
-  /** Header grid template — month/week columns shrink so the view fits the pane. */
+  /** Header grid template — all views shrink columns so the view fits the pane. */
   headColumns(): string {
     if (this.view === 'day') return '120px 1fr';
     if (this.view === 'month') return '120px repeat(' + this.colCount() + ',minmax(0,1fr))';
-    return '120px repeat(' + this.colCount() + ',minmax(44px,1fr))';
+    return '120px repeat(' + this.colCount() + ',minmax(0,1fr))';
   }
 
   cornerLabel(): string {
     return this.view === 'day' ? 'Day' : this.view === 'month' ? 'Month' : 'Week';
   }
 
-  /** Minimum timeline width. Month always fits; week/day scroll only if cramped. */
+  /** Minimum timeline width — the calendar is fixed-width and never scrolls sideways. */
   minWidth(): number {
-    if (this.view === 'week') return 120 + this.colCount() * 44;
     return 120;
   }
 
