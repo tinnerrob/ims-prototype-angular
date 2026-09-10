@@ -37,6 +37,33 @@
   --accent-soft: #dbeafe;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
+
+  /* Calendar/timeline row rhythm (Scheduler + Labor & Timesheets).
+     A "base" row — the order/contract bar that heads a lane — is exactly 1.5x
+     the height of the resource/sub rows beneath it, so the primary scheduled
+     task reads as the lead item while the items it books stay compact.
+     `.tl-row-track` stretches to the row height and `.tl-block` is inset 4px
+     top/bottom, so the VISIBLE bar is `row height - 8px`; the math below is
+     therefore expressed on the bar and the row/track follow. */
+  --tl-bar: 40px;                                   /* sub/resource bar (=48-8) */
+  --tl-bar-base: calc(var(--tl-bar) * 1.5);         /* = 60px, the base bar     */
+  --tl-row: calc(var(--tl-bar) + 8px);              /* = 48px sub row           */
+  --tl-row-base: calc(var(--tl-bar-base) + 8px);    /* = 68px base row          */
+  --tl-track: calc(var(--tl-bar) + 8px);            /* = 48px sub track         */
+  --tl-track-base: calc(var(--tl-bar-base) + 8px);  /* = 68px base track        */
+  --tl-row-plain: 42px;                             /* lane row with no bar     */
+  --tl-track-plain: 36px;
+
+  /* Banded rows: adjacent lanes/rows alternate between these two tints (the
+     band covers both the sticky label column and the bar track, so a striped
+     row reads as one continuous line). */
+  --tl-band-label: var(--card);
+  --tl-band-track: #f8fafc;
+  --tl-band-label-alt: #f5f8fc;
+  --tl-band-track-alt: #edf2fa;
+
+  /* Table rows band the same way (low alpha so a row still reads as a row). */
+  --row-band: rgba(15, 23, 42, .032);
 }
 
 .content {
@@ -401,21 +428,31 @@
 .tl-day-hours > div:first-child { border-left: none; }
 .tl-body { display: flex; flex-direction: column; gap: 6px; }
 .tl-lane { display: flex; flex-direction: column; gap: 4px; }
+/* Banded rows: alternate lanes (Scheduler) / rows (Labor & Timesheets) between
+   the two tints, so a long calendar is easy to scan across — the band runs
+   through the sticky label column as well as the bar track, so each row reads
+   as one continuous stripe. */
+.tl-body > .tl-lane:nth-child(even),
+.tl-body > .tl-row:nth-child(even) {
+  --tl-band-label: var(--tl-band-label-alt);
+  --tl-band-track: var(--tl-band-track-alt);
+}
 .tl-row {
   display: grid;
   grid-template-columns: 120px 1fr;
   gap: 0;
-  min-height: 46px;
+  min-height: var(--tl-row-plain);
   align-items: stretch;
 }
-.tl-row-order { min-height: 58px; }
+/* the base row of a lane (order/contract bar) is 1.5x a sub row */
+.tl-row-order { min-height: var(--tl-row-base); }
 .tl-row-label {
   position: sticky;
   left: 0;
   z-index: 4;
   width: 120px;
   min-width: 120px;
-  background: var(--card);
+  background: var(--tl-band-label);
   border-right: 1px solid var(--slate-200);
   box-shadow: 1px 0 0 rgba(15,23,42,.04);
   font-size: 12px;
@@ -432,26 +469,34 @@
 }
 .tl-row-track {
   position: relative;
-  background: #f8fafc;
+  background: var(--tl-band-track);
   border: 1px solid var(--slate-100);
   border-radius: 6px;
-  min-height: 40px;
+  min-height: var(--tl-track-plain);
 }
-.tl-row-order .tl-row-track { min-height: 52px; }
+.tl-row-order .tl-row-track { min-height: var(--tl-track-base); }
 .tl-block {
   position: absolute;
   top: 4px;
   bottom: 4px;
   border-radius: 6px;
-  background: linear-gradient(135deg, var(--accent), #1d4ed8);
-  color: #fff;
+  /* Pastel fill + saturated ink. The type hues still separate the bars at a
+     glance, but a calendar of soft tints is far easier on the eye (and to sit
+     in front of all day) than solid saturated blocks. `--tint-*` comes from the
+     type class below; the base order/contract bar falls back to the brand tint
+     (deliberately NOT the accent blue, so it never collides with the `bulk`
+     resource type it usually heads). */
+  background: var(--tint-bg, var(--brand-soft));
+  color: var(--tint-ink, var(--brand-deep));
+  border: 1px solid color-mix(in srgb, var(--tint-accent, var(--brand)) 26%, transparent);
+  border-left: 3px solid var(--tint-accent, var(--brand));
   padding: 5px 10px;
   /* the block body drags the whole window (see `startMove`) — the edge handles
      resize it instead */
   cursor: grab;
   user-select: none;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  box-shadow: 0 1px 2px rgba(15,23,42,.08);
 }
 .tl-block:active { cursor: grabbing; }
 /* live feedback while a block is being dragged to another day/time */
@@ -459,8 +504,8 @@
 .tl-res { cursor: grab; }
 /* Resource bars: a touch taller, and flex-centered so the label/sub text has even space
    above and below it. Applies only to resource rows — order bars are untouched. */
-.tl-row:has(.tl-res) { min-height: 54px; }
-.tl-row:has(.tl-res) .tl-row-track { min-height: 50px; }
+.tl-row:has(.tl-res) { min-height: var(--tl-row); }
+.tl-row:has(.tl-res) .tl-row-track { min-height: var(--tl-track); }
 .tl-block.tl-res {
   display: flex;
   flex-direction: column;
@@ -475,19 +520,24 @@
   justify-content: center;
   align-items: flex-end;
 }
-.tl-res-serialized { background: linear-gradient(135deg, #16a34a, #15803d); }
-.tl-res-bulk { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
-.tl-res-consumable { background: linear-gradient(135deg, #d97706, #b45309); }
-.tl-res-labor { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
-.tl-res-part { background: linear-gradient(135deg, #0891b2, #0e7490); }
-.tl-res-kit { background: linear-gradient(135deg, #059669, #047857); }
-.tl-res-attachment { background: linear-gradient(135deg, #db2777, #be185d); }
-.tl-res.conflict { background: linear-gradient(135deg, #dc2626, #991b1b); }
-.tl-row.conflict .tl-row-track { background: #fef2f2; border-color: #fecaca; }
-.tl-row.conflict .tl-row-label.res { background: #fef2f2; color: #b91c1c; font-weight: 700; }
+/* resource type palette — one soft fill + ink + accent per type */
+.tl-res-serialized { --tint-bg: var(--success-soft); --tint-ink: #15803d; --tint-accent: #16a34a; }
+.tl-res-bulk { --tint-bg: var(--accent-soft); --tint-ink: #1d4ed8; --tint-accent: #2563eb; }
+.tl-res-consumable { --tint-bg: var(--warning-soft); --tint-ink: #b45309; --tint-accent: #d97706; }
+.tl-res-labor { --tint-bg: var(--purple-soft); --tint-ink: #6d28d9; --tint-accent: #7c3aed; }
+.tl-res-part { --tint-bg: var(--info-soft); --tint-ink: #155e75; --tint-accent: #0891b2; }
+.tl-res-kit { --tint-bg: var(--teal-soft); --tint-ink: #0f766e; --tint-accent: #14b8a6; }
+.tl-res-attachment { --tint-bg: var(--pink-soft); --tint-ink: #be185d; --tint-accent: #db2777; }
+.tl-res.conflict { --tint-bg: var(--danger-soft); --tint-ink: #b91c1c; --tint-accent: #dc2626; }
+/* the conflicted ROW keeps a lighter red wash than the conflicted BAR, so the
+   bar (danger-soft + the red edge) still stands out against its own row */
+.tl-row.conflict .tl-row-track { background: #fff5f5; border-color: #fecaca; }
+.tl-row.conflict .tl-row-label.res { background: #fff5f5; color: #b91c1c; font-weight: 700; }
 .tl-row.conflict .tl-row-label.res .text-muted2 { color: #b91c1c; }
 .tl-res:active { cursor: grabbing; }
-.tl-block:hover { filter: brightness(1.08); }
+/* hover deepens the tint slightly instead of brightening it (pastels have
+   nowhere to go towards white) */
+.tl-block:hover { filter: saturate(1.12) brightness(.975); }
 .tl-block.drop-ok { outline: 2px solid var(--success); }
 .tl-block.drop-deny { outline: 2px solid var(--danger); cursor: not-allowed; }
 
@@ -524,13 +574,14 @@
   bottom: 0;
   width: 10px;
   cursor: col-resize;
-  background: rgba(255,255,255,.3);
+  /* dark handle: the bars are pastel now, so a white one would vanish */
+  background: rgba(15,23,42,.16);
   opacity: 0;
   transition: opacity .12s;
   z-index: 4;
 }
 .tl-block:hover .tl-h, .tl-h:active { opacity: 1; }
-.tl-res .tl-h { background: rgba(0,0,0,.28); }
+.tl-res .tl-h { background: rgba(15,23,42,.22); }
 .tl-h-l { left: 0; border-radius: 6px 0 0 6px; }
 .tl-h-r { right: 0; border-radius: 0 6px 6px 0; }
 .tl-empty-wrap {
@@ -600,11 +651,13 @@
 }
 .sched-pool-tabs { border-bottom: none; margin-bottom: 6px; }
 .sched-pool-tabs .subtab { padding: 6px 10px; font-size: 12px; }
+/* The inspector has no panel of its own: its cards sit straight on the page,
+   exactly like the Orders & Scheduling / Inventory Pool cards in the left pane
+   (`.sched-side`) — no second white surface stacked behind them. */
 .sched-inspector {
-  background: var(--card);
-  border: 1px solid var(--slate-200);
-  border-radius: var(--radius);
-  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   overflow: auto;
   min-height: 0;
 }
@@ -882,42 +935,49 @@
 .lab-empty { position: absolute; left: 8px; top: 5px; font-size: 10px; color: var(--slate-400); }
 .lab-nowline { position: absolute; top: 0; bottom: 0; width: 2px; background: #dc2626; opacity: .55; pointer-events: none; }
 
-/* target colours (bars, icons, mini-bars, punch chips) */
-.ts-order { --tcol: #2563eb; }
-.ts-wo { --tcol: #0d9488; }
-.ts-shop { --tcol: #7c3aed; }
-.ts-overhead { --tcol: #d97706; }
-.ts-idle { --tcol: #94a3b8; }
+/* target colours (bars, icons, mini-bars, punch chips).
+   `--tcol` is the saturated hue (small icons, legend swatch, chip borders);
+   `--tint-*` is the matching soft fill the calendar bars actually use. */
+.ts-order { --tcol: #2563eb; --tint-bg: var(--accent-soft); --tint-ink: #1d4ed8; --tint-accent: #2563eb; }
+.ts-wo { --tcol: #0d9488; --tint-bg: var(--teal-soft); --tint-ink: #0f766e; --tint-accent: #0d9488; }
+.ts-shop { --tcol: #7c3aed; --tint-bg: var(--purple-soft); --tint-ink: #6d28d9; --tint-accent: #7c3aed; }
+.ts-overhead { --tcol: #d97706; --tint-bg: var(--warning-soft); --tint-ink: #b45309; --tint-accent: #d97706; }
+.ts-idle { --tcol: #94a3b8; --tint-bg: var(--slate-100); --tint-ink: #475569; --tint-accent: #94a3b8; }
 
 .ts-block {
-  position: absolute; border-radius: 4px; color: #fff; font-size: 10px; font-weight: 700;
+  position: absolute; border-radius: 4px; font-size: 10px; font-weight: 700;
   padding: 0 5px; display: flex; align-items: center; white-space: nowrap; overflow: hidden;
-  cursor: pointer; box-sizing: border-box; background: var(--tcol);
-  background: linear-gradient(135deg, var(--tcol), color-mix(in srgb, var(--tcol) 82%, #000));
-  box-shadow: 0 1px 2px rgba(0,0,0,.18); z-index: 1;
+  cursor: pointer; box-sizing: border-box;
+  /* same pastel treatment as the scheduler bars */
+  background: var(--tint-bg, var(--slate-100));
+  color: var(--tint-ink, var(--ink-2));
+  border: 1px solid color-mix(in srgb, var(--tint-accent, var(--slate-400)) 26%, transparent);
+  border-left: 3px solid var(--tint-accent, var(--slate-400));
+  box-shadow: 0 1px 2px rgba(15,23,42,.08); z-index: 1;
 }
-.ts-block:hover { filter: brightness(1.08); z-index: 2; }
+.ts-block:hover { filter: saturate(1.12) brightness(.975); z-index: 2; }
 .ts-block.draggable { cursor: grab; }
 .ts-block.draggable:active { cursor: grabbing; }
 .ts-block-lbl { overflow: hidden; text-overflow: ellipsis; }
-.ts-live { outline: 2px dashed #fff; animation: labpulse 1.8s ease-in-out infinite; }
+/* the running bar's dashed ring follows the block ink (white would be invisible) */
+.ts-live { outline: 2px dashed currentColor; animation: labpulse 1.8s ease-in-out infinite; }
 @keyframes labpulse { 0%,100% { opacity: 1; } 50% { opacity: .7; } }
-.ts-h { position: absolute; top: 0; bottom: 0; width: 7px; cursor: col-resize; opacity: 0; background: rgba(255,255,255,.4); }
+.ts-h { position: absolute; top: 0; bottom: 0; width: 7px; cursor: col-resize; opacity: 0; background: rgba(15,23,42,.2); }
 .ts-h-l { left: 0; border-radius: 4px 0 0 4px; }
 .ts-h-r { right: 0; border-radius: 0 4px 4px 0; }
 .ts-block:hover .ts-h { opacity: .95; }
 
-i.ts-order { color: #2563eb; }
-i.ts-wo { color: #0d9488; }
-i.ts-shop { color: #7c3aed; }
-i.ts-overhead { color: #d97706; }
-i.ts-idle { color: #94a3b8; }
+i.ts-order,
+i.ts-wo,
+i.ts-shop,
+i.ts-overhead,
+i.ts-idle { color: var(--tcol); }
 
 /* legend + summary (bottom of page) */
 .lab-legend-bottom { padding: 8px 2px 0; display: flex; gap: 14px; flex-wrap: wrap; }
 .lab-legend-item { font-size: 11px; color: var(--slate-600); display: inline-flex; align-items: center; gap: 5px; }
 .mini-bar { display: inline-flex; width: 70px; height: 8px; border-radius: 4px; background: var(--slate-200); overflow: hidden; vertical-align: middle; margin-right: 6px; }
-.mini-bar > span { display: block; height: 100%; background: var(--tcol); min-width: 1px; }
+.mini-bar > span { display: block; height: 100%; background: color-mix(in srgb, var(--tcol) 45%, #fff); min-width: 1px; }
 .lab-summary { background: var(--card); border: 1px solid var(--slate-200); border-radius: var(--radius); margin-top: 14px; padding: 14px; }
 .lab-sum-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
 .lab-sum-body { display: grid; grid-template-columns: 1fr 270px; gap: 20px; }
@@ -932,17 +992,18 @@ i.ts-idle { color: #94a3b8; }
 .punch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px; margin-bottom: 12px; }
 .punch-tgt { border: 1px solid var(--slate-200); border-radius: 6px; padding: 7px 9px; text-align: left; background: #fff; cursor: pointer; font-size: 11px; color: var(--slate-700); }
 .punch-tgt:hover { border-color: var(--accent); background: #f8fafc; }
-.punch-tgt.ts-order { border-left: 3px solid #2563eb; }
-.punch-tgt.ts-wo { border-left: 3px solid #0d9488; }
-.punch-tgt.ts-shop { border-left: 3px solid #7c3aed; }
-.punch-tgt.ts-overhead { border-left: 3px solid #d97706; }
-.punch-tgt.ts-idle { border-left: 3px solid #94a3b8; }
+/* punch targets take their edge colour straight off the type's `--tcol` */
+.punch-tgt.ts-order,
+.punch-tgt.ts-wo,
+.punch-tgt.ts-shop,
+.punch-tgt.ts-overhead,
+.punch-tgt.ts-idle { border-left: 3px solid var(--tcol); }
 /* ---- timesheet / scheduler parity ---- */
 #tsViewToggle .btn-ims-outline { background: var(--slate-200); color: var(--slate-600); }
 #tsViewToggle .btn-ims-outline:hover { background: var(--slate-300); color: var(--slate-700); }
 .ts-block { flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 2px 6px; }
 .ts-block-title { display: block; max-width: 100%; font-size: 10.5px; font-weight: 700; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ts-block-sub { display: block; max-width: 100%; font-size: 9px; opacity: .9; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ts-block-sub { display: block; max-width: 100%; font-size: 9px; opacity: .8; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .tl-row.lab-row.active .tl-row-label { background: #eff6ff; border-right-color: var(--accent); }
 .tl-row.lab-row.active .tl-row-track { box-shadow: inset 0 0 0 1px var(--accent); }
 
@@ -959,15 +1020,16 @@ i.ts-idle { color: #94a3b8; }
 }
 .lab-chip:active { cursor: grabbing; }
 .lab-chip:hover { border-color: var(--slate-400); }
-.lab-chip.ts-order { border-left-color: #2563eb; }
-.lab-chip.ts-wo { border-left-color: #0d9488; }
-.lab-chip.ts-shop { border-left-color: #7c3aed; }
-.lab-chip.ts-overhead { border-left-color: #d97706; }
-.lab-chip.ts-idle { border-left-color: #94a3b8; }
+/* the chip's left edge carries the same hue as the bar it creates */
+.lab-chip.ts-order,
+.lab-chip.ts-wo,
+.lab-chip.ts-shop,
+.lab-chip.ts-overhead,
+.lab-chip.ts-idle { border-left-color: var(--tcol); }
 .ts-hint { font-size: 11px; color: var(--slate-500); margin: -2px 0 8px; line-height: 1.4; }
 .tl-row.drop-hi .tl-row-track { outline: 2px dashed var(--accent); outline-offset: -2px; background: #f0f9ff; }
-.ts-lunch { --tcol: #9ca3af; }
-i.ts-lunch { color: #9ca3af; }
+.ts-lunch { --tcol: #9ca3af; --tint-bg: var(--slate-100); --tint-ink: #4b5563; --tint-accent: #9ca3af; }
+i.ts-lunch { color: var(--tcol); }
 @media (max-width: 1100px) { .ts-page { grid-template-columns: 250px 1fr; } }
 @media (max-width: 860px) { .ts-page { grid-template-columns: 1fr; height: auto; overflow: visible; } .ts-page .sched-timeline { min-height: 72vh; } }
 
@@ -1177,6 +1239,7 @@ tr.ho-sec td .mono { font-size: 12px; }
   --brand-2: #6366f1;
   --brand-deep: #4338ca;
   --brand-ink: #1e1b4b;
+  --brand-soft: #e9e9fc;
   --accent: #2563eb;
   --accent-2: #38bdf8;
   --ink: #0b1120;
@@ -1204,6 +1267,10 @@ tr.ho-sec td .mono { font-size: 12px; }
   --info-soft: #e0f5f9;
   --purple: #7c3aed;
   --purple-soft: #f0eafd;
+  /* Two extra soft fills the calendar bars need to keep their type hues distinct
+     (teal ≈ work orders/kits, pink ≈ attachments). */
+  --teal-soft: #e2f4f1;
+  --pink-soft: #fce7f3;
 
   /* surfaces */
   --sidebar-bg: rgba(15, 20, 36, 0.96);
@@ -1471,7 +1538,10 @@ a { color: var(--brand); }
 }
 .table td { padding: 11px 14px; vertical-align: middle; border-color: var(--line-soft); font-size: 13px; }
 .table tbody tr { transition: background var(--t-fast); }
-.table tbody tr:hover { background: rgba(79, 70, 229, .03); }
+/* Banded rows: every other row gets a soft tint so a long list is easy to
+   track across. Declared BEFORE the hover rule so hover still wins. */
+.table tbody tr:nth-child(even) { background: var(--row-band); }
+.table tbody tr:hover { background: rgba(79, 70, 229, .055); }
 .table-wrap { overflow-x: auto; flex: 1 1 auto; min-height: 0; }
 
 .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
@@ -1718,15 +1788,19 @@ a { color: var(--brand); }
 .scheduler-3col, .ts-page { height: auto; min-height: 420px; }
 .ts-page { min-height: 340px; }
 
-/* Slightly tighter timeline rhythm (more lanes visible per screen) */
+/* Slightly tighter timeline rhythm (more lanes visible per screen).
+   Every row height comes from the `--tl-*` rhythm tokens (see :root) so a base
+   row stays exactly 1.5x a sub row wherever the timeline is rendered. */
 .tl-day-head { padding: 4px 0 6px; font-size: 11px; }
 .tl-nav { gap: 8px; margin-bottom: 6px; }
-.tl-row { min-height: 42px; }
-.tl-row-contract { min-height: 50px; }
-.tl-row-track { min-height: 36px; }
-.tl-row-contract .tl-row-track { min-height: 46px; }
-.tl-row:has(.tl-res) { min-height: 48px; }
-.tl-row:has(.tl-res) .tl-row-track { min-height: 44px; }
+.tl-row { min-height: var(--tl-row-plain); }
+.tl-row-track { min-height: var(--tl-track-plain); }
+.tl-row-order,
+.tl-row-contract { min-height: var(--tl-row-base); }
+.tl-row-order .tl-row-track,
+.tl-row-contract .tl-row-track { min-height: var(--tl-track-base); }
+.tl-row:has(.tl-res) { min-height: var(--tl-row); }
+.tl-row:has(.tl-res) .tl-row-track { min-height: var(--tl-track); }
 .tl-block { padding: 4px 9px; }
 .tl-row.lab-row { min-height: 46px; }
 

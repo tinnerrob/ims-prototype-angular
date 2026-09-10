@@ -197,6 +197,30 @@ detail right**, with orders as the top rows.
   used by the Scheduler's availability line/note and the log's empty state. The label is one
   shared pill — `.period-pager .tl-range` in `styles.scss` (Hand-Off's stepper, whose label
   sits inside its `.btn-group`, matches it via `.btn-group .tl-range`).
+- **Calendar styling (Scheduler + Labor & Timesheets) is token-driven** — both calendars
+  share one timeline block in `src/styles.scss`; change it there, never per page:
+  - *Row rhythm:* `--tl-bar` (a sub/resource bar) → `--tl-bar-base`
+    (`calc(var(--tl-bar) * 1.5)`) → `--tl-row` / `--tl-row-base` / `--tl-track…`. A lane's
+    **base** row (order/contract bar) is therefore exactly **1.5×** the resource rows it
+    books, so the primary task leads. `.tl-row-track` stretches to the row height and
+    `.tl-block` is inset 4px top/bottom, so the visible bar is `row − 8px` — the sizing
+    maths is expressed on the bar and the row follows. Re-size in **one** place: `--tl-bar`.
+  - *Banded rows:* `.tl-body > .tl-lane:nth-child(even)` (Scheduler lanes) and
+    `.tl-body > .tl-row:nth-child(even)` (Timesheet employee rows) swap the
+    `--tl-band-label` / `--tl-band-track` pair for its `…-alt` twin. The band covers the
+    sticky label column *and* the bar track, so a striped row reads as one line. Data
+    tables band the same way via `--row-band` on `.table tbody tr:nth-child(even)`
+    (declared **before** the hover rule so hover still wins).
+  - *Bar colours:* pastel fill + saturated ink, never solid saturated blocks (monday-style).
+    Each type sets `--tint-bg` / `--tint-ink` / `--tint-accent` from the soft tokens in
+    `:root`: `.tl-res-*` for the Scheduler, `.ts-*` for the Timesheets (which keep `--tcol`
+    as the saturated hue for icons, the legend swatch and chip edges). A bar with no type
+    falls back to the brand tint (`--brand-soft`), so the base order bar never collides with
+    the accent-blue `bulk` type it heads. `.tl-h` / `.ts-h` resize handles are dark, not
+    white, since the bars are light now.
+- **Right-hand inspector cards sit straight on the page:** `.sched-inspector` is a bare
+  flex column (no background/border/padding of its own), so Scheduling Conflicts +
+  Order Details read like the `.sched-side` panels — a card, not a card-on-a-card.
 
 ## Known gaps / next steps
 1. **No unit tests** — add a few Jasmine/Karma specs (DataService, scheduler
