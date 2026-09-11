@@ -1,6 +1,6 @@
 # IMS — Angular Port: Handoff / State
 
-**Date:** 2026-09-09 · **Repo:** `https://github.com/tinnerrob/ims-prototype-angular.git` (`main`)
+**Date:** 2026-09-11 · **Repo:** `https://github.com/tinnerrob/ims-prototype-angular.git` (`main`)
 **Purpose:** Everything a fresh session needs to resume work with no guesswork.
 
 ## Run / test
@@ -14,9 +14,9 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (55 checks across tenancy,
-attribution, the item↔location spine, the custody ledger and purchasing — see
-`docs/PLAN.md` → "Verification recipe").
+services to JS and drives the real store from Node (67 checks across tenancy,
+attribution, the item↔location spine, the custody ledger, purchasing, and the
+transfer / adjust / reorder paths — see `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -33,6 +33,11 @@ against the active tenant's licence flags; **Admin → Feature Modules** toggles
 them. The workspace and the people in it (roles → permissions) are modelled in the
 store, and the sidebar chip switches the acting user.
 
+Stock only moves through documents and movements: a purchase arrives by receiving
+against a purchase order (`receiveAgainst`), a reorder raises a **draft** PO rather
+than editing a count, and a change of place or a physical count logs a
+`transfer` / `adjust` movement from the Items page.
+
 | Area | Path | Notes |
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
@@ -40,7 +45,7 @@ store, and the sidebar chip switches the acting user.
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's stock **and** its logged movements block removal |
 | Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
-| Items & Stock | `features/items` | typed catalog: list/CRUD per type, scoped by location |
+| Items & Stock | `features/items` | typed catalog: list/CRUD per type, scoped by location; row actions **Move** (logs a `transfer`) and **Count** (logs a signed `adjust`), and the record viewer's **Ledger** section reads both back |
 | Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
@@ -48,7 +53,7 @@ store, and the sidebar chip switches the acting user.
 | Field Service & Maintenance | `features/maintenance` | work orders on items |
 | Labor & Timesheets | `features/timesheet` | task-chip → employee drag to clock in |
 | Logistics & Dispatch | `features/logistics` | trucks + dispatch status board |
-| Rentals & Sub-Rentals | `features/rentals` | vendor sub-rentals w/ spread |
+| Rentals & Sub-Rentals | `features/rentals` | sub-rentals with a supplier-FK vendor (party w/ `supplier` role) + spread |
 | Billing & Invoicing | `features/invoicing` | invoices from priced orders |
 | Fleet Telemetry | `features/telemetry` | live GPS sim + geofence feed |
 
@@ -566,24 +571,19 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    prints (`lineTotal()`). Order Details / queues / dashboards are already on the
    prototype figure.
 
-9. **Only `issue`, `return` and `receive` are ever written.** `MovementKind` also
-   types `transfer` / `adjust`; a yard-to-yard move and a count correction are
-   still logged only by hand (the Goods Receipt path posts `receive`, and the
-   `adjust` kind is used in the harness only). Until they get a screen, a
-   correction is an item edit, which leaves no trace — the ledger's `locationId`
-   and `receiptId` FKs are the seam they plug into.
-10. **A one-click restock still bypasses purchasing.** The dashboard's reorder
-    panel offers **Order** (opens Purchasing) beside **Restock**
-    (`triggerReorder()`), which sets `qtyOnHand` to twice the reorder point
-    without any document behind it — the prototype's behaviour, kept for parity.
-    The honest end state is for a reorder to raise a purchase order.
-11. **A sub-rental still names its vendor in free text.** `RentalSub.vendor` is a
-    string; it should be a `supplierId` FK now that suppliers exist (A5) — the
-    same change A3 made for `item.bin` and A4 for `movement.location`.
-12. **One SKU lives in one place.** `Item.locationId` is a single FK, so a
-    receipt re-places the row it tops up and a part can't be stocked in two bins
-    at once. Per-location quantities need a `stock_levels(item_id, location_id,
-    qty)` table (with `qtyOnHand` as its sum) — flagged as an open decision in
+9. **Only `issue`, `return`, `receive`, `transfer` and `adjust` are ever
+   written, and the last two only by the Items page.** `transfer` and `adjust`
+   gained their write paths in A5.1 (`moveStock()` / `adjustStock()` — the *Move*
+   and *Count* row actions, each logging a movement the record viewer reads back),
+   but there is still no bulk/cycle-count *screen* (a count sheet for a whole
+   location at once), and a placement corrected by editing the item's Location
+   field directly logs nothing — deliberately, as that is a data fix rather than a
+   stock movement.
+10. **One SKU lives in one place.** `Item.locationId` is a single FK, so a receipt
+    re-places the row it tops up and a count corrects *the* row: a part can't be
+    stocked in two bins at once with two quantities, and *Move* relocates the whole
+    row. Per-location quantities need a `stock_levels(item_id, location_id, qty)`
+    table (with `qtyOnHand` as its sum) — flagged as an open decision in
     `docs/PLAN.md`, not to be decided by accident.
 
 ## Source of truth for behavior
