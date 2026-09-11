@@ -27,6 +27,14 @@
     }
   </div>
   <div class="card-body">
+    <!-- The refusal a Remove click can meet (C2), printed once for whichever grid it
+         was: the button is already disabled with a tooltip when the guard knows, and
+         this is the answer for the click that got past it. -->
+    @if (refusal) {
+      <div class="alert-text mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ refusal }}
+      </div>
+    }
     @if (tab === 'locations') {
       <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
         <input class="filter-input search" placeholder="Search ID, name, type, address…" [(ngModel)]="search" />

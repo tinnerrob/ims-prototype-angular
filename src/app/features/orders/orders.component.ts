@@ -2,7 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiAdapter, IMS_API } from '../../core/api';
-import { Order, ORDER_STATUS_LABEL, OrderLine, Party, statusClass } from '../../core/models';
+import { Order, ORDER_STATUS_LABEL, OrderLine, Party, RemovalRefusal, statusClass } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -12,6 +12,18 @@ import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
 
 const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
+
+/**
+ * What the store's reasons say to a person who clicked Remove on a party (C2). The
+ * grid already disables the button and says why by tooltip
+ * (`partyRemovalBlockers()` — the same list the store's own guard reads, so the
+ * button and the refusal cannot disagree); this is the line for the click that got
+ * past it.
+ */
+const REFUSAL: Record<RemovalRefusal, string> = {
+  missing: 'That partner is already gone — it was removed somewhere else. Reload to see the current list.',
+  'in-use': 'An order, purchase order, receipt, sub-rental or rate card still names this partner, so it cannot be removed. Deactivate it instead.',
+};
 
 /**
  * Parties & Orders (core) — port of the prototype's `renderOrdersParties`
@@ -37,6 +49,8 @@ export class OrdersComponent {
   customerForm = this.emptyCustomer();
   /** Editor values as they were when it opened (drives the discard prompt). */
   private customerSnap = '';
+  /** The last refusal the store answered with, printed above the grid ('' = nothing). */
+  refusal = '';
 
   orderOpen = false;
   orderForm = {
@@ -163,7 +177,8 @@ export class OrdersComponent {
   }
 
   removeCustomer(p: Party): void {
-    this.data.removeParty(p.id);
+    const removed = this.data.removeParty(p.id);
+    this.refusal = removed.ok ? '' : REFUSAL[removed.reason];
   }
 
   /** Why this customer cannot be removed — the grid's disabled Remove button. */

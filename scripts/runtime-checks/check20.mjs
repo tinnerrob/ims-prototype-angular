@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 import { persisted, refuses } from './command-result.mjs';
 import { signInAs } from './sign-in.mjs';
@@ -170,6 +172,41 @@ await check('signIn answers the same shape as every command (B1, one vocabulary)
   const good = await d.signIn(account.email, account.password);
   assert.equal(good.ok, true);
   assert.equal(good.value.id, 'USR-003', 'the person, under the one shape');
+});
+
+/* ------------------------ and no screen ignores it (C2b) ----------------------
+ *
+ * The half a runtime check cannot reach, and the reason it is checked here rather
+ * than trusted: a screen that drops the answer — `this.data.removeParty(p.id);` —
+ * still *compiles* and still *runs*, so the refusal would go back to being silent
+ * exactly as it was before C2. The ten commands are read from the source, and each
+ * call site must do something with what it answers.
+ */
+await check('every screen reads the answer instead of dropping it', () => {
+  const commands = [
+    'removeParty', 'removeLocation', 'removeLocationType', 'removePurchaseOrder',
+    'updatePurchaseOrder', 'raiseReorder', 'receiveAgainst', 'createRental',
+    'moveStock', 'adjustStock',
+  ];
+  const call = new RegExp(`this\\.data\\.(${commands.join('|')})\\s*\\(`);
+  const bare = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (p.endsWith('.ts')) {
+        readFileSync(p, 'utf8').split('\n').forEach((line, i) => {
+          if (!call.test(line)) return;
+          // `const saved = this.data.createRental({` reads the answer; a line whose
+          // `this.data.` is the first thing on it is a dropped one. (A deliberate
+          // `void …` is the visible exception, and is not what this catches.)
+          if (/^\s*this\.data\./.test(line)) bare.push(`${p}:${i + 1}  ${line.trim()}`);
+        });
+      }
+    }
+  };
+  walk('src/app');
+  assert.deepEqual(bare, [], `call sites that drop the answer:\n      ${bare.join('\n      ')}`);
 });
 
 console.log(`\ncheck20: ${n} checks`);

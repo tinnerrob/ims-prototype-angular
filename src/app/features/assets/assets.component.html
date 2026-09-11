@@ -306,6 +306,14 @@
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+          <!-- Why the store refused the move (C2): the form disables Save for what it
+               can see, and this is the answer for what it cannot — the shelf moved
+               while the editor was open. -->
+          @if (moveRefusal) {
+            <div class="alert-text mb-2" role="alert">
+              <i class="bi bi-exclamation-triangle"></i> {{ moveRefusal }}
+            </div>
+          }
           <p class="text-12 text-muted2">
             <!-- Where the stock is right now, place by place: the source of a move
                  is one of these, and moving part of a row leaves the rest here. -->
@@ -367,6 +375,13 @@
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+          <!-- Why the store refused the count (C2) — a matching count is one of these,
+               and saying so is better than a dialog that closes over nothing. -->
+          @if (countRefusal) {
+            <div class="alert-text mb-2" role="alert">
+              <i class="bi bi-exclamation-triangle"></i> {{ countRefusal }}
+            </div>
+          }
           <p class="text-12 text-muted2">
             What the shelf actually holds at
             <span class="strong">{{ data.locationPath(countLocation) }}</span>.

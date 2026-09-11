@@ -80,6 +80,14 @@
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+          <!-- The refusal the store answered with, printed where the Save happened
+               (C2): a sub-rental with no vendor is refused by the store, not by a
+               second rule here, so this line is what a person actually sees. -->
+          @if (refusal) {
+            <div class="alert-text mb-2" role="alert">
+              <i class="bi bi-exclamation-triangle"></i> {{ refusal }}
+            </div>
+          }
           <div class="field-group">
             <label class="form-label">Map to catalog item (optional)</label>
             <select class="form-select" [(ngModel)]="form.itemId">

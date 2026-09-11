@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { ApiAdapter, IMS_API } from '../../core/api';
 import { PageSearchService } from '../../core/page-search.service';
-import { CatalogType, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
+import { CatalogType, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, StockCountRefusal, StockMoveRefusal, isCountedStock, needsReorder, statusClass } from '../../core/models';
 import { ColumnMeta, VerticalTabMeta } from '../../core/vertical-metadata';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -14,6 +14,32 @@ import { TipDirective } from '../../shared/tip/tip.directive';
 
 
 const MONEY_KEYS = ['purchaseValue', 'rateDaily', 'baseMonthly', 'costPrice', 'retailPrice', 'hourlyCost', 'hourlyBillable'];
+
+/*
+ * What the store's reasons say on the two stock corrections (C2). Both forms already
+ * disable Save while the rule they can see fails (`moveReady()` / `countReady()`), so
+ * these lines are for the case that gate cannot see: the shelf changed after the page
+ * was drawn — somebody else moved it, or the row was removed — which is exactly why
+ * the store, not the form, is the authority.
+ */
+const MOVE_REFUSAL: Record<StockMoveRefusal, string> = {
+  missing: 'That row is already gone — it was removed somewhere else. Reload to see the catalog.',
+  'not-stock': 'Labour is a person, not stock: there is no shelf to move it from.',
+  'unknown-place': 'A move needs a place that exists on both ends.',
+  'same-place': 'That is where the stock already is — a move to the same place records nothing.',
+  'out-on-rent': 'That unit is out on a job, so it is not on a shelf. It comes back with the return movement.',
+  'bad-quantity': 'Enter a positive whole number to move.',
+  'not-held': 'That place does not hold that much — you can move what is there, never more.',
+  'partial-unit': 'A kit or attachment is one row in one place, so it moves whole or not at all.',
+};
+
+const COUNT_REFUSAL: Record<StockCountRefusal, string> = {
+  missing: 'That row is already gone — it was removed somewhere else. Reload to see the catalog.',
+  'not-counted': 'A unit-held row is counted by its own row, not per place — edit the row instead.',
+  'unknown-place': 'Count at a place that exists.',
+  'bad-quantity': 'A count is a whole number, and never negative.',
+  'no-change': 'The count matches what is recorded, so there is nothing to log.',
+};
 
 /**
  * Sentinel for the location scope's "not placed yet" choice. A real location id
@@ -87,6 +113,8 @@ export class AssetsComponent {
   moveQtyInput = 0;
   moveTo = '';
   moveNote = '';
+  /** Why the store refused the last move (C2), printed in the move editor ('' = none). */
+  moveRefusal = '';
 
   /** Count editor — a physical count *of one place* (an `adjust` movement). */
   countOpen = false;
@@ -95,6 +123,8 @@ export class AssetsComponent {
   countLocation = '';
   countQtyInput = 0;
   countNote = '';
+  /** Why the store refused the last count (C2), printed in the count editor ('' = none). */
+  countRefusal = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -395,6 +425,7 @@ export class AssetsComponent {
     this.moveQtyInput = first?.qty ?? 0;
     this.moveTo = '';
     this.moveNote = '';
+    this.moveRefusal = '';
     this.moveOpen = true;
   }
 
@@ -406,6 +437,7 @@ export class AssetsComponent {
     this.moveOpen = false;
     this.moveId = '';
     this.moveFrom = '';
+    this.moveRefusal = '';
   }
 
   /** How much of the row sits at the chosen source place. */
@@ -425,7 +457,13 @@ export class AssetsComponent {
 
   saveMove(): void {
     if (!this.moveReady()) return;
-    this.data.moveStock(this.type, this.moveId, this.moveFrom, this.moveTo, Number(this.moveQtyInput), this.moveNote.trim());
+    // The form's own gate is what it can see; the store is the authority (C2), so its
+    // refusal is printed rather than closing the dialog as if the move had happened.
+    const moved = this.data.moveStock(this.type, this.moveId, this.moveFrom, this.moveTo, Number(this.moveQtyInput), this.moveNote.trim());
+    if (!moved.ok) {
+      this.moveRefusal = MOVE_REFUSAL[moved.reason];
+      return;
+    }
     this.closeMove();
   }
 
@@ -438,6 +476,7 @@ export class AssetsComponent {
     this.countLocation = home?.locationId ?? '';
     this.countQtyInput = home?.qty ?? 0;
     this.countNote = '';
+    this.countRefusal = '';
     this.countOpen = true;
   }
 
@@ -448,6 +487,7 @@ export class AssetsComponent {
   closeCount(): void {
     this.countOpen = false;
     this.countId = '';
+    this.countRefusal = '';
   }
 
   /** What the chosen place currently holds — the number the count compares to. */
@@ -467,7 +507,11 @@ export class AssetsComponent {
 
   saveCount(): void {
     if (!this.countReady()) return;
-    this.data.adjustStock(this.type, this.countId, this.countLocation, Number(this.countQtyInput), this.countNote.trim());
+    const counted = this.data.adjustStock(this.type, this.countId, this.countLocation, Number(this.countQtyInput), this.countNote.trim());
+    if (!counted.ok) {
+      this.countRefusal = COUNT_REFUSAL[counted.reason];
+      return;
+    }
     this.closeCount();
   }
 

@@ -2,7 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiAdapter, IMS_API } from '../../core/api';
-import { RentalSub } from '../../core/models';
+import { RentalRefusal, RentalSub } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -27,6 +27,16 @@ const BLANK_RENT_FORM = {
 };
 
 /**
+ * What the store's reasons say to a person filling this form in (C2). The store owns
+ * the *reason*, this screen owns the sentence — the same split the sign-in form uses
+ * for `SignInFailure`.
+ */
+const REFUSAL: Record<RentalRefusal, string> = {
+  'no-vendor': 'A sub-rental needs a vendor — pick the supplier you are renting it from.',
+  'unknown-vendor': 'That vendor is no longer in the partner list — pick another.',
+};
+
+/**
  * Rentals / Sub-Rentals (module) — port of the prototype's `renderRerents`
  * (js/pages/rerents.js): vendor wholesale / retail revenue / net spread KPIs
  * plus the sub-rental ledger and the New Sub-Rental modal.
@@ -43,6 +53,8 @@ export class RentalsComponent {
   form = { ...BLANK_RENT_FORM };
   /** Editor values as they were when it opened (drives the discard prompt). */
   private formSnap = '';
+  /** The last refusal the store answered with, printed by the form ('' = nothing). */
+  refusal = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -91,6 +103,7 @@ export class RentalsComponent {
   openForm(): void {
     this.form = this.emptyForm();
     this.formSnap = snapshotForm(this.form);
+    this.refusal = '';
     this.modalOpen = true;
   }
 
@@ -98,10 +111,14 @@ export class RentalsComponent {
     const f = this.form;
     const item = f.itemId ? this.data.getItem('serialized', f.itemId) : null;
     const assetName = item ? item.name : f.assetName.trim();
-    // A sub-rental needs an asset and a vendor: without the supplier there is
-    // nothing to pay, so the store refuses it too (see `createRental`).
-    if (!assetName || !f.supplierId) return;
-    this.data.createRental({
+    // The asset name is *this form's* requirement (the store only needs something to
+    // call it); the vendor is the store's rule, so this screen no longer keeps a
+    // second copy of it — it prints the reason the store answers with instead.
+    if (!assetName) {
+      this.refusal = 'Name the asset (or map it to a catalog item) before saving.';
+      return;
+    }
+    const saved = this.data.createRental({
       itemId: item?.id ?? null,
       assetName,
       orderId: f.orderId || null,
@@ -110,6 +127,10 @@ export class RentalsComponent {
       retailRate: Number(f.retailRate) || 0,
       qty: Number(f.qty) || 1,
     });
+    if (!saved.ok) {
+      this.refusal = REFUSAL[saved.reason];
+      return;
+    }
     this.closeForm();
   }
 
@@ -125,6 +146,7 @@ export class RentalsComponent {
   closeForm(): void {
     this.modalOpen = false;
     this.formSnap = '';
+    this.refusal = '';
   }
 
   /* --------------------------- record viewer ---------------------------- */

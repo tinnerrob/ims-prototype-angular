@@ -28,6 +28,14 @@
   </div>
 
   <div class="card-body">
+    <!-- The refusal a grid action met (C2): the Remove buttons are already disabled
+         with a tooltip when the store's own blockers know, so this is the answer for
+         the click that got past them — nothing here silently does nothing. -->
+    @if (refusal) {
+      <div class="alert-text mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ refusal }}
+      </div>
+    }
     <!-- The filter row: period chips + their date pager for the two document
          lists (suppliers carries no date to page), then the record count. The
          chips live here rather than in the card header because the sub-tab strip
@@ -287,6 +295,13 @@
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
+          <!-- The refusal a Save met (C2): an order can be removed while it is open in
+               this editor, and the person who typed into it is owed that answer. -->
+          @if (poRefusal) {
+            <div class="alert-text mb-2" role="alert">
+              <i class="bi bi-exclamation-triangle"></i> {{ poRefusal }}
+            </div>
+          }
           <div class="row g-3">
             <div class="col-md-5 field-group">
               <label class="form-label">Supplier *</label>
@@ -402,6 +417,14 @@
             <button type="button" class="btn-close" aria-label="Close"></button>
           </div>
           <div class="modal-body">
+            <!-- Why the posting was refused (C2), printed inside the editor it was
+                 posted from: this form is filled in against an order somebody else
+                 may have moved on, so a refusal is expected rather than exceptional. -->
+            @if (receiveRefusal) {
+              <div class="alert-text mb-2" role="alert">
+                <i class="bi bi-exclamation-triangle"></i> {{ receiveRefusal }}
+              </div>
+            }
             <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
               <div>
                 <span class="strong">{{ data.partyName(po.supplierId) }}</span>

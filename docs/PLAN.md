@@ -584,12 +584,24 @@ and stay silent: `updatePurchaseOrder` re-adds a delivered line and ignores a ca
 because the receipts are the record, and that is a rule holding rather than a request
 being denied.
 
-**C2b — the screens print it.** Each refusing call site says why where the action
-happened, the way the sign-in form prints a refusal: a signal holding the store's
-reason, a `Record<Reason, string>` of sentences, one `role="alert"` line. The refusals
-the grids already warn about by tooltip (`partyRemovalBlockers()`) keep that tooltip and
-gain the printed reason for the click that gets past it — which is what the person who
-clicked needs, and what "a refusal reaches the screen as a reason it prints" means.
+**C2b — the screens print it.** Each refusing call site says why *where the action
+happened*, the way the sign-in form prints a refusal: a field holding the store's reason
+(the screens here are plain-field components, not signal ones), a `Record<Reason, string>`
+of sentences, one `role="alert"` line — inside the editor when the action was a Save, above
+the grid when it was a Remove. Six screens meet a refusal (`dashboard`, `rentals`,
+`locations`, `orders`, `purchasing`, `assets`, four maps deep in Purchasing alone, which
+meets four different unions). The grids that already warn by tooltip
+(`partyRemovalBlockers()`, `locationRemovalBlockers()`, `purchaseOrderRemovalBlockers()` —
+each the same list the store's own guard reads) keep that tooltip and gain the printed
+reason for the click that gets *past* it, which is what the person who clicked is owed and
+what "a refusal reaches the screen as a reason it prints" means.
+
+One rule that lived in two places now lives in one: `rentals.save()` re-implemented
+`createRental`'s vendor requirement and returned silently when its copy failed, so it
+prints the store's reason instead. Purchasing's receiving editor keeps its own gates
+(`canReceive()` disables the button on a draft; `receiveReady()` keeps obviously
+incomplete postings out), because those do a different job — a form that is still being
+filled in — and the store's reason is what answers the case they cannot see.
 
 **C2 is held twice, like C1.** A harness drives each refusal through the real store and
 checks the reason *and* that nothing was written (a refusal that half-wrote is worse than
@@ -1040,17 +1052,20 @@ hand-roll `localStorage` and assert on the store's own output:
   the class (`useExisting`, not a second workspace); and B1 still works through the seam
   — a fresh fixture acts as nobody, a credential signs somebody in, `signOut()` ends it.
 
-- `check20.mjs` — **C2, 36 checks:** the runtime half of "a command says *why*". One case
-  per answerable refusal — all 33 of them across the ten commands (missing rows,
-  `'in-use'` removals, a draft and a cancelled order, an over-receipt, a person treated as
-  stock, half a kit, a count that matched) — each asserting the **reason by name** and that
-  the persisted snapshot is byte-for-byte unchanged, because a command that half-wrote and
-  then said no would be worse than the sentinel it replaced. Then the other branch: a
-  command that succeeds answers `{ ok: true }` and hands back the row it made
-  (`raiseReorder`'s draft, `receiveAgainst`'s receipt), a removal hands nothing back, and
-  `signIn()` answers the same shape. `assert.ok(result)` would pass on a `{ok, reason}`
-  object exactly the way the screens passed on a truthy sentinel — which is why the reason
-  is asserted by name and not by truthiness.
+- `check20.mjs` — **C2, 37 checks:** the runtime half of "a command says *why*", plus the
+  source half of "a screen prints it". One case per answerable refusal — all 33 of them
+  across the ten commands (missing rows, `'in-use'` removals, a draft and a cancelled
+  order, an over-receipt, a person treated as stock, half a kit, a count that matched) —
+  each asserting the **reason by name** and that the persisted snapshot is byte-for-byte
+  unchanged, because a command that half-wrote and then said no would be worse than the
+  sentinel it replaced. Then the other branch: a command that succeeds answers
+  `{ ok: true }` and hands back the row it made (`raiseReorder`'s draft, `receiveAgainst`'s
+  receipt), a removal hands nothing back, and `signIn()` answers the same shape.
+  `assert.ok(result)` would pass on a `{ok, reason}` object exactly the way the screens
+  passed on a truthy sentinel — which is why the reason is asserted by name. The last check
+  reads the sources it just drove: no call site of those ten commands may *drop* the answer
+  (`this.data.removeParty(p.id);` compiles and runs, so only a source walk catches the
+  refusal going silent again — the same reason `check18` exists).
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.

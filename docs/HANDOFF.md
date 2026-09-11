@@ -724,13 +724,17 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    (`core/api.ts` — the store's surface split into queries and commands, held by two
    compile-time assertions and `check17`) and C1b moved every screen onto it (all 22
    injection sites take `IMS_API`, held by `check18`), so swapping the implementation is
-   a provider change. **C2a is done** — a command's refusal is one typed `CommandResult`
-   (`models.ts`) with a named reason per answerable branch, replacing `null`/`false` for
-   every command whose refusal a screen can observe (ten of them, including two —
-   `moveStock`, `adjustStock` — that the third compile-time assertion found after a
-   hand-written list missed them); `check20` drives all 33 refusals and proves each one
-   names its reason *and* persisted nothing. **C2b is next** (the screens print the
-   reason where the action was). Still open on the *auth* seam, and
+   a provider change. **C2 is done** — C2a made a command's refusal one typed
+   `CommandResult` (`models.ts`) with a named reason per answerable branch, replacing
+   `null`/`false` for every command whose refusal a screen can observe (ten of them,
+   including two — `moveStock`, `adjustStock` — that the third compile-time assertion
+   found after a hand-written list missed them); C2b made the screens *print* it, where
+   the action happened, through one `Record<Reason, string>` per surface (six screens,
+   and a rule that had lived in both the form and the store now lives in the store
+   alone). `check20` (37 checks) drives all 33 refusals, proves each names its reason and
+   persisted nothing, and walks the sources for a call site that drops the answer.
+   **C3 is next** (the request context becomes the seam's argument). Still open on the
+   *auth* seam, and
    named in DATA-MODEL's "not in the model yet": **revocation** — nothing cuts a session
    short before it is given up, and no other client is told one ended (the API's job: a
    `sessions` row or a token version).

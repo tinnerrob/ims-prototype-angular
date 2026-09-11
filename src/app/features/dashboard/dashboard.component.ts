@@ -3,9 +3,15 @@ import { Router } from '@angular/router';
 
 import { ApiAdapter, IMS_API } from '../../core/api';
 import { ModulesService } from '../../core/modules.service';
-import { CatalogType, Order, statusClass } from '../../core/models';
+import { CatalogType, Order, ReorderRefusal, statusClass } from '../../core/models';
 import { TelemetryService } from '../../core/telemetry.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+
+/** What the store's reasons say to a person who clicked *Raise Order* (C2). */
+const REFUSAL: Record<ReorderRefusal, string> = {
+  missing: 'That catalog row is gone — the list was built a moment ago. Refresh to see the shelf.',
+  'not-purchasable': 'That row is not bought from a supplier, so there is no order to raise for it.',
+};
 
 /** One row of the dashboard's active-order margin table. */
 interface OrderTotalRow {
@@ -33,6 +39,9 @@ export class DashboardComponent {
 
   /** Read-only record viewer (opened by clicking the margin table's rows). */
   viewer: ViewModel | null = null;
+
+  /** The last refusal the store answered with, printed above the warnings ('' = none). */
+  refusal = '';
 
   constructor(
     @Inject(IMS_API) readonly data: ApiAdapter,
@@ -89,7 +98,15 @@ export class DashboardComponent {
    * it, receive it — and the receipt is what moves the quantity.
    */
   raiseReorder(type: CatalogType, ref: string): void {
-    if (this.data.raiseReorder(type, ref).ok) this.router.navigate(['/purchasing']);
+    const raised = this.data.raiseReorder(type, ref);
+    if (!raised.ok) {
+      // The store said why, and this screen prints it rather than sending the person
+      // to Purchasing for an order that was never raised (C2).
+      this.refusal = REFUSAL[raised.reason];
+      return;
+    }
+    this.refusal = '';
+    this.router.navigate(['/purchasing']);
   }
 
   openView(id: string): void {

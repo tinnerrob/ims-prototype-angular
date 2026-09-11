@@ -114,6 +114,14 @@
       <span class="badge-status st-reorder">{{ reorders().length }}</span>
     </div>
     <div class="bento-body">
+      <!-- The refusal a click can meet (C2): the list was built from the shelf a
+           moment ago, so a row that went away says so here instead of looking like a
+           button that did nothing. -->
+      @if (refusal) {
+        <div class="alert-text mb-2" role="alert">
+          <i class="bi bi-exclamation-triangle"></i> {{ refusal }}
+        </div>
+      }
       @for (r of reorders(); track r.ref) {
         <div class="list-line">
           <span class="l">{{ r.ref }} · {{ r.label }}</span>

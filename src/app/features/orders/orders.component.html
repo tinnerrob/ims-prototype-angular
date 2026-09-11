@@ -19,6 +19,14 @@
     </button>
   </div>
   <div class="card-body">
+    <!-- The refusal a Remove click can meet (C2): the button is disabled with a tooltip
+         when the grid already knows, and this is the answer for the click that got past
+         it — so a person is never left with a button that appears to do nothing. -->
+    @if (refusal) {
+      <div class="alert-text mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ refusal }}
+      </div>
+    }
     @if (tab === 'customers') {
       <div class="table-wrap">
         <table class="table">

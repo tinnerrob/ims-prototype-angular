@@ -11,8 +11,11 @@ import {
   PO_STATUS_LABEL,
   PurchaseOrder,
   PurchaseOrderLine,
+  PurchaseOrderRefusal,
   PurchaseOrderStatus,
   Receipt,
+  ReceiptRefusal,
+  RemovalRefusal,
   isUnitStock,
   statusClass,
 } from '../../core/models';
@@ -26,6 +29,35 @@ import { TipDirective } from '../../shared/tip/tip.directive';
 
 /** Which of the page's three sub-tables is showing. */
 type Tab = 'suppliers' | 'orders' | 'receipts';
+
+/*
+ * What the store's reasons say here (C2). The page meets four of them, and each is a
+ * different sentence: the grid already disables Remove and explains it by tooltip
+ * (the blockers the store's own guard reads), so these lines are for the click that got
+ * past it — and for the editor, where the row can vanish underneath a person typing.
+ */
+const SUPPLIER_REFUSAL: Record<RemovalRefusal, string> = {
+  missing: 'That supplier is already gone — it was removed somewhere else. Reload to see the list.',
+  'in-use': 'An order, purchase order, receipt, sub-rental or rate card still names this supplier, so it cannot be removed. Deactivate it instead.',
+};
+
+const PO_REMOVE_REFUSAL: Record<RemovalRefusal, string> = {
+  missing: 'That purchase order is already gone — it was removed somewhere else. Reload to see the list.',
+  'in-use': 'A receipt was posted against it. History is append-only, so the order stays — cancel it instead.',
+};
+
+const PO_SAVE_REFUSAL: Record<PurchaseOrderRefusal, string> = {
+  missing: 'This purchase order no longer exists, so there is nothing to save it into. Copy anything you need, then reopen the order from the list.',
+};
+
+const RECEIPT_REFUSAL: Record<ReceiptRefusal, string> = {
+  missing: 'That purchase order no longer exists — the delivery has nowhere to go.',
+  draft: 'This order is still a draft. Pick a supplier and send it before receiving against it.',
+  cancelled: 'This order was cancelled, so nothing can be received against it.',
+  'unknown-place': 'Pick a place that exists to put the delivery in.',
+  'over-receipt': 'A line cannot receive more than is still outstanding — the order caps the delivery.',
+  'nothing-to-receive': 'Enter a quantity for at least one line before posting.',
+};
 
 /** The two lists that carry dates, and so carry a period filter. */
 type DatedTab = 'orders' | 'receipts';
@@ -140,6 +172,13 @@ export class PurchasingComponent {
   supplierForm = { ...BLANK_SUPPLIER };
   private supplierSnap = '';
 
+  /** The last refusal a *grid* action met, printed above the table ('' = nothing). */
+  refusal = '';
+  /** The last refusal the PO editor met, printed inside it ('' = nothing). */
+  poRefusal = '';
+  /** The last refusal the receiving editor met, printed inside it ('' = nothing). */
+  receiveRefusal = '';
+
   /** Purchase-order editor. */
   poOpen = false;
   editingPoId: string | null = null;
@@ -176,6 +215,7 @@ export class PurchasingComponent {
 
   selectTab(t: Tab): void {
     this.tab = t;
+    this.refusal = '';
     this.closeSupplier();
     this.closePo();
     this.closeReceive();
@@ -317,7 +357,8 @@ export class PurchasingComponent {
   }
 
   removeSupplier(p: Party): void {
-    this.data.removeParty(p.id);
+    const removed = this.data.removeParty(p.id);
+    this.refusal = removed.ok ? '' : SUPPLIER_REFUSAL[removed.reason];
   }
 
   /** Orders placed with a supplier (blocks removal — the PO holds the FK). */
@@ -475,8 +516,18 @@ export class PurchasingComponent {
       notes: f.notes,
       lines,
     };
-    if (this.editingPoId) this.data.updatePurchaseOrder(this.editingPoId, header);
-    else this.data.createPurchaseOrder(header);
+    if (this.editingPoId) {
+      // An edit can be refused where a create cannot (C2): the order may have been
+      // removed since the editor opened, and this says so instead of closing over
+      // edits the store never took.
+      const saved = this.data.updatePurchaseOrder(this.editingPoId, header);
+      if (!saved.ok) {
+        this.poRefusal = PO_SAVE_REFUSAL[saved.reason];
+        return;
+      }
+    } else {
+      this.data.createPurchaseOrder(header);
+    }
     this.closePo();
   }
 
@@ -484,6 +535,7 @@ export class PurchasingComponent {
     this.poOpen = false;
     this.editingPoId = null;
     this.poSnap = '';
+    this.poRefusal = '';
   }
 
   /** Delivery state of a PO — derived from the receipts (see the store). */
@@ -521,7 +573,8 @@ export class PurchasingComponent {
   }
 
   removePo(po: PurchaseOrder): void {
-    this.data.removePurchaseOrder(po.id);
+    const removed = this.data.removePurchaseOrder(po.id);
+    this.refusal = removed.ok ? '' : PO_REMOVE_REFUSAL[removed.reason];
   }
 
   /* ------------------------------ receiving ----------------------------- */
@@ -536,6 +589,7 @@ export class PurchasingComponent {
     this.receiveQty = {};
     for (const { line, outstanding } of this.receivable(po)) this.receiveQty[line.id] = outstanding;
     this.receiveNote = '';
+    this.receiveRefusal = '';
     this.receiveOpen = true;
   }
 
@@ -590,10 +644,15 @@ export class PurchasingComponent {
       qty,
       note: this.receiveNote.trim(),
     });
-    if (posted.ok) {
-      this.closeReceive();
-      this.showReceipt(posted.value);
+    if (!posted.ok) {
+      // The editor is filled in against an order somebody else may have changed, so a
+      // refusal here is the one a person is most likely to meet — it says which rule
+      // held (C2) and leaves the form as it was, so nothing typed is lost.
+      this.receiveRefusal = RECEIPT_REFUSAL[posted.reason];
+      return;
     }
+    this.closeReceive();
+    this.showReceipt(posted.value);
   }
 
   closeReceive(): void {
@@ -602,6 +661,7 @@ export class PurchasingComponent {
     this.receiveLocationId = '';
     this.receiveQty = {};
     this.receiveNote = '';
+    this.receiveRefusal = '';
   }
 
   /* ------------------------------- receipts ----------------------------- */

@@ -2,7 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { ApiAdapter, IMS_API } from '../../core/api';
-import { Location, LocationType } from '../../core/models';
+import { Location, LocationType, RemovalRefusal } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -18,6 +18,17 @@ interface LocationRow {
 
 /** Which of the page's two sub-tables is showing (the tab strip at the top). */
 type Tab = 'locations' | 'types';
+
+/**
+ * What the store's reasons say to a person who clicked Remove (C2). The grids already
+ * disable the button and explain it by tooltip (`locationRemovalBlockers()`); this is
+ * for the click that gets past it — a row another tab removed, or a shelf somebody
+ * filled while this page was open.
+ */
+const REFUSAL: Record<RemovalRefusal, string> = {
+  missing: 'That row is already gone — it was removed somewhere else. Reload to see the current list.',
+  'in-use': 'Something still points at it, so it cannot be removed. Deactivate it instead.',
+};
 
 /**
  * Data-free blank editor form. Class field initializers run *before* the
@@ -73,6 +84,8 @@ export class LocationsComponent {
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
+  /** The last refusal the store answered with, printed above whichever grid it was (C2). */
+  refusal = '';
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: { kind: 'location' | 'type'; id: string } | null = null;
 
@@ -81,6 +94,7 @@ export class LocationsComponent {
   /** Switch sub-table — closing any open editor so a stale modal can't linger. */
   selectTab(t: Tab): void {
     this.tab = t;
+    this.refusal = '';
     this.closeForm();
     this.closeType();
     this.closeViewer();
@@ -245,10 +259,12 @@ export class LocationsComponent {
   /**
    * Remove a location. The store refuses while stock is stored at it (the grid
    * disables the action in that case), and re-parents the node's children so the
-   * hierarchy stays intact.
+   * hierarchy stays intact. A refusal is the store's to explain (C2), so the reason it
+   * answers with is printed rather than swallowed.
    */
   remove(loc: Location): void {
-    this.data.removeLocation(loc.id);
+    const removed = this.data.removeLocation(loc.id);
+    this.refusal = removed.ok ? '' : REFUSAL[removed.reason];
   }
 
   /** True when the location editor holds edits that Save has not written yet. */
@@ -312,7 +328,8 @@ export class LocationsComponent {
   }
 
   removeType(t: LocationType): void {
-    this.data.removeLocationType(t.name);
+    const removed = this.data.removeLocationType(t.name);
+    this.refusal = removed.ok ? '' : REFUSAL[removed.reason];
   }
 
   closeType(): void {
