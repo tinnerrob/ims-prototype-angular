@@ -42,6 +42,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ |
 | A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ |
 | A10 | The last hole A8 named: `orders.party` (a stored copy of the counterparty's name) leaves the model — the screens read the join — and `partyRemovalBlockers()` keeps the FK from dangling | ✅ |
+| A11 | Negotiated rates per party: `price_cards` + `price_card_lines` hang off `parties`, an order bills at the card in force on the day its booking starts (`cardRateFor()`), a supplier's card is the PO editor's cost default, and the Pricing page edits them | ✅ |
 
 ### Acceptance criteria per increment
 
@@ -207,6 +208,35 @@ Customers grid's Remove button reads the same list the guard does (the
 `locationRemovalBlockers` pattern: one source, two readers). What is left of a
 party with history is `active = false`, which the document already said.
 
+**A11 — a negotiated rate is read, never copied.** The gap the document named last
+("Pricing per party and per contract… a customer-specific rate card is not
+modelled") is the other half of the same idea as A10: money that belongs to a
+counterparty, resolved through the FK rather than written down twice. So
+`price_cards` (with `price_card_lines`) hangs off `parties`, and the order screens
+**read** it — `lineTotal()` and `rateBasis()` both go through one reader,
+`cardRateFor(partyId, item, onDate)` — which means a repriced card moves every
+order it covers at once and the order row is never written. The catalog keeps its
+own list prices (`items.rate_daily` is the fallback, not the override), so the
+"printed rate" and the "Gross above it" cannot drift: they are the same call.
+
+The card carries a **window**, and that is what makes the join safe rather than
+retroactive: an order prices at the card in force on the day its *booking* starts
+(`lineStart()`), so a renewal is a new card with a later `effectiveFrom` and last
+year's contracts keep last year's prices. Deleting a card cannot dangle an FK —
+nothing holds a `price_card_id` — so the consequence of a removal is visible on
+the order screens instead, and `active = false` is how a card is retired while it
+still has to read back.
+
+The buying side is deliberately **not symmetric**, and the document says why: an
+order line has no price column (its price is derived), while a purchase order line
+stores the `unit_cost` it was raised at — a supplier's quote is the document's own
+fact. So a supplier's card seeds the PO editor's cost (`supplierCardCost()`, read
+by `syncLine()`) and the raised PO keeps stating its own price. One table, two
+readers, each reading its own half. The counterparty is a row in `parties` because
+A5 made a customer and a supplier the same row, so a partner that is both has one
+card, not two that drift. That FK joins the party guard, so a party whose only row
+is a card cannot be removed either — the card has to go first.
+
 
 ## Open decisions (need the owner's call)
 
@@ -247,7 +277,7 @@ party with history is `active = false`, which the document already said.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 126 runtime checks against the real store, no browser
+npm run check:store    # 134 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -375,6 +405,24 @@ hand-roll `localStorage` and assert on the store's own output:
   list (a PO's supplier, every receipt's supplier, a sub-rental vendor), and a
   party nothing points at still removes — the guard is a guard, not a freeze.
 
+- `check13.mjs` — **A11, 8 checks:** a negotiated rate is a join like the name is.
+  Every card in the fixture names a real party and carries its stamps; one order
+  bills at its customer's card (the weekly basis prints the *card's* `baseWeekly`,
+  the one-time types its `unitPrice`, and the Gross is the sum of them); and the
+  **catalog keeps its own list prices** while a party with no card bills exactly
+  what it billed before cards existed. Then the window: an expired card prices
+  nothing (Meridian's 2025 rates leave CT-2024-002 at the catalog's 1325 x 3, and a
+  card created for them moves the same line to 995 x 3, then removing it puts the
+  catalog back — the test a fixture-only coincidence cannot pass). Repricing a card
+  moves the Gross **without writing the order row** (A10's test, in money), a card
+  for one customer does not touch another's order, the buying side takes a
+  supplier's card as the editor's *default* while the raised PO keeps the price it
+  was ordered at, and removing a card — a row nothing references, so it needs no
+  guard — sends the booking back to the catalog rates. Finally the FK A11 added
+  joins the party guard: a party whose only row is a rate card cannot be removed
+  either (the card has to go first), which is what keeps `price_cards.party_id`
+  from dangling the way a removed `orders.party_id` would have.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -390,6 +438,10 @@ the cheapest way to prove an invariant still holds.
   `partyName`), never stored — an order names its customer by FK and nothing else,
   so a rename on the Parties grid reaches every contract without touching a single
   order row (A10).
+- Rates are resolved the same way (A11): one reader (`cardRateFor()`) feeds both
+  the printed rate and the line total, and the catalog keeps its own list prices
+  underneath. Anything a counterparty *agreed* is read through the FK; anything a
+  document *states* (a PO line's `unitCost`) is the document's own fact.
 - A movement's place is *derived*, not asked for: the store resolves it from the
   unit (`logMovement`), so a hand-off can't be logged somewhere the machine never
   was. Only a `return` re-homes a unit — the shelf follows the ledger, and the

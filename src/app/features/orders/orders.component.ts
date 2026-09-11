@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { Order, ORDER_STATUS_LABEL, Party, statusClass } from '../../core/models';
+import { Order, ORDER_STATUS_LABEL, OrderLine, Party, statusClass } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -268,6 +268,9 @@ export class OrdersComponent {
             { label: 'Notes', value: p.notes || '—' },
           ],
         },
+        // The rates agreed with this partner, on the screen that owns the party —
+        // the card itself is edited on Pricing (A11).
+        { title: 'Rate Card', fields: this.rateCardFields(p) },
       ],
     };
   }
@@ -292,6 +295,65 @@ export class OrdersComponent {
 
   gross(o: Order): number {
     return this.data.orderAmount(o);
+  }
+
+  /**
+   * The rate a booking's row prints. It comes from `rateBasis()` — the same
+   * reader the invoice multiplies and `lineTotal()` adds up — so the figure beside
+   * a line cannot disagree with the Gross above it (A11: the customer's card is
+   * read here, not a stored copy of it).
+   */
+  lineRate(li: OrderLine, order: Order): number {
+    const item = this.data.getItem(li.type, li.refId);
+    return item ? this.data.rateBasis(li, item, order).rate : 0;
+  }
+
+  /** True when the customer's card, not the catalog, set that rate. */
+  lineOnCard(li: OrderLine, order: Order): boolean {
+    const item = this.data.getItem(li.type, li.refId);
+    return !!item && this.data.cardRateFor(order.partyId, item, this.data.lineStart(li, order)).source === 'card';
+  }
+
+  /** The rate cell's tooltip: the basis, the figure, and who set it. */
+  lineRateTitle(li: OrderLine, order: Order): string {
+    const item = this.data.getItem(li.type, li.refId);
+    if (!item) return '';
+    const basis = this.data.rateBasis(li, item, order);
+    if (!this.lineOnCard(li, order)) {
+      return `${basis.basis} rate ${this.data.money(basis.rate)} — catalog`;
+    }
+    const card = this.data.priceCardFor(order.partyId, this.data.lineStart(li, order));
+    return `${basis.basis} rate ${this.data.money(basis.rate)} — ${card?.name ?? 'rate card'}`;
+  }
+
+  /**
+   * The card this contract prices at, named on the detail modal. It is read on the
+   * order's *own* start date, the way the Gross was, so the note can never name a
+   * different agreement from the one the money came from.
+   */
+  rateCardNote(o: Order): string {
+    const card = this.data.priceCardFor(o.partyId, o.startDate);
+    return card ? `Rate card: ${card.name}` : 'Catalog rates — no card in force';
+  }
+
+  /** The customer viewer's rate-card section (what is agreed, and since when). */
+  private rateCardFields(p: Party): { label: string; value: string; mono?: boolean }[] {
+    const card = this.data.priceCardFor(p.id);
+    const onFile = this.data.priceCardsForParty(p.id);
+    if (!card) {
+      return [
+        { label: 'Negotiated Rates', value: onFile.length ? 'None in force' : 'None on file' },
+        { label: 'Cards On File', value: String(onFile.length) },
+      ];
+    }
+    const from = card.effectiveFrom ? this.data.fmtDate(card.effectiveFrom) : 'Open';
+    const to = card.effectiveTo ? this.data.fmtDate(card.effectiveTo) : 'Open';
+    return [
+      { label: 'Agreement', value: card.name },
+      { label: 'In Force', value: `${from} → ${to}`, mono: true },
+      { label: 'Negotiated Rates', value: `${card.lines.length} item(s)` },
+      { label: 'Cards On File', value: String(onFile.length) },
+    ];
   }
 
   private emptyCustomer() {

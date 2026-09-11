@@ -184,7 +184,7 @@ export const VIEWS: ViewDef[] = [
   {
     id: 'pricing',
     title: 'Pricing & Policies',
-    desc: 'Policies: optional pricing, tax, and overhead rules applied to orders.',
+    desc: 'Policies: optional pricing, tax, overhead and counterparty rate-card rules applied to orders.',
     nav: 'Pricing & Policies',
     icon: 'bi-sliders',
     group: 'admin',

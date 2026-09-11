@@ -407,7 +407,11 @@ export class PurchasingComponent {
     const item = line.refId ? this.data.getItem(line.type, line.refId) : undefined;
     if (!item) return;
     line.description = item.name;
-    if (!line.unitCost) line.unitCost = item.costPrice ?? item.purchaseValue ?? 0;
+    // The supplier's own negotiated price comes before the catalog's (A11) — the
+    // card is the cost side's default, and once the PO is raised its stored
+    // `unitCost` is the document's fact, so this only ever pre-fills a blank.
+    const agreed = this.data.supplierCardCost(this.poForm.supplierId, line.type, line.refId);
+    if (!line.unitCost) line.unitCost = agreed ?? item.costPrice ?? item.purchaseValue ?? 0;
     if (this.isUnit(line.type) && !line.rateDaily) line.rateDaily = item.rateDaily;
   }
 

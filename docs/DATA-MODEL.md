@@ -501,11 +501,77 @@ supplier tests `kinds` for membership and a reader that counts customers counts
 the nulls too. A schema that prefers a join table uses
 (`party_id`, `kind`) with a row per kind instead of the array.
 
-Removal is refused while an order, a purchase order, a receipt or a sub-rental
-points at the party — the API's `ON DELETE RESTRICT`, enforced in the store by
-`partyRemovalBlockers()` (one list the guard and the grids' disabled buttons
-share), because those rows carry the FK that is now the only name the screens
-have. Leaving the trade is `active = false`.
+Removal is refused while an order, a purchase order, a receipt, a sub-rental or a
+**rate card** points at the party — the API's `ON DELETE RESTRICT`, enforced in
+the store by `partyRemovalBlockers()` (one list the guard and the grids' disabled
+buttons share), because those rows carry the FK that is now the only name the
+screens have. Leaving the trade is `active = false`.
+
+### `price_cards` — `PriceCard`
+
+```sql
+price_cards(
+  id              text         PRIMARY KEY,
+  party_id        text         NOT NULL REFERENCES parties(id),
+  name            text         NOT NULL,
+  active          boolean      NOT NULL,
+  effective_from  date         NULL,
+  effective_to    date         NULL,
+  note            text         NULL
+)
+```
+
+**Keys/rules.** A counterparty's negotiated price list. Rates otherwise live on
+`items.rate_daily` and in `pricing` (the rules engine); a *customer's* agreed
+numbers are neither, so they hang off the counterparty they were agreed with —
+one table, because A5 made a customer and a supplier the same row and a partner
+can be both.
+
+The card is **read, never copied**. An order's amount is derived at read time
+(`lineTotal()` → `cardRateFor()`), so the card line is the only place its price is
+written down and a repriced card moves every order it covers at once — the A10
+argument (`orders.party` was a stored copy of a name) applied to money instead of
+a name. Nothing holds a `price_card_id`: a card is not referenced by any row, so
+removing one cannot dangle an FK, it only re-prices the orders it priced (visible
+on those screens). That is also why the two directions are not symmetrical: an
+order line has no price column, so its price is derived; a purchase order line
+stores the `unit_cost` it was raised at, so a supplier's card is the editor's
+*default* and the raised document keeps stating its own price.
+
+`effective_from` / `effective_to` are the window (inclusive, either bound may be
+null = open). An order prices at the card in force on the day its booking starts,
+which is what makes a renewal a *new* card rather than an edit of the old one:
+last year's contracts keep last year's prices. When two windows overlap, the later
+`effective_from` wins. A card past its window is kept and readable — it is the
+history of what was agreed — so the way to retire one is `active = false` (or let
+it expire by date), never a delete that erases the record.
+
+### `price_card_lines` — `PriceCardLine` (`card_id` is the parent key, `item_id` for `refId`)
+
+```sql
+price_card_lines(
+  card_id      text          NOT NULL REFERENCES price_cards(id),
+  type         catalog_type  NOT NULL,
+  item_id      text          NOT NULL REFERENCES items(id),
+  rate_daily   numeric(14,2) NULL,
+  base_weekly  numeric(14,2) NULL,
+  base_monthly numeric(14,2) NULL,
+  unit_price   numeric(14,2) NULL,
+  unit_cost    numeric(14,2) NULL,
+  PRIMARY KEY (card_id, item_id)
+)
+```
+
+One negotiated rate per catalog row. The columns are named after the item fields
+they replace, so a reader can say "the card's `rate_daily`, else the item's"
+without a translation: a rented type reads `rate_daily` / `base_weekly` /
+`base_monthly`, a line that bills once reads `unit_price` (labor hourly bill, a
+consumable's retail, a part's cost — the figures `lineTotal()` has always billed),
+and the buying side reads `unit_cost`, the price we pay. A null column means the
+card says nothing about it and the catalog's value stands, so a card can set one
+rate without restating the rest. A line whose item is removed goes with it
+(`ON DELETE CASCADE`) — a negotiated price for something no longer owned is not
+history, it is noise.
 
 ## Orders (the selling side)
 
@@ -875,7 +941,8 @@ two copies drift. Each has a single reader in the store:
 | a location's label and its path | the `locations` tree walked up `parent_id` | `locationLabel()`, `locationPath()` |
 | a stock row's `Low` / `In Stock` status | `qty_on_hand` vs `reorder_point` | `needsReorder()`, `refreshStockStatus()` |
 | what an item can commit at once | `total_owned` (bulk), `qty_on_hand` (stock), `qty` (kit/attachment), else 1 | `capacity()` |
-| an order's days, line totals, gross, margin | the order window, the line windows, `pricing`, `items.rate_daily` | `orderDays()`, `billableDays()`, `lineTotal()`, `orderAmount()`, `activeOrderTotals()` |
+| an order's days, line totals, gross, margin | the order window, the line windows, `pricing`, the customer's price card, `items.rate_daily` | `orderDays()`, `billableDays()`, `lineTotal()`, `orderAmount()`, `activeOrderTotals()` |
+| the rate a booking bills at | the card in force on the day the booking starts, else the catalog | `cardRateFor()`, `rateBasis()` |
 | an invoice's cycles and totals | the order, the cycle window, the module rates | `lineAmountForPeriod()`, `invoiceTotals()` |
 | a work order's cost | `work_order_parts` and the shop labour rate | `workOrderCost()` |
 | a timesheet segment's hours, bill, cost | `clock_in`/`clock_out` and the employee's rates | `segmentHours()`, `segmentBill()`, `segmentCost()` |
@@ -913,7 +980,8 @@ end will not be the only writer.
 | a receipt is immutable | nothing edits or deletes it | no `UPDATE`/`DELETE` grant |
 | a location with stock or history cannot be deleted | `locationRemovalBlockers()` | `ON DELETE RESTRICT` on both FKs |
 | a location type in use cannot be deleted | `removeLocationType()` returns false | `ON DELETE RESTRICT` |
-| a party with documents cannot be deleted | `partyRemovalBlockers()` (orders, POs, receipts, sub-rentals) | `ON DELETE RESTRICT` |
+| a party with rows naming it cannot be deleted | `partyRemovalBlockers()` (orders, POs, receipts, sub-rentals, rate cards) | `ON DELETE RESTRICT` |
+| an item's negotiated prices go with it | a card line for a removed item never matches | `ON DELETE CASCADE` on `price_card_lines` |
 | a category in use cannot be deleted | `removeCategory()` refuses | `ON DELETE RESTRICT` |
 | a deleted item takes its shelves with it | `removeItem()` drops its levels | `ON DELETE CASCADE` on `stock_levels` |
 | a movement is appended, never rewritten | no edit path exists | no `UPDATE`/`DELETE` grant |
@@ -921,7 +989,7 @@ end will not be the only writer.
 
 The store's own schema bump is the last rule worth copying: the persisted
 snapshot carries `_v`, and a version the client does not know is discarded and
-reseeded rather than half-read (`DataService.VERSION`, currently `10`). A server
+reseeded rather than half-read (`DataService.VERSION`, currently `11`). A server
 does that job with migrations, and the client's banner — "your saved data was
 replaced" — is the honest version of a silent upgrade.
 
@@ -1027,6 +1095,8 @@ be one the store audits.
 | `stock_levels` | `StockLevel` | `stockLevels` | `/api/stock-levels` |
 | `movements` | `Movement` | `movements` | `/api/movements` (append-only) |
 | `parties` | `Party` | `parties` | `/api/parties` |
+| `price_cards` | `PriceCard` | `priceCards` | `/api/price-cards` |
+| `price_card_lines` | `PriceCardLine` | `priceCards[].lines` | `/api/price-cards/:id/lines` |
 | `orders` | `Order` | `orders` | `/api/orders` |
 | `order_lines` | `OrderLine` | `orders[].lineItems` | `/api/orders/:id/lines` |
 | `purchase_orders` | `PurchaseOrder` | `purchaseOrders` | `/api/purchase-orders` |
@@ -1089,8 +1159,13 @@ each is an increment waiting for its turn:
   `work_orders` above).
 - **Documents and attachments.** `inspections.photos` is a *count*, not a file;
   nothing in the model stores a binary, a URL or a signature.
-- **Pricing per party and per contract.** Rates live on `items.rate_daily` and
-  the pricing settings; a customer-specific rate card is not modelled.
+- **A price on the order line, and on the contract.** A negotiated rate now has a
+  home (`price_cards`, A11), but it is the *counterparty's* card: two bookings for
+  the same customer at different prices, a one-off deal on a single contract or a
+  flat line total still cannot be said, because `order_lines` has no price column.
+  A card that a single order overrides is the next step, and it is a column on
+  `order_lines` plus a rule for which one wins (the line, then the card, then the
+  catalog) — the resolution order `cardRateFor()` already has room for.
 - **Soft delete.** Rows are removed (`removeItem`, `removeLocation`), and the
   guard is contents/history rather than a deleted flag. A financial system
   usually wants `deleted_at` on the catalog side; this model does not have one.

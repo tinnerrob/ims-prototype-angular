@@ -27,6 +27,8 @@ import {
   PartyKind,
   PO_PROGRESS_LABEL,
   PO_STATUS_LABEL,
+  PriceCard,
+  PriceCardLine,
   PricingSettings,
   PurchaseOrder,
   PurchaseOrderLine,
@@ -274,7 +276,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 10;
+  private readonly VERSION = 11;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -326,6 +328,12 @@ export class DataService {
     };
     yard: Yard;
     parties: Party[];
+    /**
+     * Negotiated rates per counterparty (see `PriceCard`). Configuration, not a
+     * document: nothing references a card, it is *read* when an order's amount is
+     * derived.
+     */
+    priceCards: PriceCard[];
     orders: Order[];
     items: Record<string, Item[]>;
     /**
@@ -361,6 +369,7 @@ export class DataService {
     session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID },
     yard: { name: 'Main Yard — Buckhead Hub', lat: 33.749, lng: -84.388 },
     parties: this.seedParties(),
+    priceCards: this.seedPriceCards(),
     orders: this.seedOrders(),
     items: this.seedItems(),
     /** Filled by `seedStockLevels()` in the constructor: a level row needs the
@@ -426,6 +435,7 @@ export class DataService {
         if (snap.settings?.pricing) this.db.settings.pricing = snap.settings.pricing;
         if (snap.yard) this.db.yard = snap.yard;
         if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
+        if (Array.isArray(snap.priceCards)) this.db.priceCards = snap.priceCards;
         if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
         if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
         if (Array.isArray(snap.stockLevels)) this.db.stockLevels = snap.stockLevels;
@@ -495,6 +505,7 @@ export class DataService {
           session: this.db.session,
           yard: this.db.yard,
           parties: this.db.parties,
+          priceCards: this.db.priceCards,
           orders: this.db.orders,
           items: this.db.items,
           stockLevels: this.db.stockLevels,
@@ -562,6 +573,7 @@ export class DataService {
     for (const [type, rows] of Object.entries(this.db.items)) add(`items:${type}`, rows);
     add('stockLevels', this.db.stockLevels);
     add('parties', this.db.parties);
+    add('priceCards', this.db.priceCards);
     add('orders', this.db.orders);
     add('movements', this.db.movements);
     add('purchaseOrders', this.db.purchaseOrders);
@@ -764,10 +776,12 @@ export class DataService {
    *
    * A party is a document's counterparty, so every row that names one points at
    * it: orders (`orders.party_id`), purchase orders and their receipts
-   * (`supplier_id`), and the sub-rentals they hire to us. That FK now carries the
-   * only copy of the name — the order screens derive it — so a party deleted out
-   * from under a document would print a raw id where a customer belongs. Leaving
-   * the trade is `active = false`, exactly as the document says.
+   * (`supplier_id`), the sub-rentals they hire to us, and the rate cards negotiated
+   * with them (`price_cards.party_id` — A11's FK, and a card is a row that names
+   * the party just as a document is). That FK now carries the only copy of the name
+   * — the order screens derive it — so a party deleted out from under a row would
+   * print a raw id where a customer belongs. Leaving the trade is `active = false`,
+   * exactly as the document says.
    */
   partyRemovalBlockers(id: string): string[] {
     const out: string[] = [];
@@ -779,6 +793,8 @@ export class DataService {
     if (receipts > 0) out.push(`${receipts} receipt(s)`);
     const subs = this.rentalsFromSupplier(id).length;
     if (subs > 0) out.push(`${subs} sub-rental(s)`);
+    const cards = this.db.priceCards.filter((c) => c.partyId === id).length;
+    if (cards > 0) out.push(`${cards} rate card(s)`);
     return out;
   }
 
@@ -798,6 +814,181 @@ export class DataService {
       if (!Number.isNaN(n) && n > max) max = n;
     }
     return 'PTY-' + String(max + 1).padStart(3, '0');
+  }
+
+
+  /* ----------------------------- price cards ---------------------------- */
+
+  /**
+   * Negotiated rates per counterparty (see `PriceCard`).
+   *
+   * This is configuration a workspace edits, but unlike the settings tables it
+   * hangs off a *party* rather than the tenant — so it lives beside `parties`, not
+   * under `settings`, and its rows are stamped and audited like any other.
+   */
+  listPriceCards(): PriceCard[] {
+    return [...this.db.priceCards];
+  }
+
+  getPriceCard(id: string): PriceCard | undefined {
+    return this.db.priceCards.find((c) => c.id === id);
+  }
+
+  /** Every card a party has ever had, newest window first (the grid's detail). */
+  priceCardsForParty(partyId: string): PriceCard[] {
+    return this.db.priceCards
+      .filter((c) => c.partyId === partyId)
+      .sort((a, b) => (b.effectiveFrom ?? '').localeCompare(a.effectiveFrom ?? ''));
+  }
+
+  createPriceCard(data: Omit<PriceCard, 'id'>): PriceCard {
+    const rec: PriceCard = { ...data, id: this.nextPriceCardId(), active: data.active !== false };
+    this.db.priceCards.push(rec);
+    this.save();
+    return rec;
+  }
+
+  updatePriceCard(id: string, patch: Partial<PriceCard>): void {
+    const c = this.db.priceCards.find((x) => x.id === id);
+    if (c) {
+      Object.assign(c, patch);
+      this.save();
+    }
+  }
+
+  /**
+   * Remove a card. No guard, and that is the point: nothing references a card —
+   * it is read when an order's amount is derived — so removal cannot dangle an FK,
+   * it only re-prices the orders the card covered (visible on those screens).
+   * Retiring a card that still has to read back is `active = false`.
+   */
+  removePriceCard(id: string): void {
+    const i = this.db.priceCards.findIndex((c) => c.id === id);
+    if (i < 0) return;
+    this.db.priceCards.splice(i, 1);
+    this.save();
+  }
+
+  /**
+   * The card in force for a party on a date: active, and the date inside its
+   * window (an absent bound is open). When two cards overlap the later
+   * `effectiveFrom` wins — a renewal supersedes what it replaced.
+   */
+  priceCardFor(partyId: string, onDate?: string): PriceCard | undefined {
+    const day = onDate ?? dISO(new Date());
+    const inForce = this.db.priceCards
+      .filter((c) => c.partyId === partyId && c.active !== false && this.cardCovers(c, day))
+      .sort((a, b) => (a.effectiveFrom ?? '').localeCompare(b.effectiveFrom ?? ''));
+    return inForce[inForce.length - 1];
+  }
+
+  /** True when `onDate` falls inside a card's window (either bound may be absent). */
+  cardCovers(card: PriceCard, onDate: string): boolean {
+    if (card.effectiveFrom && onDate < card.effectiveFrom) return false;
+    if (card.effectiveTo && onDate > card.effectiveTo) return false;
+    return true;
+  }
+
+  /**
+   * Where a card stands today, for the grid: `in-force` means it covers today and
+   * is switched on (so a booking made today prices at it), `scheduled` starts
+   * later, `expired` ended, `inactive` was switched off. A card never reports
+   * `in-force` *and* reads as unused — the status is the window and the flag, the
+   * same two facts `priceCardFor()` filters on.
+   */
+  cardStatus(card: PriceCard): 'in-force' | 'scheduled' | 'expired' | 'inactive' {
+    if (card.active === false) return 'inactive';
+    const today = dISO(new Date());
+    if (card.effectiveFrom && today < card.effectiveFrom) return 'scheduled';
+    if (card.effectiveTo && today > card.effectiveTo) return 'expired';
+    return 'in-force';
+  }
+
+  /** A card's line for a catalog row, if the card negotiated one. */
+  cardLineFor(card: PriceCard | undefined, type: CatalogType, refId: string): PriceCardLine | undefined {
+    return card?.lines.find((l) => l.type === type && l.refId === refId);
+  }
+
+  /**
+   * The price of a line that bills **once** — the catalog's own figure per type,
+   * which is what `lineTotal()` has always billed: labor at its hourly billable, a
+   * consumable at retail, a part at cost. A rented type has no single price, so it
+   * reads back as `undefined` and the day/week/month rates apply instead.
+   */
+  oneTimePrice(item: Item): number | undefined {
+    if (item.type === 'labor') return item.hourlyBillable ?? item.rateDaily;
+    if (item.type === 'consumable') return item.retailPrice ?? item.rateDaily;
+    if (item.type === 'part') return item.costPrice ?? item.retailPrice ?? item.rateDaily;
+    return undefined;
+  }
+
+  /**
+   * The rates a **booking** bills at — the single reader of a price card.
+   *
+   * Everything derived from a rate (`lineTotal()`, `rateBasis()`, an invoice's
+   * cycle amounts) comes through here, so a screen cannot print one number and add
+   * up another: the card's negotiated rate replaces the catalog's, field by field,
+   * and `source` says which won so the UI can mark it. A line the card does not
+   * name prices exactly as it did before the card existed.
+   */
+  cardRateFor(
+    partyId: string,
+    item: Item,
+    onDate?: string,
+  ): {
+    rateDaily: number;
+    baseWeekly?: number;
+    baseMonthly?: number;
+    unitPrice?: number;
+    source: 'card' | 'list';
+    card?: PriceCard;
+  } {
+    const catalog = {
+      rateDaily: item.rateDaily,
+      baseWeekly: item.baseWeekly,
+      baseMonthly: item.baseMonthly,
+      // The one-time price a type bills once, exactly the figure `lineTotal()`
+      // has always used: labor bills its hourly billable, a consumable its retail,
+      // a part its cost. (Before A11 the invoicing screen's `rateBasis()` read
+      // `retailPrice` for a part while `lineTotal()` read `costPrice`; going
+      // through one reader is what makes the printed rate and the billed amount
+      // agree again.)
+      unitPrice: this.oneTimePrice(item),
+    };
+    const card = partyId ? this.priceCardFor(partyId, onDate) : undefined;
+    const line = this.cardLineFor(card, item.type, item.id);
+    if (!card || !line) return { ...catalog, source: 'list' };
+    const pick = (a: number | undefined, b: number | undefined) => (a == null ? b : a);
+    return {
+      rateDaily: pick(line.rateDaily, catalog.rateDaily) ?? 0,
+      baseWeekly: pick(line.baseWeekly, catalog.baseWeekly),
+      baseMonthly: pick(line.baseMonthly, catalog.baseMonthly),
+      unitPrice: pick(line.unitPrice, catalog.unitPrice),
+      source: 'card',
+      card,
+    };
+  }
+
+  /**
+   * The cost a **supplier's** card sets for a catalog row, for the buying side.
+   *
+   * Unlike the bill side this is a *default*, not a derived figure: a purchase
+   * order line stores the `unit_cost` it was raised at, so the card seeds the
+   * editor (`syncLine`) and the document then stands on its own — a supplier's
+   * own quote, kept as the fact it is. `undefined` means the card says nothing
+   * about the row and the catalog's cost applies.
+   */
+  supplierCardCost(partyId: string, type: CatalogType, refId: string, onDate?: string): number | undefined {
+    return this.cardLineFor(this.priceCardFor(partyId, onDate), type, refId)?.unitCost;
+  }
+
+  private nextPriceCardId(): string {
+    let max = 0;
+    for (const c of this.db.priceCards) {
+      const n = Number(c.id.split('-')[1]);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+    return 'PC-' + String(max + 1).padStart(3, '0');
   }
 
 
@@ -975,6 +1166,15 @@ export class DataService {
     return daysBetween(order.startDate, order.endDate);
   }
 
+  /**
+   * The day a booking starts: the line's own window when it has one, else the
+   * order's. It is the date a price card is read on — the day the rate was agreed
+   * for, not the day the screen happens to be open.
+   */
+  lineStart(li: OrderLine, order: Order): string {
+    return li.startDate ?? order.startDate;
+  }
+
   /** Billable days honouring a line's weekend policy (prototype `billableDays`). */
   billableDays(order: Order, li: OrderLine): number {
     const s = li.startDate ?? order.startDate;
@@ -995,9 +1195,12 @@ export class DataService {
   /**
    * Gross billable revenue for **one line** — a port of the prototype's
    * `computeLineTotal()`, and the number Order Details prints under a booking.
-   * Order-line pricing *policy* (custom rates, flat totals, unit prices) isn't in the
-   * ported `OrderLine`, so this is the item-defaults path only:
-   *  - labor / consumable / part bill **once** (hourly billable, retail, cost price),
+   * Order-line pricing *policy* (flat totals, unit prices) still isn't in the
+   * ported `OrderLine`, so this is the rates path: the customer's **price card**
+   * where it names the item (`cardRateFor`, A11), the catalog otherwise — and the
+   * rate is applied by type:
+   *  - labor / consumable / part bill **once** (negotiated unit price, else the
+   *    catalog's hourly billable / retail / cost price),
    *  - kit + attachment bill their daily rate x billable days,
    *  - serialized + bulk step up to the weekly (`ceil(days / 7)`) and monthly
    *    (`ceil(days / 28)`) basis at 7 and 28 days,
@@ -1011,18 +1214,21 @@ export class DataService {
     const qty = li.qty || 1;
     const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
     const days = this.orderDays(order);
-    if (li.type === 'labor') return round2(qty * (item.hourlyBillable ?? item.rateDaily));
-    if (li.type === 'consumable') return round2(qty * (item.retailPrice ?? item.rateDaily));
-    if (li.type === 'part') return round2(qty * (item.costPrice ?? item.retailPrice ?? item.rateDaily));
+    // The card is read on the day the booking starts, so a later renewal prices
+    // the contracts that start under it and leaves the earlier ones alone.
+    const rates = this.cardRateFor(order.partyId, item, this.lineStart(li, order));
+    if (li.type === 'labor' || li.type === 'consumable' || li.type === 'part') {
+      return round2(qty * (rates.unitPrice ?? rates.rateDaily));
+    }
     if (li.type === 'kit' || li.type === 'attachment') {
-      return round2(item.rateDaily * qty * this.billableDays(order, li) * (1 + premium));
+      return round2(rates.rateDaily * qty * this.billableDays(order, li) * (1 + premium));
     }
     const perUnit =
-      days >= 28 && item.baseMonthly
-        ? item.baseMonthly * Math.ceil(days / 28)
-        : days >= 7 && item.baseWeekly
-          ? item.baseWeekly * Math.ceil(days / 7)
-          : item.rateDaily * this.billableDays(order, li);
+      days >= 28 && rates.baseMonthly
+        ? rates.baseMonthly * Math.ceil(days / 28)
+        : days >= 7 && rates.baseWeekly
+          ? rates.baseWeekly * Math.ceil(days / 7)
+          : rates.rateDaily * this.billableDays(order, li);
     return round2(perUnit * qty * (1 + premium));
   }
 
@@ -2789,17 +2995,23 @@ export class DataService {
     return round2(qty * rates.rate * days);
   }
 
-  /** Rate basis label + effective rate for a line (prototype `rateBasis`). */
+  /**
+   * Rate basis label + effective rate for a line (prototype `rateBasis`) — what
+   * the invoicing screen prints beside a booking, and the rate
+   * `lineAmountForPeriod()` multiplies. It reads the same card `lineTotal()` does,
+   * on the same day, so a printed rate and a billed amount cannot disagree.
+   */
   rateBasis(li: OrderLine, item: Item, order: Order): { basis: string; rate: number } {
     const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
     const days = this.orderDays(order);
-    if (li.type === 'labor') return { basis: 'Hourly', rate: item.hourlyBillable ?? item.rateDaily };
+    const rates = this.cardRateFor(order.partyId, item, this.lineStart(li, order));
+    if (li.type === 'labor') return { basis: 'Hourly', rate: rates.unitPrice ?? rates.rateDaily };
     if (li.type === 'consumable' || li.type === 'part') {
-      return { basis: 'Unit', rate: round2((item.retailPrice ?? item.rateDaily) * (1 + premium)) };
+      return { basis: 'Unit', rate: round2((rates.unitPrice ?? rates.rateDaily) * (1 + premium)) };
     }
-    if (days >= 28 && item.baseMonthly) return { basis: 'Monthly', rate: item.baseMonthly };
-    if (days >= 7 && item.baseWeekly) return { basis: 'Weekly', rate: item.baseWeekly };
-    return { basis: 'Daily', rate: round2(item.rateDaily * (1 + premium)) };
+    if (days >= 28 && rates.baseMonthly) return { basis: 'Monthly', rate: rates.baseMonthly };
+    if (days >= 7 && rates.baseWeekly) return { basis: 'Weekly', rate: rates.baseWeekly };
+    return { basis: 'Daily', rate: round2(rates.rateDaily * (1 + premium)) };
   }
 
   /** Invoice totals: base + env fee + waiver + fuel + tax (prototype `invoiceTotals`). */
@@ -3294,6 +3506,86 @@ export class DataService {
         kinds: ['supplier'],
         notes: 'Compaction & small plant hire.',
         active: true,
+      },
+    ];
+  }
+
+
+  /**
+   * Negotiated rates, one card per counterparty (see `PriceCard`).
+   *
+   * The fixture is a set of *cases* rather than a set of prices, because the card
+   * is read rather than copied and the interesting questions are which card wins
+   * and when:
+   *
+   *  - `PC-001` is **in force** and reprices a live order — CT-2024-001
+   *    (Halstead, from 2026-08-20) now bills at the negotiated rates;
+   *  - `PC-002` is in force for a second customer, so an order priced by one
+   *    party's card shows whether the other's leaked into it;
+   *  - `PC-003` is **expired** (2025) for Meridian, whose CT-2024-002 starts in
+   *    2026: the order must keep the catalog rates. That window is the whole
+   *    reason a card carries dates — a renewal is a new card, so an old contract
+   *    keeps the price it was written at;
+   *  - `PC-004` is a **supplier's** card. Its `unitCost` is the cost side: the PO
+   *    editor's default, while PO-2026-001 still states the price it was ordered
+   *    at (the document's own fact beats the default it was seeded from).
+   */
+  private seedPriceCards(): PriceCard[] {
+    return [
+      {
+        id: 'PC-001',
+        partyId: 'PTY-001',
+        name: '2026 Master Agreement',
+        active: true,
+        effectiveFrom: '2026-01-01',
+        effectiveTo: '2026-12-31',
+        note: 'Volume rates on the aerial fleet; agreed hourly and PPE prices.',
+        lines: [
+          { type: 'serialized', refId: 'BL-119', rateDaily: 465, baseWeekly: 2325, baseMonthly: 6975 },
+          { type: 'serialized', refId: 'FL-401', rateDaily: 195, baseWeekly: 975, baseMonthly: 2925 },
+          { type: 'consumable', refId: 'SG-LFT-001', unitPrice: 4.6 },
+          { type: 'labor', refId: 'EMP-001', unitPrice: 62 },
+        ],
+      },
+      {
+        id: 'PC-002',
+        partyId: 'PTY-003',
+        name: 'Refinery Hazmat Rates 2026',
+        active: true,
+        effectiveFrom: '2026-01-01',
+        effectiveTo: '2026-12-31',
+        note: 'Hazmat-rated units sit above list; the barriers are capped.',
+        lines: [
+          { type: 'serialized', refId: 'GN-511', rateDaily: 155, baseWeekly: 775, baseMonthly: 2325 },
+          { type: 'bulk', refId: 'BR-010', rateDaily: 5.75, baseWeekly: 23, baseMonthly: 69 },
+          { type: 'labor', refId: 'EMP-002', unitPrice: 78 },
+        ],
+      },
+      {
+        id: 'PC-003',
+        partyId: 'PTY-002',
+        name: '2025 Rates (superseded)',
+        active: true,
+        effectiveFrom: '2025-01-01',
+        effectiveTo: '2025-12-31',
+        note: 'Superseded 2025 agreement — kept for history, no longer in force.',
+        lines: [
+          { type: 'serialized', refId: 'SS-204', rateDaily: 199, baseWeekly: 995, baseMonthly: 2985 },
+          { type: 'serialized', refId: 'TL-605', rateDaily: 355 },
+        ],
+      },
+      {
+        id: 'PC-004',
+        partyId: 'PTY-007',
+        name: 'FY26 Supply Agreement',
+        active: true,
+        effectiveFrom: '2026-01-01',
+        effectiveTo: '2026-12-31',
+        note: 'Consumable/filter pricing agreed for the year.',
+        lines: [
+          { type: 'part', refId: 'PRT-001', unitCost: 16.1 },
+          { type: 'part', refId: 'PRT-002', unitCost: 19.4 },
+        ],
       },
     ];
   }

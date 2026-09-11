@@ -18,12 +18,12 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (126 checks across tenancy,
+services to JS and drives the real store from Node (134 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
-month windows the purchasing lists filter by, and the order↔party join — see
-`docs/PLAN.md` → "Verification recipe").
+month windows the purchasing lists filter by, the order↔party join, and the
+counterparty rate cards — see `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -53,6 +53,7 @@ than editing a count, and a change of place or a physical count logs a
 | **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules (the vertical switch + what it exposes) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
 | Categories | `features/categories` | type tabs (named by the tenant's vertical registry), add/rename/remove (Admin submenu) |
+| Pricing & Policies | `features/pricing` | the pricing rules engine · overhead / service fees · sales-tax schedules · **counterparty rate cards** (negotiated rates per party, read by the order screens and used as the PO editor's cost default) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking**; a party's name is read through the order's FK (never stored) and removal is refused while a document names it |
 | Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location, with tabs/labels/columns/defaults read from the tenant's vertical registry; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
 | Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock — the two document lists filter by **period** (All/Day/Week/Month + `‹ range ›`, the inspection log's control) |
@@ -315,12 +316,26 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   beside it — `partyName(order.partyId)` prints it. That was the last column in
   the model that duplicated a join (A10 dropped it), and it is what makes a rename
   on the Parties grid reach every contract at once. The price is a rule that now
-  has to hold: because there is no copy to fall back on, **a party a document
-  names cannot be removed**. `partyRemovalBlockers()` — orders, purchase orders,
-  their receipts, sub-rentals — is the single list the guard and the Customers
+  has to hold: because there is no copy to fall back on, **a party a row names
+  cannot be removed**. `partyRemovalBlockers()` — orders, purchase orders, their
+  receipts, sub-rentals, and the party's rate cards (A11's FK) — is the single list
+  the guard and the Customers
   grid's disabled Remove button read, so a dangling `party_id` cannot be created;
   the same shape as `locationRemovalBlockers()`, and the store's version of
   `ON DELETE RESTRICT`.
+- **A negotiated rate is read the same way (A11).** A customer's price card
+  (`price_cards`, one per counterparty, with `price_card_lines`) is what an order
+  actually bills at: `lineTotal()` and `rateBasis()` both go through one reader,
+  `cardRateFor(partyId, item, onDate)`, so the rate a row *prints* and the amount
+  the invoice *multiplies* are the same call — and repricing a card never writes an
+  order row. The card carries an effective window and the date it is read on is the
+  booking's own start (`lineStart()`), which is what makes a renewal a new card
+  rather than a re-pricing of history. The catalog keeps its list prices
+  underneath (`items.rateDaily` is the fallback). The buying side is deliberately
+  asymmetric: a PO line stores the cost it was raised at, so a supplier's card is
+  the PO editor's *default* (`supplierCardCost()`, read by `syncLine()`) and the
+  raised document holds its own price. Nothing references a card, so removing one
+  needs no guard — it re-prices, visibly, on the order screens.
 - **A movement's place is the same FK.** `Movement.locationId` points at the same
   hierarchy, so "what left Yard A this month?" is `movementsAtLocation(id)` — a
   subtree query — instead of a substring search on a stored label. The store
@@ -692,7 +707,12 @@ The store models the SaaS boundary the API will implement, so these are load-bea
     A9 stamped the configuration tables, and A10 removed `orders.party` — the last
     stored copy of a name a join should have produced — replacing it with
     `partyName(partyId)` at every read site and a `partyRemovalBlockers()` guard
-    so the FK the screens now depend on cannot dangle. What the doc still states
+    so the FK the screens now depend on cannot dangle. A11 then took the same
+    argument to money: a counterparty's negotiated rates are a `price_cards` row
+    read at read time, not a price copied onto an order — which is why
+    `price_card_lines` carries an effective window (the date a booking is priced on
+    is its own start day, so a renewal is a new card and history is not re-priced).
+    What the doc still states
     and nothing enforces is the rest of the table; it is the API's to implement.
 
 ## Source of truth for behavior

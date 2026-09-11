@@ -102,6 +102,62 @@ export const PARTY_KIND_LABEL: Record<PartyKind, string> = {
   supplier: 'Supplier',
 };
 
+/**
+ * One negotiated rate on a party's card (see `PriceCard`).
+ *
+ * A line names a catalog row and replaces whichever rate the *catalog* would
+ * have supplied. Which slot a document reads is decided by the direction it
+ * faces: an order (we bill) reads the rent/price slots, a purchase order (we
+ * pay) reads `unitCost`. The fields are the item's own rate field names, so a
+ * reader can say "the card's `rateDaily`, or the item's" without a translation.
+ */
+export interface PriceCardLine {
+  type: CatalogType;
+  refId: string;
+  /** Negotiated daily rate for a rented type (`Item.rateDaily`). */
+  rateDaily?: number;
+  /** Negotiated weekly / monthly basis (`Item.baseWeekly` / `baseMonthly`). */
+  baseWeekly?: number;
+  baseMonthly?: number;
+  /** Negotiated one-time price: labor hourly bill, consumable retail, part price. */
+  unitPrice?: number;
+  /** Negotiated cost we pay for it (`Item.costPrice`) — the buying side's rate. */
+  unitCost?: number;
+}
+
+/**
+ * A counterparty's negotiated price list — the rate card.
+ *
+ * Rates live on `items.rateDaily` and in `settings.pricing` (the rules engine);
+ * a customer's negotiated numbers are neither, so they get their own table
+ * against `parties`. The card is **read**, not copied: an order's amount is
+ * derived at read time (`lineTotal()` → `cardRateFor()`), so the card line is the
+ * only place its price is written down — renaming or repricing a card moves every
+ * order it covers at once, the A10 argument applied to money instead of a name.
+ *
+ * That is also why the window exists. A renewal is a *new* card with a later
+ * `effectiveFrom`, never an edit of the old one: an order prices at the card in
+ * force on the day its booking starts, so last year's contracts keep last year's
+ * prices. A card is not referenced by any row (nothing holds a `price_card_id`),
+ * so removing one re-prices the orders it priced rather than dangling — the
+ * effect is visible on those screens, and `active = false` is how a card is
+ * retired while it still has to be readable.
+ */
+export interface PriceCard extends AuditFields {
+  id: string;
+  /** FK -> `parties.id`. The counterparty the rates were negotiated with. */
+  partyId: string;
+  /** What the agreement is called (`2026 Master Agreement`). */
+  name: string;
+  active: boolean;
+  /** ISO date the rates apply from (absent = open-ended backwards). */
+  effectiveFrom?: string;
+  /** ISO date they apply through, inclusive (absent = until replaced). */
+  effectiveTo?: string;
+  lines: PriceCardLine[];
+  note?: string;
+}
+
 export type OrderStatus = 'draft' | 'active' | 'closed';
 
 export interface OrderLine {

@@ -151,6 +151,60 @@
       </div>
     </div>
   </div>
+
+  <!-- Counterparty rate cards -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title"><i class="bi bi-card-checklist"></i> Counterparty Rate Cards</span>
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openCard()">
+          <i class="bi bi-plus-lg"></i> New Card
+        </button>
+      </div>
+      <div class="card-body">
+        <p class="text-muted2 text-xs2 mb-2">
+          Negotiated rates, one card per counterparty. An order bills at the card in force on the
+          day its booking starts; a purchase order takes the card's cost as its default.
+        </p>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Card</th><th>Counterparty</th><th>In Force</th>
+                <th>Rates</th><th>Standing</th><th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (c of cards(); track c.id) {
+                <tr class="row-open" (click)="showCardView($event, c)">
+                  <td class="strong">
+                    {{ c.name }}
+                    <div class="text-muted2 text-xs2 mono">{{ c.id }}</div>
+                  </td>
+                  <td>{{ cardParty(c) }}</td>
+                  <td class="mono text-muted2 text-xs2">{{ cardWindow(c) }}</td>
+                  <td>{{ cardRates(c) }}</td>
+                  <td>
+                    <span class="badge-status {{ cardStatusClass(c) }}">{{ cardStatusLabel(c) }}</span>
+                  </td>
+                  <td class="text-end text-nowrap">
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openCard(c)">
+                      <i class="bi bi-pencil"></i>
+                    </button>
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeCard(c)">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </td>
+                </tr>
+              } @empty {
+                <tr><td colspan="6" class="text-center text-muted2 py-4">No rate cards.</td></tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- overhead / service fee modal -->
@@ -259,6 +313,128 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ims" [disabled]="!taxForm.code.trim()" (click)="saveTax()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+
+<!-- rate card modal -->
+@if (cardsOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="cardDirty()" (dismiss)="closeCard()">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-card-checklist"></i>{{ cardEditingId ? 'Edit' : 'New' }} Rate Card
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-6 field-group">
+              <label class="form-label">Counterparty *</label>
+              <select class="form-select" [(ngModel)]="cardForm.partyId">
+                <option value="">Select a partner…</option>
+                @for (p of parties(); track p.id) {
+                  <option [value]="p.id">{{ p.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">Agreement Name *</label>
+              <input class="form-control" [(ngModel)]="cardForm.name" placeholder="2026 Master Agreement" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">In Force From</label>
+              <input class="form-control" type="date" [(ngModel)]="cardForm.effectiveFrom" />
+            </div>
+            <div class="col-md-6 field-group">
+              <label class="form-label">In Force Through</label>
+              <input class="form-control" type="date" [(ngModel)]="cardForm.effectiveTo" />
+            </div>
+          </div>
+          <p class="text-muted2 text-xs2 mb-2">
+            Leave a date blank for an open end. A renewal is a <em>new</em> card with a later start,
+            so contracts already written keep the price they were booked at.
+          </p>
+          <div class="field-group">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="card-active" [(ngModel)]="cardForm.active" />
+              <label class="form-check-label" for="card-active">In use</label>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Note</label>
+            <input class="form-control" [(ngModel)]="cardForm.note" />
+          </div>
+
+          <div class="divider"></div>
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="strong"><i class="bi bi-tags me-1"></i>Negotiated Rates ({{ cardForm.lines.length }})</span>
+            <button class="btn btn-ims-outline btn-sm2" type="button" (click)="addCardLine()">
+              <i class="bi bi-plus-lg"></i> Add Rate
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Type</th><th>Item</th><th class="num">Daily</th><th class="num">Weekly</th>
+                  <th class="num">Monthly</th><th class="num">Unit Price</th><th class="num">Unit Cost</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of cardForm.lines; track $index) {
+                  <tr>
+                    <td>
+                      <select class="form-select form-select-sm" [ngModel]="l.type" (ngModelChange)="onCardLineType(l, $event)">
+                        @for (t of catalogTypes; track t.key) {
+                          <option [value]="t.key">{{ t.label }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm" [(ngModel)]="l.refId">
+                        <option value="">Select…</option>
+                        @for (i of cardItems(l.type); track i.id) {
+                          <option [value]="i.id">{{ i.name }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.rateDaily" /></td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.baseWeekly" /></td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.baseMonthly" /></td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.unitPrice" /></td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.unitCost" /></td>
+                    <td class="text-end">
+                      <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove rate" (click)="removeCardLine($index)">
+                        <i class="bi bi-x-lg"></i>
+                      </button>
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="8" class="text-center text-muted2 py-3">
+                      No rates yet — every item bills at the catalog rate.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          <p class="text-muted2 text-xs2 mb-0">
+            A blank column means the card says nothing about it and the catalog's own rate stands.
+            <em>Unit Price</em> is the one-time figure (labor hourly bill, consumable retail, part
+            cost); <em>Unit Cost</em> is what a supplier's card sets for the buying side.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!cardForm.name.trim() || !cardForm.partyId" (click)="saveCard()">
             <i class="bi bi-check2"></i> Save Record
           </button>
         </div>

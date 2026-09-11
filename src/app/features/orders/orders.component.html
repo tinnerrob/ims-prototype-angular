@@ -230,6 +230,7 @@
             <div class="col-md-6 field-group">
               <label class="form-label">Customer</label>
               <div class="form-control-plaintext strong">{{ data.partyName(detail.partyId) }}</div>
+              <div class="text-muted2 text-xs2">{{ rateCardNote(detail) }}</div>
             </div>
             <div class="col-md-6 field-group">
               <label class="form-label">Project</label>
@@ -263,8 +264,11 @@
                 {{ data.itemLabel(li.type, li.refId) }}
                 <span class="type-chip tc-{{ li.type }}">{{ li.type }}</span>
               </span>
-              <span class="r">
-                {{ data.int(li.qty) }} &#215; {{ data.money(data.getItem(li.type, li.refId)?.rateDaily ?? 0) }}
+              <span class="r" [title]="lineRateTitle(li, detail)">
+                {{ data.int(li.qty) }} &#215; {{ data.money(lineRate(li, detail)) }}
+                @if (lineOnCard(li, detail)) {
+                  <span class="type-chip" title="Rate from the customer's price card">card</span>
+                }
               </span>
             </div>
           } @empty {
