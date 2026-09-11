@@ -1,3 +1,12 @@
-/* Styling comes from the global design system (src/styles.scss), ported from the
-   prototype CSS. Component styles are scoped, so rules here would out-rank those
-   globals — the markup uses the prototype class names directly. */
+/* ------------------------------------------------------------------
+   Hand-Off board. The card, sub-tab strip, table and modal shell all come from
+   the global design system (src/styles.scss), which also stretches the card so
+   `.table-wrap` owns the scrolling — so only page-specific bits live here.
+   ------------------------------------------------------------------ */
+
+/* The toolbar search field is wider than the pool filter but should not run the
+   full width of a wide board table. */
+.filter-input.search {
+  max-width: 340px;
+}
+

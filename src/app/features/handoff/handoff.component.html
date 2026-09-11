@@ -1,153 +1,277 @@
 <div class="page-head"></div>
 
-<div class="card mb-3">
+<div class="card">
   <div class="card-header">
-    <span class="card-title"><i class="bi bi-arrow-left-right"></i> Item Hand-Off &amp; Custody</span>
-    <!-- day stepper stays on the left, next to the title (`me-auto`) -->
-    <div class="d-flex align-items-center gap-2 me-auto">
-      <div class="btn-group">
-        <button class="btn btn-sm2" type="button" (click)="moveDay(-1)"><i class="bi bi-chevron-left"></i></button>
+    <span class="card-title">
+      <i class="bi {{ activeTab().icon }}"></i>
+      {{ activeTab().label }}
+    </span>
+
+    <!-- day stepper: only the two board lists are day-scoped -->
+    @if (boardTab()) {
+      <div class="period-pager">
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous day" (click)="moveDay(-1)">
+          <i class="bi bi-chevron-left"></i>
+        </button>
         <span class="tl-range">{{ dayLabel() }}</span>
-        <button class="btn btn-sm2" type="button" (click)="moveDay(1)"><i class="bi bi-chevron-right"></i></button>
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next day" (click)="moveDay(1)">
+          <i class="bi bi-chevron-right"></i>
+        </button>
       </div>
-      <button class="btn btn-ims-outline btn-sm2" type="button" (click)="today()">Today</button>
-    </div>
+      <button
+        class="btn btn-ims-outline btn-sm2"
+        type="button"
+        title="Jump to today"
+        [disabled]="isToday()"
+        (click)="goToday()"
+      >
+        Today
+      </button>
+    }
   </div>
+
   <div class="card-body">
-    <div class="strong mb-2"><i class="bi bi-box-arrow-up-right me-1"></i>Outbound — to check out</div>
-    <div class="table-wrap mb-3">
-      <table class="table">
-        <thead>
-          <tr><th>Asset</th><th>Contract</th><th>Model</th><th>Rental window</th><th>Custodian</th><th>Status</th><th class="text-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @for (r of outbound(); track r.itemId) {
-            <tr class="row-open" (click)="showBoardView($event, r)">
-              <td class="strong mono">{{ r.itemId }}</td>
-              <td class="mono">{{ r.orderId }}</td>
-              <td class="text-muted2">{{ r.model }}</td>
-              <td>{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
-              <td>{{ r.custodian }}</td>
-              <td>
-                @if (r.overdue) {
-                  <span class="badge-status st-reorder">Go out (overdue)</span>
-                } @else {
-                  <span class="badge-status st-out">Pick-up today</span>
-                }
-              </td>
-              <td class="text-end">
-                <button class="btn btn-ims btn-sm2" type="button" (click)="checkOut(r)">
-                  <i class="bi bi-box-arrow-up-right"></i> Check Out
-                </button>
-              </td>
-            </tr>
-          } @empty {
-            <tr><td colspan="7" class="text-center text-muted2 py-4">No units to check out on {{ dayLabel() }}.</td></tr>
-          }
-        </tbody>
-      </table>
+    <!-- sub-page toggle (same pattern as Categories / Locations) -->
+    <div class="subtabs">
+      @for (t of tabs; track t.key) {
+        <button class="subtab" type="button" [class.active]="tab === t.key" (click)="selectTab(t.key)">
+          <i class="bi {{ t.icon }}"></i>{{ t.label }}
+          <span class="count-pill">{{ totalCount(t.key) }}</span>
+        </button>
+      }
     </div>
 
-    <div class="strong mb-2"><i class="bi bi-box-arrow-in-down me-1"></i>Incoming — to check in</div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr><th>Asset</th><th>Contract</th><th>Model</th><th>Rental window</th><th>Custodian</th><th>Status</th><th class="text-end">Actions</th></tr>
-        </thead>
-        <tbody>
-          @for (r of incoming(); track r.itemId) {
-            <tr class="row-open" (click)="showBoardView($event, r)">
-              <td class="strong mono">{{ r.itemId }}</td>
-              <td class="mono">{{ r.orderId }}</td>
-              <td class="text-muted2">{{ r.model }}</td>
-              <td>{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
-              <td>
-                {{ r.custodian }}
-                <div class="text-muted2 small">out {{ data.fmtDT(r.outAt) }}</div>
-              </td>
-              <td>
-                @if (r.overdue) {
-                  <span class="badge-status st-reorder">Overdue return</span>
-                } @else {
-                  <span class="badge-status st-out">Due back today</span>
-                }
-              </td>
-              <td class="text-end">
-                <button class="btn btn-ims btn-sm2" type="button" (click)="checkIn(r)">
-                  <i class="bi bi-box-arrow-in-down"></i> Check In
-                </button>
-              </td>
-
-<div class="split-layout">
-  <div>
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title"><i class="bi bi-person-badge"></i> Active Custody</span>
-        <span class="badge-status st-out">{{ custody().length }} out</span>
-      </div>
-      <div class="card-body">
-        @for (item of custody(); track item.id) {
-          <div class="list-line">
-            <span class="l">
-              <span class="strong">{{ item.id }}</span> · {{ item.name }}
-              <div class="text-muted2 small">Out to {{ outFor(item) }}</div>
-            </span>
-            <span class="r">
-              <button class="btn btn-ims-outline btn-sm2" type="button"
-                (click)="checkIn({ itemId: item.id, orderId: '', project: '', model: '', start: '', end: '', custodian: '', outAt: null, kind: 'in', overdue: false })">
-                <i class="bi bi-box-arrow-in-down"></i> Return
-              </button>
-            </span>
-          </div>
-        } @empty {
-          <p class="text-muted2 py-2">Nothing is out right now.</p>
-        }
-      </div>
+    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+      <input class="filter-input search" [placeholder]="searchPlaceholder()" [(ngModel)]="search" />
+      <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
     </div>
-  </div>
 
-  <div>
-    <div class="card">
-      <div class="card-header">
-        <span class="card-title"><i class="bi bi-journal-text"></i> Chain-of-Custody Log</span>
-        <span class="badge-status st-on">{{ movements().length }}</span>
-      </div>
-      <div class="card-body table-wrap">
+    <!-- ============================ OUTBOUND ============================ -->
+    @if (tab === 'outbound') {
+      <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>ID</th><th>Kind</th><th>Item</th><th>Order / party</th><th>When</th><th>Note</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Asset</th><th>Model</th><th>Order</th><th>Rental window</th>
+              <th>Custodian</th><th>Status</th><th class="text-end">Actions</th>
+            </tr>
+          </thead>
           <tbody>
-            @for (m of movements(); track m.id) {
-              <tr class="row-open" (click)="showMovementView($event, m)">
-                <td class="mono">{{ m.id }}</td>
-                <td>
-                  <span [class]="m.kind === 'issue' ? 'badge-status st-out' : 'badge-status st-available'">
-                    {{ kindLabel[m.kind] }}
-                  </span>
+            @for (r of outbound(); track r.itemId) {
+              <tr class="row-open" (click)="showBoardView($event, r)">
+                <td class="strong mono">{{ r.itemId }}</td>
+                <td class="text-muted2 text-12">{{ r.model }}</td>
+                <td class="mono text-12">{{ r.orderId }}</td>
+                <td class="mono text-muted2 text-12">{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
+                <td class="text-12">{{ r.custodian }}</td>
+                <td><span [class]="boardBadge(r)">{{ boardBadgeLabel(r) }}</span></td>
+                <td class="text-end text-nowrap">
+                  <button class="btn btn-ims btn-sm2" type="button" title="Record the hand-off to this order" (click)="checkOut(r)">
+                    <i class="bi bi-box-arrow-up-right"></i> Check Out
+                  </button>
                 </td>
-                <td class="strong">{{ m.refId }}</td>
-                <td>{{ m.orderId || m.party || '—' }}</td>
-                <td class="mono text-muted2">{{ data.fmtDT(m.at) }}</td>
-                <td class="text-muted2">{{ m.note || '—' }}</td>
               </tr>
             } @empty {
-              <tr><td colspan="6" class="text-center text-muted2 py-4">No movements logged.</td></tr>
+              <tr><td colspan="7" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
             }
           </tbody>
         </table>
       </div>
-    </div>
+    }
+
+    <!-- ============================ INCOMING ============================ -->
+    @if (tab === 'incoming') {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Asset</th><th>Model</th><th>Order</th><th>Rental window</th>
+              <th>Custodian</th><th>Status</th><th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of incoming(); track r.itemId) {
+              <tr class="row-open" (click)="showBoardView($event, r)">
+                <td class="strong mono">{{ r.itemId }}</td>
+                <td class="text-muted2 text-12">{{ r.model }}</td>
+                <td class="mono text-12">{{ r.orderId }}</td>
+                <td class="mono text-muted2 text-12">{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
+                <td class="text-12">
+                  {{ r.custodian }}
+                  <div class="text-muted2 text-105">out {{ data.fmtDT(r.outAt) }}</div>
+                </td>
+                <td><span [class]="boardBadge(r)">{{ boardBadgeLabel(r) }}</span></td>
+                <td class="text-end text-nowrap">
+                  <button
+                    class="btn btn-ims btn-sm2"
+                    type="button"
+                    title="Record the return to the yard"
+                    (click)="openReturnForRow(r)"
+                  >
+                    <i class="bi bi-box-arrow-in-down"></i> Check In
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- ============================ IN CUSTODY ============================ -->
+    @if (tab === 'custody') {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Asset</th><th>Model</th><th>Custodian</th><th>Order</th>
+              <th>Checked out</th><th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (item of custody(); track item.id) {
+              <tr class="row-open" (click)="showCustodyView($event, item)">
+                <td class="strong mono">{{ item.id }}</td>
+                <td class="text-muted2 text-12">{{ data.mkName(item) || item.name }}</td>
+                <td class="text-12">{{ data.outInfo(item.id)?.party || '—' }}</td>
+                <td class="mono text-12">{{ outFor(item) }}</td>
+                <td class="mono text-muted2 text-12">{{ outSince(item) }}</td>
+                <td class="text-end text-nowrap">
+                  <button
+                    class="btn btn-ims btn-sm2"
+                    type="button"
+                    title="Return this unit to the yard"
+                    (click)="openReturn(item.id)"
+                  >
+                    <i class="bi bi-box-arrow-in-down"></i> Return
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="6" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- ============================ CUSTODY LOG ============================ -->
+    @if (tab === 'log') {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Movement</th><th>Kind</th><th>Item</th><th>Order / party</th>
+              <th>When</th><th>By</th><th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (m of movements(); track m.id) {
+              <tr class="row-open" (click)="showMovementView($event, m)">
+                <td class="strong mono">{{ m.id }}</td>
+                <td><span class="badge-status {{ kindClass(m.kind) }}">{{ kindLabel[m.kind] }}</span></td>
+                <td class="strong mono">{{ m.refId }}</td>
+                <td class="text-12">{{ m.orderId || m.party || '—' }}</td>
+                <td class="mono text-muted2 text-12">{{ data.fmtDT(m.at) }}</td>
+                <td class="text-12">{{ m.by || '—' }}</td>
+                <td class="text-muted2 text-12">{{ m.note || '—' }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
   </div>
 </div>
 
-            </tr>
-          } @empty {
-            <tr><td colspan="7" class="text-center text-muted2 py-4">No units due back on {{ dayLabel() }}.</td></tr>
+<!-- ===== Return editor (prototype `hoCheckInModal`) ===== -->
+@if (returnOpen) {
+  <div
+    class="modal show d-block"
+    tabindex="-1"
+    role="dialog"
+    imsModalDismiss
+    [imsDirty]="returnDirty()"
+    [imsDirtyTitle]="'Discard this return note?'"
+    [imsDirtyMessage]="'The note you typed will be lost. The unit stays checked out.'"
+    [imsDiscardLabel]="'Discard note'"
+    [imsKeepLabel]="'Keep editing'"
+    (dismiss)="closeReturn()"
+  >
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-box-arrow-in-down"></i>Return Equipment — {{ returnAssetId }}</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+            <div>
+              <span class="strong mono">{{ returnAssetId }}</span>
+              <div class="text-muted2 text-12">{{ returnItem()?.name || '—' }}</div>
+            </div>
+            <span class="badge-status st-out">On Site</span>
+          </div>
+
+          @if (returnCustody(); as custody) {
+            <div class="list-line">
+              <span class="l text-muted2">Order</span>
+              <span class="r mono">{{ custody.orderId || '—' }}</span>
+            </div>
+            <div class="list-line">
+              <span class="l text-muted2">Custodian</span>
+              <span class="r">{{ custody.party || '—' }}</span>
+            </div>
+            <div class="list-line">
+              <span class="l text-muted2">Checked out</span>
+              <span class="r mono">{{ data.fmtDT(custody.at) }}</span>
+            </div>
           }
-        </tbody>
-      </table>
+
+          <div class="list-line">
+            <span class="l text-muted2">Still out on {{ returnCustody()?.orderId || 'this order' }}</span>
+            <span class="r mono">
+              @if (returnSiblings().length) {
+                {{ returnSiblings().join(', ') }}
+              } @else {
+                <span class="text-muted2">none — last unit</span>
+              }
+            </span>
+          </div>
+          <div class="form-hint">
+            @if (returnSiblings().length) {
+              This returns <strong>{{ returnAssetId }}</strong> only — {{ returnSiblings().length }} other unit(s) stay
+              out until checked in individually.
+            } @else {
+              This is the last unit out. The order is not auto-closed — close it from Parties &amp; Orders.
+            }
+          </div>
+
+          <div class="field-group mt-3">
+            <label class="form-label">Return condition / note (optional)</label>
+            <textarea
+              class="form-control"
+              rows="2"
+              [(ngModel)]="returnNote"
+              placeholder="Condition on return, hours, notes…"
+            ></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" (click)="confirmReturn()">
+            <i class="bi bi-check2"></i> Confirm Return
+          </button>
+        </div>
+      </div>
     </div>
   </div>
-</div>
+  <div class="modal-backdrop show d-block"></div>
+}
 
 <!-- ===== Read-only record viewer (row click) ===== -->
 <ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>

@@ -1,10 +1,16 @@
 import { Component } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 
 import { DataService, periodLabel } from '../../core/data.service';
-import { Item, Movement, MOVEMENT_KIND_LABEL, statusClass } from '../../core/models';
+import { Item, Movement, MovementKind, MOVEMENT_KIND_LABEL } from '../../core/models';
+import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
+import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
-/** One row on the hand-off day board. */
+/** Board list shown at a time (one sub-tab each). */
+type HandoffTab = 'outbound' | 'incoming' | 'custody' | 'log';
+
+/** One unit to hand off on the selected day, derived from its order line. */
 interface BoardRow {
   orderId: string;
   project: string;
@@ -18,31 +24,65 @@ interface BoardRow {
   overdue: boolean;
 }
 
+/** Badge modifier per movement kind. */
+const KIND_CLASS: Record<MovementKind, string> = {
+  issue: 'st-out',
+  return: 'st-available',
+  receive: 'st-active',
+  transfer: 'st-on',
+  adjust: 'st-reorder',
+};
+
 /**
  * Item Hand-Off & Custody (core) — port of the prototype's `renderHandoff`
- * (js/pages/handoff.js): an outbound / incoming day board for a selected day
- * with Check-Out / Check-In, plus the immutable chain-of-custody log.
+ * (js/pages/handoff.js): a per-day check-out / check-in dispatch board, the
+ * units currently in a party's custody, and the immutable chain-of-custody log.
+ *
+ * Layout follows the other table views: one card, a sub-tab strip with counts,
+ * a scrolling table per tab, row clicks opening the shared read-only viewer, and
+ * a return editor that closes through `imsModalDismiss` (asking first when the
+ * note is unsaved).
  */
 @Component({
   selector: 'ims-handoff',
   standalone: true,
-  imports: [RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
   templateUrl: './handoff.component.html',
   styleUrl: './handoff.component.scss',
 })
 export class HandoffComponent {
   readonly kindLabel = MOVEMENT_KIND_LABEL;
+  readonly tabs: { key: HandoffTab; label: string; icon: string }[] = [
+    { key: 'outbound', label: 'Outbound', icon: 'bi-box-arrow-up-right' },
+    { key: 'incoming', label: 'Incoming', icon: 'bi-box-arrow-in-down' },
+    { key: 'custody', label: 'In Custody', icon: 'bi-person-badge' },
+    { key: 'log', label: 'Custody Log', icon: 'bi-journal-text' },
+  ];
 
-  /** Selected board day (ISO), defaults to today. */
+  tab: HandoffTab = 'outbound';
+  /** Selected board day (ISO) for the outbound / incoming lists. */
   day = new Date().toISOString().slice(0, 10);
+  search = '';
 
-  /** Read-only record viewer (opened by clicking a board / log row). */
+  /** Return editor (prototype `hoCheckInModal`). */
+  returnOpen = false;
+  returnAssetId = '';
+  returnNote = '';
+  private returnSnap = '';
+
+  /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
 
   constructor(readonly data: DataService) {}
 
+  /* -------------------------------- day --------------------------------- */
+
   dayLabel(): string {
     return periodLabel('day', this.data.parseDT(this.day));
+  }
+
+  isToday(): boolean {
+    return this.day === new Date().toISOString().slice(0, 10);
   }
 
   moveDay(n: number): void {
@@ -51,38 +91,125 @@ export class HandoffComponent {
     this.day = d.toISOString().slice(0, 10);
   }
 
-  today(): void {
+  goToday(): void {
     this.day = new Date().toISOString().slice(0, 10);
   }
 
-  private rows(kind: 'out' | 'in'): BoardRow[] {
-    const rows: BoardRow[] = [];
+  /** The day stepper only applies to the two board lists. */
+  boardTab(): boolean {
+    return this.tab === 'outbound' || this.tab === 'incoming';
+  }
+
+  selectTab(t: HandoffTab): void {
+    this.tab = t;
+    this.search = '';
+  }
+
+  count(t: HandoffTab): number {
+    switch (t) {
+      case 'outbound':
+        return this.rows('out').length;
+      case 'incoming':
+        return this.rows('in').length;
+      case 'custody':
+        return this.custody().length;
+      default:
+        return this.movements().length;
+    }
+  }
+
+  /** Unfiltered size of a tab — the pill shows the total, the label shows "N of M". */
+  totalCount(t: HandoffTab): number {
+    switch (t) {
+      case 'outbound':
+        return this.rows('out', false).length;
+      case 'incoming':
+        return this.rows('in', false).length;
+      case 'custody':
+        return this.data.custodyItems().length;
+      default:
+        return this.data.listMovements().length;
+    }
+  }
+
+  /** Definition of the active tab (drives the card title). */
+  activeTab(): { key: HandoffTab; label: string; icon: string } {
+    return this.tabs.find((t) => t.key === this.tab) ?? this.tabs[0];
+  }
+
+  searchPlaceholder(): string {
+    switch (this.tab) {
+      case 'outbound':
+      case 'incoming':
+        return 'Search asset, model, order, custodian…';
+      case 'custody':
+        return 'Search asset, custodian, order…';
+      default:
+        return 'Search movement, item, order, note…';
+    }
+  }
+
+  emptyLabel(): string {
+    switch (this.tab) {
+      case 'outbound':
+        return `No units to check out on ${this.dayLabel()}.`;
+      case 'incoming':
+        return `No units due back on ${this.dayLabel()}.`;
+      case 'custody':
+        return this.search ? 'No matching units in custody.' : 'Nothing is out right now.';
+      default:
+        return this.search ? 'No matching movements.' : 'No movements logged yet.';
+    }
+  }
+
+  /* ------------------------------- lists -------------------------------- */
+
+  /** Case-insensitive filter over the visible columns of the active tab. */
+  private matches(...parts: (string | null | undefined)[]): boolean {
+    const q = this.search.trim().toLowerCase();
+    if (!q) return true;
+    return parts.some((p) => (p ?? '').toLowerCase().includes(q));
+  }
+
+  /**
+   * Board rows for one direction, derived from the active orders' serialized
+   * lines (prototype `renderHandoff`): a unit is *outbound* while it is still in
+   * the yard and its rental window covers the day; it is *incoming* once it is
+   * with the party and its window has reached the day.
+   */
+  private rows(kind: 'out' | 'in', applySearch = true): BoardRow[] {
+    const out: BoardRow[] = [];
     for (const order of this.data.activeOrders()) {
       for (const li of order.lineItems) {
         if (li.type !== 'serialized') continue;
         const start = (li.startDate ?? order.startDate).slice(0, 10);
         const end = (li.endDate ?? order.endDate).slice(0, 10);
         const item = this.data.getItem('serialized', li.refId);
-        const out = this.data.outInfo(li.refId);
+        const custody = this.data.outInfo(li.refId);
         const base = {
           orderId: order.orderId,
           project: order.projectName,
           itemId: li.refId,
-          model: this.data.mkName(item),
+          model: this.data.mkName(item) || li.refId,
           start,
           end,
           custodian: this.data.partyName(order.partyId),
-          outAt: out?.at ?? null,
+          outAt: custody?.at ?? null,
         };
-        if (kind === 'out' && !out && start <= this.day && this.day <= end) {
-          rows.push({ ...base, kind: 'out', overdue: start < this.day });
+        const isOutbound = kind === 'out' && !custody && start <= this.day && this.day <= end;
+        const isIncoming = kind === 'in' && !!custody && end <= this.day;
+        if (!isOutbound && !isIncoming) continue;
+        if (applySearch && !this.matches(base.itemId, base.model, base.orderId, base.project, base.custodian)) {
+          continue;
         }
-        if (kind === 'in' && out && end <= this.day) {
-          rows.push({ ...base, kind: 'in', overdue: end < this.day });
-        }
+        out.push({
+          ...base,
+          kind,
+          overdue: isOutbound ? start < this.day : end < this.day,
+        });
       }
     }
-    return rows;
+    return out;
   }
 
   outbound(): BoardRow[] {
@@ -93,21 +220,73 @@ export class HandoffComponent {
     return this.rows('in');
   }
 
+  /** Serialized units currently in a party's custody (prototype `assetOutInfo`). */
   custody(): Item[] {
-    return this.data.custodyItems();
+    return this.data.custodyItems().filter((item) => {
+      const info = this.data.outInfo(item.id);
+      return this.matches(item.id, item.name, this.data.mkName(item), info?.orderId, info?.party);
+    });
   }
 
-  movements() {
-    return this.data.listMovements().slice(0, 40);
+  /** Chain-of-custody log, newest first. */
+  movements(): Movement[] {
+    return this.data
+      .listMovements()
+      .filter((m) =>
+        this.matches(
+          m.id,
+          m.refId,
+          this.kindLabel[m.kind],
+          m.orderId,
+          m.party,
+          m.location,
+          m.note,
+          m.by,
+        ),
+      );
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
+  /* ------------------------------- badges ------------------------------- */
+
+  kindClass(kind: MovementKind): string {
+    return KIND_CLASS[kind] ?? 'st-on';
   }
 
-  /** Check a unit out to its order (prototype `hoCheckOut`). */
+  /** Board status chip: overdue reads amber, due-today reads red (`st-out`). */
+  boardBadge(r: BoardRow): string {
+    return r.overdue ? 'badge-status st-reorder' : 'badge-status st-out';
+  }
+
+  boardBadgeLabel(r: BoardRow): string {
+    if (r.kind === 'out') return r.overdue ? 'Go out (overdue)' : 'Pick-up today';
+    return r.overdue ? 'Overdue return' : 'Due back today';
+  }
+
+  /** Where a unit in custody went (prototype `outFor`). */
+  outFor(item: Item): string {
+    const info = this.data.outInfo(item.id);
+    return info?.orderId ?? info?.party ?? '—';
+  }
+
+  outSince(item: Item): string {
+    const info = this.data.outInfo(item.id);
+    return info ? this.data.fmtDT(info.at) : '—';
+  }
+
+  /** Other units still out on the same order — shown in the return editor. */
+  siblingsStillOut(contractId: string | null, excludeAssetId: string): string[] {
+    if (!contractId) return [];
+    return this.data
+      .custodyItems()
+      .filter((i) => i.id !== excludeAssetId && this.data.outInfo(i.id)?.orderId === contractId)
+      .map((i) => i.id);
+  }
+
+
+  /* ----------------------------- hand-off ------------------------------- */
+
+  /** Check a unit out to its order and append the custody event. */
   checkOut(row: BoardRow): void {
-    const item = this.data.getItem('serialized', row.itemId);
     this.data.logMovement({
       type: 'serialized',
       refId: row.itemId,
@@ -117,44 +296,77 @@ export class HandoffComponent {
       party: row.custodian,
       note: `Checked out to ${row.orderId}`,
     });
-    if (item) this.data.updateItem('serialized', row.itemId, { status: 'On Rent', orderId: row.orderId });
   }
 
-  /** Return a unit to the yard (prototype `hoCheckIn`). */
-  checkIn(row: BoardRow): void {
-    const item = this.data.getItem('serialized', row.itemId);
+  /* --------------------------- return editor ---------------------------- */
+
+  /** Open the return editor for one asset (prototype `hoCheckInModal`). */
+  openReturn(assetId: string): void {
+    this.returnAssetId = assetId;
+    this.returnNote = '';
+    this.returnSnap = snapshotForm({ note: this.returnNote });
+    this.returnOpen = true;
+  }
+
+  /** Return editor can also be opened from a board row (Incoming list). */
+  openReturnForRow(row: BoardRow): void {
+    this.openReturn(row.itemId);
+  }
+
+  /** Unsaved-note check, wired to `imsModalDismiss`. */
+  returnDirty(): boolean {
+    return formChanged({ note: this.returnNote }, this.returnSnap);
+  }
+
+  closeReturn(): void {
+    this.returnOpen = false;
+    this.returnAssetId = '';
+    this.returnNote = '';
+  }
+
+  /** Write the return movement and close the editor. */
+  confirmReturn(): void {
+    const assetId = this.returnAssetId;
+    if (!assetId) return;
     this.data.logMovement({
       type: 'serialized',
-      refId: row.itemId,
+      refId: assetId,
       kind: 'return',
       qty: 1,
       party: 'Main yard',
-      note: 'Returned to yard / available.',
+      note: this.returnNote.trim() || 'Returned to yard / available.',
     });
-    if (item) this.data.updateItem('serialized', row.itemId, { status: 'Available', orderId: null });
+    this.closeReturn();
   }
 
-  /** Where a custody item is out to. */
-  outFor(item: Item): string {
-    const info = this.data.outInfo(item.id);
-    return info?.orderId ?? info?.party ?? '—';
+  /** Asset backing the open return editor. */
+  returnItem(): Item | undefined {
+    return this.returnAssetId ? this.data.getItem('serialized', this.returnAssetId) : undefined;
+  }
+
+  /** Custody record for the asset being returned. */
+  returnCustody(): { orderId: string | null; party: string; at: string } | null {
+    return this.returnAssetId ? this.data.outInfo(this.returnAssetId) : null;
+  }
+
+  /** Units still out on the same order, excluding the one being returned. */
+  returnSiblings(): string[] {
+    const info = this.returnCustody();
+    return this.siblingsStillOut(info?.orderId ?? null, this.returnAssetId);
   }
 
   /* --------------------------- record viewer ---------------------------- */
 
-  /**
-   * Board row click → read-only viewer for one unit's hand-off (the Check Out /
-   * Check In buttons keep their own click).
-   */
+  /** Board row click → read-only view of that unit's hand-off. */
   showBoardView(e: Event, r: BoardRow): void {
     if (isInteractiveTarget(e)) return;
     const item = this.data.getItem('serialized', r.itemId);
-    const out = this.data.outInfo(r.itemId);
+    const info = this.data.outInfo(r.itemId);
     this.viewer = {
       title: r.itemId,
       subtitle: `${r.model} · ${r.orderId}`,
       icon: r.kind === 'out' ? 'bi-box-arrow-up-right' : 'bi-box-arrow-in-down',
-      badge: r.kind === 'out' ? (r.overdue ? 'Go out (overdue)' : 'Pick-up today') : r.overdue ? 'Overdue return' : 'Due back today',
+      badge: this.boardBadgeLabel(r),
       badgeClass: r.overdue ? 'st-reorder' : 'st-out',
       sections: [
         {
@@ -168,9 +380,9 @@ export class HandoffComponent {
           ],
         },
         {
-          title: 'Contract',
+          title: 'Order',
           fields: [
-            { label: 'Contract', value: r.orderId, mono: true },
+            { label: 'Order', value: r.orderId, mono: true },
             { label: 'Project', value: r.project || '—' },
             { label: 'Custodian', value: r.custodian || '—' },
             { label: 'Rental Window', value: `${this.data.fmtDate(r.start)} → ${this.data.fmtDate(r.end)}`, mono: true },
@@ -180,17 +392,64 @@ export class HandoffComponent {
         {
           title: 'Asset Status',
           fields: [
-            { label: 'Catalog Name', value: item ? this.data.mkName(item) || item.name : '—' },
-            { label: 'Service Status', value: item ? item.status : '—' },
-            { label: 'Current Custody', value: out?.orderId ?? out?.party ?? 'In yard' },
-            { label: 'Meter Hours', value: item ? this.data.int(item.meterHours ?? 0) : '—' },
+            { label: 'Catalog Name', value: item ? item.name : '—' },
+            { label: 'Service Status', value: item?.status ?? '—' },
+            { label: 'Current Custody', value: info?.orderId ?? info?.party ?? 'In yard' },
+            { label: 'Meter Hours', value: this.data.int(item?.meterHours ?? 0) },
           ],
         },
       ],
     };
   }
 
-  /** Chain-of-custody log row click → read-only viewer for that movement. */
+  /** Custody row click → read-only view of the unit in custody. */
+  showCustodyView(e: Event, item: Item): void {
+    if (isInteractiveTarget(e)) return;
+    const info = this.data.outInfo(item.id);
+    const order = info?.orderId ? this.data.getOrder(info.orderId) : undefined;
+    this.viewer = {
+      title: item.id,
+      subtitle: item.name,
+      icon: 'bi-person-badge',
+      badge: 'On Site',
+      badgeClass: 'st-out',
+      sections: [
+        {
+          title: 'Custody',
+          fields: [
+            { label: 'Asset', value: item.id, mono: true },
+            { label: 'Model', value: this.data.mkName(item) || '—' },
+            { label: 'Custodian', value: info?.party || '—' },
+            { label: 'Checked Out', value: info ? this.data.fmtDT(info.at) : '—', mono: true },
+          ],
+        },
+        {
+          title: 'Order',
+          fields: [
+            { label: 'Order', value: info?.orderId ?? '—', mono: true },
+            { label: 'Project', value: order?.projectName ?? '—' },
+            {
+              label: 'Rental Window',
+              value: order
+                ? `${this.data.fmtDate(order.startDate)} → ${this.data.fmtDate(order.endDate)}`
+                : '—',
+              mono: true,
+            },
+          ],
+        },
+        {
+          title: 'Asset Status',
+          fields: [
+            { label: 'Service Status', value: item.status },
+            { label: 'Meter Hours', value: this.data.int(item.meterHours ?? 0) },
+            { label: 'Category', value: item.category || '—' },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Log row click → read-only view of that movement. */
   showMovementView(e: Event, m: Movement): void {
     if (isInteractiveTarget(e)) return;
     this.viewer = {
@@ -198,7 +457,7 @@ export class HandoffComponent {
       subtitle: `${this.kindLabel[m.kind]} · ${m.refId}`,
       icon: 'bi-journal-text',
       badge: this.kindLabel[m.kind],
-      badgeClass: m.kind === 'issue' ? 'st-out' : 'st-available',
+      badgeClass: this.kindClass(m.kind),
       sections: [
         {
           fields: [
@@ -207,7 +466,7 @@ export class HandoffComponent {
             { label: 'Item Type', value: m.type },
             { label: 'Item', value: m.refId, mono: true },
             { label: 'Quantity', value: String(m.qty) },
-            { label: 'Contract', value: m.orderId || '—', mono: true },
+            { label: 'Order', value: m.orderId || '—', mono: true },
             { label: 'Party', value: m.party || '—' },
             { label: 'Location', value: m.location || '—' },
             { label: 'Recorded At', value: this.data.fmtDT(m.at), mono: true },
@@ -223,3 +482,4 @@ export class HandoffComponent {
     this.viewer = null;
   }
 }
+
