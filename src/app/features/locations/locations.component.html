@@ -1,32 +1,32 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-body">
-    <!-- The active sub-tab already names the sub-page ("Locations" / "Location
-         Types"), so the card carries no title of its own: the selector strip
-         and the action it belongs to share one line. -->
-    <div class="tabs-row">
-      <div class="subtabs">
-        <button class="subtab" type="button" [class.active]="tab === 'locations'" (click)="selectTab('locations')">
-          <i class="bi bi-diagram-3"></i>Locations
-          <span class="count-pill">{{ locations().length }}</span>
-        </button>
-        <button class="subtab" type="button" [class.active]="tab === 'types'" (click)="selectTab('types')">
-          <i class="bi bi-tags"></i>Location Types
-          <span class="count-pill">{{ typeRecords().length }}</span>
-        </button>
-      </div>
-      @if (tab === 'locations') {
-        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
-          <i class="bi bi-plus-lg"></i> New Location
-        </button>
-      } @else {
-        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openTypeAdd()">
-          <i class="bi bi-plus-lg"></i> Add Location Type
-        </button>
-      }
+  <!-- The active sub-tab already names the sub-page ("Locations" / "Location
+       Types"), so this bar carries no title of its own: the selector strip
+       anchors the left, its action the right, and the divider under the bar
+       separates both from the search row below. -->
+  <div class="card-header">
+    <div class="subtabs">
+      <button class="subtab" type="button" [class.active]="tab === 'locations'" (click)="selectTab('locations')">
+        <i class="bi bi-diagram-3"></i>Locations
+        <span class="count-pill">{{ locations().length }}</span>
+      </button>
+      <button class="subtab" type="button" [class.active]="tab === 'types'" (click)="selectTab('types')">
+        <i class="bi bi-tags"></i>Location Types
+        <span class="count-pill">{{ typeRecords().length }}</span>
+      </button>
     </div>
-
+    @if (tab === 'locations') {
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+        <i class="bi bi-plus-lg"></i> New Location
+      </button>
+    } @else {
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openTypeAdd()">
+        <i class="bi bi-plus-lg"></i> Add Location Type
+      </button>
+    }
+  </div>
+  <div class="card-body">
     @if (tab === 'locations') {
       <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
         <input class="filter-input search" placeholder="Search ID, name, type, address…" [(ngModel)]="search" />

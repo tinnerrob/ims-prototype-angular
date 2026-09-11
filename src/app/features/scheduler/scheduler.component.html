@@ -79,15 +79,7 @@
   <!-- ======================= MIDDLE: timeline ======================= -->
   <div class="sched-timeline">
     <div class="tl-nav">
-      <div class="period-pager">
-        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shift(-1)">
-          <i class="bi bi-chevron-left"></i>
-        </button>
-        <span class="tl-range">{{ rangeLabel() }}</span>
-        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shift(1)">
-          <i class="bi bi-chevron-right"></i>
-        </button>
-      </div>
+      <!-- selector left, period navigation right -->
       <div class="btn-group">
         @for (v of ['day', 'week', 'month']; track v) {
           <button
@@ -100,6 +92,15 @@
             {{ v[0].toUpperCase() + v.slice(1) }}
           </button>
         }
+      </div>
+      <div class="period-pager end">
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shift(-1)">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <span class="tl-range">{{ rangeLabel() }}</span>
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shift(1)">
+          <i class="bi bi-chevron-right"></i>
+        </button>
       </div>
     </div>
 

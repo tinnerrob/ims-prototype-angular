@@ -3,18 +3,23 @@
    globals — the markup uses the prototype class names directly. */
 
 /* ---- inspection-log period filter (card header) ----
-   Header order is `[‹ date ›] [All/Day/Week/Month chips] [Log Inspection]`:
-   the global `.period-pager` takes the slack and packs left, so the navigator
-   (only rendered with a Day/Week/Month filter) sits at the far left of the
-   table while `margin-left: auto` on `.log-filter` — a no-op when the pager is
-   present — still pushes the chips + button to the right end with the default
-   `All` filter. */
+   Header order is `[All/Day/Week/Month chips] [‹ date ›] [Log Inspection]`:
+   the chips are the selector, so they anchor the far left, and the global
+   `.period-pager` takes the slack between them and the action button while
+   `.end` packs the navigator itself against the right edge. With the default
+   `All` filter there is no navigator to render, so the header falls back to the
+   shared `space-between` layout: chips left, action right. */
 .log-filter {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-left: auto;
+  flex: 0 0 auto;
   min-width: 0;
+}
+/* The log's label keeps its full width (the pager owns the slack here, so the
+   global 46% cap isn't needed) and inherits the shared pill size. */
+.log-pager .tl-range {
+  max-width: none;
 }
 /* The log's label keeps its full width (the pager owns the slack here, so the
    global 46% cap isn't needed) and inherits the shared pill size. */

@@ -2618,26 +2618,73 @@ button:focus-visible,
 /* Same idea for the record-viewer / card headers that use a plain icon. */
 .card-title i { opacity: .9; }
 
-/* ---- 6. Selector strip + its primary action share one line ------------- */
-/* The list pages that carry a Customers/Contracts-style selector (Orders,
-   Items, Locations, Categories) used to repeat the page name in a card header
-   and park the "New X" button up there — a whole row spent on a title the page
-   header already shows. The header is gone; the action rides the selector
-   line, so the card starts with the strip and gains back that row.
-   `flex: 0 0 auto` keeps the row at its natural height inside the fixed-height
-   card layouts (both `.content` and the nested `.admin-pane` variants), so only
-   the table below it takes and scrolls in the remaining space. */
-.tabs-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-  flex: 0 0 auto;
-  margin-bottom: 16px;
+/* ---- 6. One header bar for every list page ----------------------------- */
+/* Every card header is the same height and every one of them ends with the
+   same divider. The height is driven by the tallest thing a header can hold —
+   the 38px segmented selector tray — plus the shared 9px header padding and
+   the 1px divider: 38 + 9 + 9 + 1 = 57. Without this, a header holding a
+   38px tray measured 57px while one holding a 30px pager measured 49px and a
+   title-only panel header 41px, so the divider sat at a different height on
+   every page. The padding shrinks in the short-screen tiers, so they do too. */
+.card-header { min-height: 57px; }
+@media (max-height: 820px) { .card-header { min-height: 53px; } }
+@media (max-height: 660px) { .card-header { min-height: 51px; } }
+
+/* The selector strip now lives INSIDE the header — it used to sit in the body
+   with the search row, which left the header (and its divider) with nothing to
+   separate from the table. The header's own space-between lays it out: strip
+   at the left, primary action at the right.
+   The strip scrolls horizontally instead of wrapping: the 7-tab Items /
+   Categories strips are wider than a 1440px window's bar, and letting them wrap
+   would make those two pages' bars two rows tall while every other page's stayed
+   one — exactly the inconsistency this pass removes. The scrollbar is hidden so
+   it cannot add height; a half-visible last pill is the affordance. */
+.card-header > .subtabs {
+  margin-bottom: 0;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
-.tabs-row > .subtabs { margin-bottom: 0; }
-.tabs-row > .btn { flex-shrink: 0; }
-@media (max-width: 991.98px) { .tabs-row { margin-bottom: 10px; } }
+.card-header > .subtabs::-webkit-scrollbar { height: 0; }
+.card-header > .subtabs .subtab { padding-left: 10px; padding-right: 10px; }
+/* A control cluster is never taller than the 38px tray, so the bar height above
+   is the real height on every page. */
+.card-header > .subtabs,
+.card-header > .btn-group,
+.card-header > .period-pager,
+.card-header > .log-filter { min-height: 38px; }
+
+/* One segmented control everywhere — same 3px tray, same 30px buttons, same
+   12px labels — whether it sits inside a card header (the inspection log's
+   All/Day/Week/Month chips) or on a timeline nav (the scheduler and timesheet
+   Day/Week/Month toggles). Previously the header-scoped `.card-header .btn`
+   rule restyled the former down to 12px while the latter kept `.btn-sm2`'s
+   12.5px and .28rem padding, so the same control read bigger on Scheduling. */
+.btn-group { min-height: 38px; }
+.btn-group .btn {
+  height: 30px;
+  font-size: 12px;
+  padding: 0 11px;
+  border-radius: 7px;
+}
+
+/* Sub-tabs ride the same 38px tray, so a strip-led header matches a
+   chips-led one. */
+.subtabs { padding: 3px; min-height: 38px; }
+.subtab { height: 30px; padding-top: 0; padding-bottom: 0; }
 
 /* A header that lost its (redundant) title keeps its controls, pushed right so
    they still line up with the card's action edge. */
 .card-header.controls-only { justify-content: flex-end; }
+
+/* ---- 7. Selector left, period navigation right -------------------------- */
+/* The date navigator takes the slack between the selector and whatever action
+   ends the bar, and packs its own content against the right edge — so every
+   header reads `[selector] … [‹ range ›] [action]` with the selector anchored
+   left, instead of the pager leading and pushing the selector into the middle. */
+.period-pager.end { justify-content: flex-end; }
+
 

@@ -1,12 +1,21 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <!-- Day stepper, only for the two day-scoped board lists. When there is no
-       stepper the card has no header at all: the sub-tabs below already name the
-       active list, so a title here only repeated the selected tab. -->
-  @if (boardTab()) {
-    <div class="card-header">
-      <div class="period-pager">
+  <!-- This bar is always present, so the divider between it and the search row
+       below never disappears: the sub-tabs name the active list, so it carries
+       no title of its own, and the day stepper joins it only for the two
+       day-scoped board lists — selector left, navigation packed right. -->
+  <div class="card-header">
+    <div class="subtabs">
+      @for (t of tabs; track t.key) {
+        <button class="subtab" type="button" [class.active]="tab === t.key" (click)="selectTab(t.key)">
+          <i class="bi {{ t.icon }}"></i>{{ t.label }}
+          <span class="count-pill">{{ totalCount(t.key) }}</span>
+        </button>
+      }
+    </div>
+    @if (boardTab()) {
+      <div class="period-pager end">
         <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous day" (click)="moveDay(-1)">
           <i class="bi bi-chevron-left"></i>
         </button>
@@ -24,20 +33,10 @@
       >
         Today
       </button>
-    </div>
-  }
+    }
+  </div>
 
   <div class="card-body">
-    <!-- sub-page toggle (same pattern as Categories / Locations) -->
-    <div class="subtabs">
-      @for (t of tabs; track t.key) {
-        <button class="subtab" type="button" [class.active]="tab === t.key" (click)="selectTab(t.key)">
-          <i class="bi {{ t.icon }}"></i>{{ t.label }}
-          <span class="count-pill">{{ totalCount(t.key) }}</span>
-        </button>
-      }
-    </div>
-
     <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
       <input class="filter-input search" [placeholder]="searchPlaceholder()" [(ngModel)]="search" />
       <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
