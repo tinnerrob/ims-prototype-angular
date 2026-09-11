@@ -48,6 +48,8 @@ import {
   WorkOrderPart,
   WorkOrderStatus,
   Yard,
+  isCountedStock,
+  isPurchasable,
   isUnitStock,
   needsReorder,
 } from './models';
@@ -215,7 +217,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 8;
+  private readonly VERSION = 9;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -998,14 +1000,45 @@ export class DataService {
     return this.reorders().length;
   }
 
-  /** Restock a low item to 2x its reorder point (prototype `triggerReorder`). */
-  triggerReorder(type: CatalogType, ref: string): void {
+  /**
+   * Raise a draft purchase order for a stock row that has fallen to its reorder
+   * point — what the dashboard's reorder panel does with one click.
+   *
+   * The prototype's `triggerReorder` set `qtyOnHand` to twice the reorder point
+   * and left a number nothing backs (exactly the bug A5 exists to kill). A
+   * reorder is a *document*: this creates it as a **draft** with one line — the
+   * catalogue row, the shortfall up to twice the reorder point, the row's current
+   * cost — and stops there.
+   *
+   * It deliberately names **no supplier**: whose stock to buy is the buyer's call,
+   * and the Purchasing page's editor refuses to save a PO without one. Stock still
+   * arrives only through `receiveAgainst()` on that order, so the one-click path
+   * and the ledger agree.
+   */
+  raiseReorder(type: CatalogType, ref: string): PurchaseOrder | null {
     const it = this.getItem(type, ref);
-    if (!it) return;
-    const restock = Math.max((it.reorderPoint ?? 0) * 2, 1);
-    it.qtyOnHand = restock;
-    it.status = 'In Stock';
-    this.save();
+    if (!it || !isPurchasable(type)) return null;
+    const target = Math.max((it.reorderPoint ?? 0) * 2, 1);
+    const shortfall = Math.max(target - this.countedQty(it), 1);
+    const today = dISO(new Date());
+    return this.createPurchaseOrder({
+      supplierId: '',
+      status: 'draft',
+      orderedAt: today,
+      expectedAt: today,
+      reference: '',
+      notes: `Raised from the reorder warning (${it.id} at ${this.countedQty(it)} / @${it.reorderPoint ?? 0}).`,
+      lines: [
+        {
+          id: '',
+          type,
+          refId: it.id,
+          description: it.name,
+          qty: shortfall,
+          unitCost: it.costPrice ?? it.purchaseValue ?? 0,
+        },
+      ],
+    });
   }
 
   private static readonly ID_PREFIX: Record<CatalogType, string> = {
@@ -1475,6 +1508,119 @@ export class DataService {
   /** Serialized items free to issue. */
   availableItems(): Item[] {
     return this.listItems('serialized').filter((i) => !this.isOut(i.id));
+  }
+
+  /**
+   * The ledger for one row, newest first — what the Items page shows under a
+   * record so a count correction or a move can be read back where it was made.
+   */
+  movementsFor(type: CatalogType, refId: string): Movement[] {
+    return this.listMovements().filter((m) => m.type === type && m.refId === refId);
+  }
+
+  /**
+   * Move everything a row holds to another location: the shelf and the ledger
+   * move together.
+   *
+   * A placement change by hand (the item editor's Location field) leaves no
+   * trace — the item's `locationId` simply differs and nothing says how it got
+   * there — so this is the action that *logs* a `transfer`. What it refuses is as
+   * deliberate as what it does:
+   *
+   * - **Labor is a person**, not stock (`isPurchasable`), so it has no place to
+   *   move from.
+   * - **A unit that is out on rent** is not on a shelf; its place changes when it
+   *   comes back (the `return` movement re-homes it), so a transfer now would
+   *   record a shelf it isn't on.
+   * - **The destination must be a real location** and must differ from where the
+   *   row already sits — a no-op is refused rather than logged as a movement.
+   */
+  moveStock(type: CatalogType, id: string, toLocationId: string, note = ''): Movement | null {
+    const item = this.getItem(type, id);
+    if (!item || !isPurchasable(type)) return null;
+    if (!toLocationId || !this.getLocation(toLocationId)) return null;
+    if (item.locationId === toLocationId) return null;
+    if (type === 'serialized' && this.isOut(id)) return null;
+
+    const from = item.locationId;
+    item.locationId = toLocationId;
+    // A transfer is logged at the destination: the movement says where the stock
+    // is *now*, and the row's own `locationId` above agrees with it. Where it came
+    // from is a readable note (the previous place may be deleted later; the
+    // movement it moved through survives either way).
+    const rec = this.appendMovement({
+      type,
+      refId: id,
+      kind: 'transfer',
+      qty: this.countedQty(item),
+      locationId: toLocationId,
+      note: note || (from ? `Moved from ${this.locationPath(from)}` : 'Placed'),
+    });
+    this.save();
+    return rec;
+  }
+
+  /**
+   * Correct a count: set a stock row to what a physical count found and log the
+   * difference as one signed `adjust` movement (a count that matches writes
+   * nothing, because there is nothing to record).
+   *
+   * The delta is what the ledger keeps — `+/- n` at the place the stock sits —
+   * so "where did these eight go?" is answerable months later instead of being an
+   * edit that overwrote the old number. Status follows the count through
+   * `refreshStockStatus()`, so a row can fall to `Low` (or climb out of it) the
+   * moment someone counts the shelf rather than only when a receipt arrives.
+   */
+  adjustStock(type: CatalogType, id: string, countedQty: number, note = ''): Movement | null {
+    const item = this.getItem(type, id);
+    if (!item || !isCountedStock(type)) return null;
+    const counted = Math.floor(Number(countedQty));
+    if (!Number.isFinite(counted) || counted < 0) return null;
+
+    const before = this.countedQty(item);
+    const delta = counted - before;
+    if (delta === 0) return null;
+
+    this.setCountedQty(item, counted);
+    this.refreshStockStatus(item);
+    const rec = this.appendMovement({
+      type,
+      refId: id,
+      kind: 'adjust',
+      qty: delta,
+      note: note || `Count corrected ${before} → ${counted}`,
+    });
+    this.save();
+    return rec;
+  }
+
+  /** Quantity a stock row holds, whichever field its type keeps it in. */
+  private countedQty(item: Item): number {
+    return item.type === 'bulk' ? item.qtyAvailable ?? item.totalOwned ?? item.qty : item.qtyOnHand ?? item.qty;
+  }
+
+  /**
+   * Write a counted quantity back, keeping a bulk row's three fields coherent:
+   * a count finds what is on the shelf (`qtyAvailable`), so what we *own* is that
+   * plus what is out (`qtyOut`) — otherwise `capacity()` would shrink the moment
+   * someone counted a rack.
+   */
+  private setCountedQty(item: Item, counted: number): void {
+    if (item.type === 'bulk') {
+      item.qtyAvailable = counted;
+      item.totalOwned = counted + (item.qtyOut ?? 0);
+      item.qty = counted;
+      return;
+    }
+    item.qtyOnHand = counted;
+    item.qty = counted;
+  }
+
+  /** Keep a stock row's stock status in step with its count. */
+  private refreshStockStatus(item: Item): void {
+    if (!isCountedStock(item.type)) return;
+    if (needsReorder(item)) item.status = 'Low';
+    else if (item.status === 'Low') item.status = 'In Stock';
   }
 
   /** A serialized asset is out while its latest movement is an issue (prototype `assetOutInfo`). */
@@ -2130,7 +2276,14 @@ export class DataService {
     return [...this.db.rentals];
   }
 
-  createRental(data: Omit<RentalSub, 'id'>): RentalSub {
+  /**
+   * Record a sub-rental. The supplier is required and must be a partner we
+   * know: a sub-rental with no vendor is an asset from nowhere, and the
+   * wholesale cost side of the ledger has to point at a row (`supplierParties()`
+   * feeds the picker).
+   */
+  createRental(data: Omit<RentalSub, 'id'>): RentalSub | null {
+    if (!data.supplierId || !this.getParty(data.supplierId)) return null;
     const rec: RentalSub = { ...data, id: this.nextRentalId() };
     this.db.rentals.push(rec);
     this.save();
@@ -2143,6 +2296,16 @@ export class DataService {
       this.db.rentals.splice(i, 1);
       this.save();
     }
+  }
+
+  /** Display name of the partner a sub-rental came from (a supplier party). */
+  rentalSupplier(r: RentalSub): string {
+    return r.supplierId ? this.partyName(r.supplierId) : '—';
+  }
+
+  /** Sub-rentals sourced from one supplier (the buying history of a partner). */
+  rentalsFromSupplier(supplierId: string): RentalSub[] {
+    return this.db.rentals.filter((r) => r.supplierId === supplierId);
   }
 
   rentalSpread(r: RentalSub): number {
@@ -2736,6 +2899,48 @@ export class DataService {
         billingCycle: 'prepaid',
         kinds: ['supplier'],
         notes: 'PPE consumables; prepaid card on file.',
+        active: true,
+      },
+      /*
+       * The three partners the sub-rental ledger draws from (`seedRentals`): we
+       * don't own their machines, we rent them to fill an order and bill the
+       * customer — "in" rentals rather than "out". They carry the supplier kind
+       * because that is what they are to us: a counterparty we buy from.
+       */
+      {
+        id: 'PTY-010',
+        name: 'PowerGen Rentals',
+        contact: 'A. Kowalski',
+        phone: '(912) 555-0173',
+        email: 'dispatch@powergen-rentals.com',
+        billingAddress: '19 Turbine Rd, Savannah, GA',
+        billingCycle: 'net-30',
+        kinds: ['supplier'],
+        notes: 'Temporary power / generators; same-day delivery.',
+        active: true,
+      },
+      {
+        id: 'PTY-011',
+        name: 'Forklift Fleet Co',
+        contact: 'J. Marchetti',
+        phone: '(770) 555-0197',
+        email: 'rentals@forkliftfleet.com',
+        billingAddress: '620 Industrial Park Dr, Marietta, GA',
+        billingCycle: 'net-30',
+        kinds: ['supplier'],
+        notes: 'Material handling; sub-rentals billed weekly.',
+        active: true,
+      },
+      {
+        id: 'PTY-012',
+        name: 'Meridian Tools Supply',
+        contact: 'D. Osei',
+        phone: '(678) 555-0151',
+        email: 'hire@meridiantools.com',
+        billingAddress: '410 Foundry St, Atlanta, GA',
+        billingCycle: 'net-15',
+        kinds: ['supplier'],
+        notes: 'Compaction & small plant hire.',
         active: true,
       },
     ];
@@ -3359,11 +3564,17 @@ export class DataService {
   }
 
   /** Sub-rentals from third-party vendors (prototype `IMS.rentals`). */
+  /**
+   * Sub-rentals from third-party vendors (prototype `IMS.rentals`). The prototype
+   * stored each vendor as a string; here the vendors are supplier *parties*
+   * (`PTY-010`…`PTY-012`), so the wholesale side of the business points at the
+   * same partner table the purchase orders do.
+   */
   private seedRentals(): RentalSub[] {
     return [
-      { id: 'RR-001', itemId: 'GN-510', assetName: 'Generac 100 kW Generator', orderId: 'CT-2024-003', vendor: 'PowerGen Rentals', vendorCost: 110, retailRate: 175, qty: 1 },
-      { id: 'RR-002', itemId: 'FL-402', assetName: 'Toyota Forklift 8FGU25', orderId: 'CT-2024-004', vendor: 'Forklift Fleet Co', vendorCost: 95, retailRate: 205, qty: 1 },
-      { id: 'RR-003', itemId: null, assetName: 'Compaction Roller 5T', orderId: 'CT-2024-002', vendor: 'Meridian Tools Supply', vendorCost: 140, retailRate: 260, qty: 1 },
+      { id: 'RR-001', itemId: 'GN-510', assetName: 'Generac 100 kW Generator', orderId: 'CT-2024-003', supplierId: 'PTY-010', vendorCost: 110, retailRate: 175, qty: 1 },
+      { id: 'RR-002', itemId: 'FL-402', assetName: 'Toyota Forklift 8FGU25', orderId: 'CT-2024-004', supplierId: 'PTY-011', vendorCost: 95, retailRate: 205, qty: 1 },
+      { id: 'RR-003', itemId: null, assetName: 'Compaction Roller 5T', orderId: 'CT-2024-002', supplierId: 'PTY-012', vendorCost: 140, retailRate: 260, qty: 1 },
     ];
   }
 

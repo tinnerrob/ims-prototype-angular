@@ -80,8 +80,16 @@ export class DashboardComponent {
     return 'badge-status ' + cls;
   }
 
-  triggerReorder(type: CatalogType, ref: string): void {
-    this.data.triggerReorder(type, ref);
+  /**
+   * Raise a draft purchase order for a low row and go where the buyer finishes it.
+   *
+   * The prototype's one-click restock set `qtyOnHand` directly, which left stock
+   * nothing in the ledger accounted for. Here the click raises a **document**
+   * (`DataService.raiseReorder`) and lands on Purchasing: pick the supplier, send
+   * it, receive it — and the receipt is what moves the quantity.
+   */
+  raiseReorder(type: CatalogType, ref: string): void {
+    if (this.data.raiseReorder(type, ref)) this.router.navigate(['/purchasing']);
   }
 
   openView(id: string): void {

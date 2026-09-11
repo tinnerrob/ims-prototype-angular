@@ -66,6 +66,25 @@
                 </td>
               }
               <td class="text-end text-nowrap">
+                @if (movable()) {
+                  <!-- Placement and count are ledger-writing actions, not fields:
+                       each logs a movement the row's own viewer reads back. -->
+                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                          [title]="item.type === 'serialized' && data.isOut(item.id)
+                            ? 'Move — unavailable while the unit is out on rent'
+                            : 'Move to another location (logs a transfer)'"
+                          [disabled]="item.type === 'serialized' && data.isOut(item.id)"
+                          (click)="openMove(item)">
+                    <i class="bi bi-arrows-move"></i>
+                  </button>
+                }
+                @if (countable()) {
+                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                          title="Record a physical count (logs an adjustment)"
+                          (click)="openCount(item)">
+                    <i class="bi bi-clipboard2-check"></i>
+                  </button>
+                }
                 <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openForm(item)">
                   <i class="bi bi-pencil"></i>
                 </button>
@@ -251,8 +270,92 @@
   <div class="modal-backdrop show d-block"></div>
 }
 
+@if (moveOpen) {
+  <!-- ===== Move (a `transfer` movement) ===== -->
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeMove()">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-arrows-move"></i>Move — {{ moveRow()?.id }}</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-12 text-muted2">
+            {{ moveRow()?.name }} currently sits at
+            <span class="strong">{{ data.locationPath(moveRow()?.locationId) }}</span>.
+            Moving it logs a transfer at the destination, so the shelf and the ledger agree.
+          </p>
+          <div class="field-group">
+            <label class="form-label">Move to *</label>
+            <select class="form-select" [(ngModel)]="moveTo">
+              <option value="">— choose a location —</option>
+              @for (o of locationOptions(); track o.id) {
+                <option [value]="o.id" [disabled]="o.id === moveRow()?.locationId">{{ o.label }}</option>
+              }
+            </select>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Note</label>
+            <input class="form-control" [(ngModel)]="moveNote" placeholder="e.g. loaded onto TRK-02 for CT-2024-001" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!moveReady()" (click)="saveMove()">
+            <i class="bi bi-box-arrow-right"></i> Move {{ moveQty() }} unit(s)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
 
-<!-- ===== Read-only record viewer (row click) ===== -->
+@if (countOpen) {
+  <!-- ===== Physical count (an `adjust` movement) ===== -->
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeCount()">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-clipboard2-check"></i>Physical Count — {{ countRow()?.id }}</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-12 text-muted2">
+            What the shelf actually holds at
+            <span class="strong">{{ data.locationPath(countRow()?.locationId) }}</span>.
+            The difference is logged as one adjustment movement — a count that matches writes nothing.
+          </p>
+          <div class="row g-2">
+            <div class="col-6 field-group">
+              <label class="form-label">On record</label>
+              <input class="form-control" [value]="countOnRecord()" disabled />
+            </div>
+            <div class="col-6 field-group">
+              <label class="form-label">Counted *</label>
+              <input class="form-control" type="number" min="0" [(ngModel)]="countQtyInput" />
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Adjustment</label>
+            <div class="text-12" [class.text-danger]="countDelta() < 0" [class.text-success]="countDelta() > 0">
+              {{ countDelta() > 0 ? '+' : '' }}{{ countDelta() }} unit(s)
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="form-label">Note</label>
+            <input class="form-control" [(ngModel)]="countNote" placeholder="e.g. quarterly cycle count" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!countReady()" (click)="saveCount()">
+            <i class="bi bi-check2"></i> Record Count
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
 <ims-record-view
   [view]="viewer"
   [editable]="true"

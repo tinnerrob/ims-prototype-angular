@@ -51,7 +51,7 @@
                 @if (r.itemId) { <span class="mono text-muted2">{{ r.itemId }}</span> }
               </td>
               <td class="strong mono">{{ r.orderId || '—' }}</td>
-              <td>{{ r.vendor }}</td>
+              <td>{{ supplierName(r) }}</td>
               <td class="num">{{ data.money(r.vendorCost) }}</td>
               <td class="num">{{ data.money(r.retailRate) }}</td>
               <td class="num">{{ r.qty }}</td>
@@ -102,8 +102,16 @@
             </select>
           </div>
           <div class="field-group">
-            <label class="form-label">Vendor Source Name</label>
-            <input class="form-control" [(ngModel)]="form.vendor" />
+            <label class="form-label">Vendor Source *</label>
+            <!-- The vendor is a supplier party, not a typed name (see
+                 `RentalSub.supplierId`): one partner table, so "what else have we
+                 bought from them?" is a join. -->
+            <select class="form-select" [(ngModel)]="form.supplierId">
+              <option value="">— choose a supplier —</option>
+              @for (s of suppliers(); track s.id) {
+                <option [value]="s.id">{{ s.id }} · {{ s.name }}</option>
+              }
+            </select>
           </div>
           <div class="row g-2">
             <div class="col-4 field-group">
@@ -124,7 +132,7 @@
           <button
             type="button"
             class="btn btn-ims"
-            [disabled]="!form.vendor.trim() || !(form.itemId || form.assetName.trim())"
+            [disabled]="!form.supplierId || !(form.itemId || form.assetName.trim())"
             (click)="save()"
           >
             <i class="bi bi-check2"></i> Save Record

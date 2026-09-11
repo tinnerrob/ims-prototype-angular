@@ -502,6 +502,9 @@ export class PurchasingComponent {
             { label: 'Terms', value: p.billingCycle || '—' },
             { label: 'Purchase Orders', value: String(this.data.supplierOrderCount(p.id)) },
             { label: 'Open Orders', value: String(this.data.supplierOpenOrderCount(p.id)) },
+            // Sub-rentals point at this same partner row (`RentalSub.supplierId`),
+            // so "what have we taken from them?" is a join, not a name match.
+            { label: 'Sub-Rentals', value: String(this.data.rentalsFromSupplier(p.id).length) },
             { label: 'Notes', value: p.notes || '—' },
           ],
         },
@@ -615,6 +618,7 @@ export class PurchasingComponent {
       { label: 'Terms', value: p.billingCycle || '—' },
       { label: 'POs', value: String(this.data.supplierOrderCount(p.id)) },
       { label: 'Open', value: String(this.data.supplierOpenOrderCount(p.id)) },
+      { label: 'Sub-rentals', value: String(this.data.rentalsFromSupplier(p.id).length) },
     ]);
   }
 

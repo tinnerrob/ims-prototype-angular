@@ -388,6 +388,17 @@ export function isUnitStock(type: CatalogType): boolean {
   return type === 'serialized';
 }
 
+/**
+ * Stock whose quantity is a *count* rather than a set of rows: a physical count
+ * corrects these in place (`DataService.adjustStock`), because nothing
+ * distinguishes one bag of sand from another. A serialized unit is the opposite —
+ * it arrives, leaves and is corrected as whole rows — and a kit / attachment is
+ * an owned count the prototype never counted either.
+ */
+export function isCountedStock(type: CatalogType): boolean {
+  return type === 'bulk' || type === 'consumable' || type === 'part';
+}
+
 /** Labor is a person, not stock — nothing can be purchased into it. */
 export function isPurchasable(type: CatalogType): boolean {
   return type !== 'labor';
@@ -800,7 +811,17 @@ export interface RentalSub extends AuditFields {
   assetName: string;
   /** Customer contract the sub-rental is billed against. */
   orderId?: string | null;
-  vendor: string;
+  /**
+   * Who we sub-rent it from — a FK into `parties.id`, a partner carrying the
+   * `supplier` kind.
+   *
+   * This replaces the prototype's free-text `vendor` name for the same reason
+   * A3 deleted `item.bin` and A4 de-named a movement's place: the buying side is
+   * a partner table (A5), so "who did we rent this from, and what else have we
+   * bought from them?" has to be a join, not a string that a rename or a typo
+   * splits in two.
+   */
+  supplierId: string;
   vendorCost: number; // daily cost to us
   retailRate: number; // daily billable
   qty: number;

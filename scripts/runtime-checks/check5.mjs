@@ -33,7 +33,7 @@ const seededPos = d.listPurchaseOrders().map((p) => ({ ...p }));
 
 check('suppliers are parties carrying the supplier role', () => {
   const suppliers = d.supplierParties();
-  assert.equal(suppliers.length, 4, 'the seeded suppliers');
+  assert.equal(suppliers.length, 7, 'the seeded suppliers (4 buying + 3 sub-rental vendors)');
   for (const s of suppliers) {
     assert.equal(s.kinds.includes('supplier'), true, `${s.id} is a supplier`);
     assert.equal(typeof s.name, 'string');

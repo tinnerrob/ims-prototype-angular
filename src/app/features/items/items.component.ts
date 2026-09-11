@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
-import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
+import { CatalogType, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -137,13 +137,29 @@ export class ItemsComponent {
   /** Editor values as they were when it opened (drives the discard prompt). */
   private formSnap = '';
 
+  /**
+   * Move editor — the ledger-writing placement change (a `transfer` movement).
+   * The item editor's Location field still re-homes a row, but quietly; this is
+   * the action that says where it came from, for stock that walks between bins.
+   */
+  moveOpen = false;
+  moveId = '';
+  moveTo = '';
+  moveNote = '';
+
+  /** Count editor — a physical count correction (an `adjust` movement). */
+  countOpen = false;
+  countId = '';
+  countQtyInput = 0;
+  countNote = '';
+
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: Item | null = null;
 
   constructor(
-    private readonly data: DataService,
+    readonly data: DataService,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: report how many of the active
@@ -353,6 +369,104 @@ export class ItemsComponent {
     this.data.removeItem(this.type, item.id);
   }
 
+  /* ------------------------- place & count (ledger) --------------------- */
+
+  /**
+   * The two corrections a stock row gets by hand, each of which *writes* the
+   * ledger through the store (`moveStock` / `adjustStock`) instead of quietly
+   * editing a field: an item's place and its count both have a history, and the
+   * row's own record view reads that history back (see `ledgerFields`).
+   */
+
+  /** Labor is a person, so it has no place to move and no count to correct. */
+  movable(): boolean {
+    return this.type !== 'labor';
+  }
+
+  /** Only counted stock is corrected in place — units arrive as whole rows. */
+  countable(): boolean {
+    return isCountedStock(this.type);
+  }
+
+  openMove(item: Item): void {
+    this.moveId = item.id;
+    this.moveTo = '';
+    this.moveNote = '';
+    this.moveOpen = true;
+  }
+
+  moveRow(): Item | undefined {
+    return this.data.getItem(this.type, this.moveId);
+  }
+
+  closeMove(): void {
+    this.moveOpen = false;
+    this.moveId = '';
+  }
+
+  /** A move needs a destination that is real and differs from the current one. */
+  moveReady(): boolean {
+    const item = this.moveRow();
+    return !!item && !!this.moveTo && this.moveTo !== item.locationId && !!this.data.getLocation(this.moveTo);
+  }
+
+  saveMove(): void {
+    if (!this.moveReady()) return;
+    this.data.moveStock(this.type, this.moveId, this.moveTo, this.moveNote.trim());
+    this.closeMove();
+  }
+
+  openCount(item: Item): void {
+    this.countId = item.id;
+    // Prefill with what the row holds now: a count is usually a small correction,
+    // and an empty box would read as "counted zero".
+    this.countQtyInput = this.cellQty(item);
+    this.countNote = '';
+    this.countOpen = true;
+  }
+
+  countRow(): Item | undefined {
+    return this.data.getItem(this.type, this.countId);
+  }
+
+  closeCount(): void {
+    this.countOpen = false;
+    this.countId = '';
+  }
+
+  countDelta(): number {
+    const item = this.countRow();
+    return item ? (Number(this.countQtyInput) || 0) - this.cellQty(item) : 0;
+  }
+
+  /** A count of what is already recorded has nothing to log. */
+  countReady(): boolean {
+    return !!this.countRow() && Number(this.countQtyInput) >= 0 && this.countDelta() !== 0;
+  }
+
+  saveCount(): void {
+    if (!this.countReady()) return;
+    this.data.adjustStock(this.type, this.countId, Number(this.countQtyInput), this.countNote.trim());
+    this.closeCount();
+  }
+
+  /** The number a count compares against — the row's live quantity. */
+  cellQty(item: Item): number {
+    return item.type === 'bulk' ? item.qtyAvailable ?? item.totalOwned ?? item.qty : item.qtyOnHand ?? item.qty;
+  }
+
+  /** Quantity the open move would relocate (the whole row's count). */
+  moveQty(): number {
+    const item = this.moveRow();
+    return item ? this.cellQty(item) : 0;
+  }
+
+  /** What the open count compares against, for the modal's read-only field. */
+  countOnRecord(): number {
+    const item = this.countRow();
+    return item ? this.cellQty(item) : 0;
+  }
+
   /** True when the editor holds edits that Save has not written yet. */
   formDirty(): boolean {
     return formChanged(this.form, this.formSnap);
@@ -394,7 +508,29 @@ export class ItemsComponent {
         // Who set the record up and who last touched it — the two facts the store
         // stamps on every write, so the screen that produces them can read them.
         ...auditSections(item, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
+        this.ledgerSection(item),
       ],
+    };
+  }
+
+  /**
+   * The row's ledger — every movement this item is on, newest first. It is here
+   * because a count correction and a move are *movements* (see `moveStock` /
+   * `adjustStock`), so the record that produced one can show it: without this the
+   * only proof a count ever happened would be a number that changed.
+   */
+  private ledgerSection(item: Item): ViewModel['sections'][number] {
+    const moves = this.data.movementsFor(item.type, item.id).slice(0, 6);
+    return {
+      title: 'Ledger',
+      fields: moves.length
+        ? moves.map((m) => ({
+            label: `${MOVEMENT_KIND_LABEL[m.kind]} · ${m.qty > 0 ? '+' : ''}${m.qty}`,
+            value: `${this.data.fmtDT(m.at)} · ${this.data.locationPath(m.locationId)} · ${this.data.userName(m.byUserId)}${
+              m.note ? ` · ${m.note}` : ''
+            }`,
+          }))
+        : [{ label: 'Movements', value: 'None — this row has not moved yet.' }],
     };
   }
 

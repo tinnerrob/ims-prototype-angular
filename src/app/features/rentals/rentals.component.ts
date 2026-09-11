@@ -20,7 +20,7 @@ const BLANK_RENT_FORM = {
   itemId: '',
   assetName: '',
   orderId: '',
-  vendor: '',
+  supplierId: '',
   vendorCost: 0,
   retailRate: 0,
   qty: 1,
@@ -61,6 +61,16 @@ export class RentalsComponent {
     return this.data.listOrders();
   }
 
+  /** Vendors we sub-rent from — the partner table's suppliers (see `Party.kinds`). */
+  suppliers() {
+    return this.data.supplierParties();
+  }
+
+  /** Who a sub-rental came from, resolved from its supplier FK. */
+  supplierName(r: RentalSub): string {
+    return this.data.rentalSupplier(r);
+  }
+
   totalCost(): number {
     return this.rentals().reduce((s, r) => s + r.vendorCost * r.qty, 0);
   }
@@ -88,12 +98,14 @@ export class RentalsComponent {
     const f = this.form;
     const item = f.itemId ? this.data.getItem('serialized', f.itemId) : null;
     const assetName = item ? item.name : f.assetName.trim();
-    if (!assetName || !f.vendor.trim()) return;
+    // A sub-rental needs an asset and a vendor: without the supplier there is
+    // nothing to pay, so the store refuses it too (see `createRental`).
+    if (!assetName || !f.supplierId) return;
     this.data.createRental({
       itemId: item?.id ?? null,
       assetName,
       orderId: f.orderId || null,
-      vendor: f.vendor,
+      supplierId: f.supplierId,
       vendorCost: Number(f.vendorCost) || 0,
       retailRate: Number(f.retailRate) || 0,
       qty: Number(f.qty) || 1,
@@ -135,7 +147,7 @@ export class RentalsComponent {
             { label: 'Asset', value: r.assetName },
             { label: 'Catalog Item', value: r.itemId || '—', mono: true },
             { label: 'Contract', value: r.orderId || '—', mono: true },
-            { label: 'Vendor Source', value: r.vendor },
+            { label: 'Vendor Source', value: this.supplierName(r) },
             { label: 'Quantity', value: String(r.qty) },
           ],
         },
@@ -166,7 +178,7 @@ export class RentalsComponent {
   tipRental(r: RentalSub): Tip {
     const spread = r.retailRate - r.vendorCost;
     return tip(r.assetName, [
-      { label: 'Vendor', value: r.vendor },
+      { label: 'Vendor', value: this.supplierName(r) },
       r.orderId ? { label: 'Contract', value: r.orderId } : null,
       { label: 'Vendor cost', value: `${this.data.money(r.vendorCost)}/day` },
       { label: 'Retail', value: `${this.data.money(r.retailRate)}/day` },
