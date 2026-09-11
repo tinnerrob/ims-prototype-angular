@@ -471,7 +471,8 @@ Tenant administration is **E**'s.
 
 | # | Increment | Status |
 |---|---|---|
-| C1 | The contract as an interface (the `apiAdapter`): every method the screens call, split query vs command, with `DataService` as the first implementation behind it | ⏳ |
+| C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `C1a-sha` |
+| C1b | The screens depend on the contract: features inject `IMS_API` instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ⏳ |
 | C2 | Commands answer in one shape: a typed result (value or `reason`) replacing the `null`/`false` sentinels, so a screen renders a refusal instead of guessing what `null` meant | ⏳ |
 | C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
 | C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
@@ -483,6 +484,26 @@ and commands (things `save()` persists: `createItem`, `moveStock`, `runNextCycle
 Naming it forces the two questions this repo has been answering increment by
 increment — is this fact stored or derived, and is this method a read or a write —
 to be answered once, in one file, instead of being inferred from a method body.
+
+What the file holds is **membership and direction, not signatures**: the surface is
+`Pick<DataService, ApiQueryName | ApiCommandName>`, so a signature is the store's own
+and a method that moves is a compile error rather than a stale copy. The split is one
+rule — *a command persists, directly or through another command it calls; a query never
+does* — and that rule is the part a second implementation has to agree with. It is held
+twice, because membership and semantics fail differently: two compile-time assertions in
+`api.ts` fail the **build** if a public member sits outside both unions (a type is
+something no harness can see), and `check17` re-derives the split from
+`data.service.ts` with its own implementation of the rule and fails if a name is on the
+wrong side. Both were earned rather than decorative: `punchIn()` reaches `save()` only
+through `createTimesheet()`, so a "does this body mention `save()`" reading files a
+command as a query — and `reseeded`, a public *field*, was missing from the surface
+entirely until the type assertion refused to compile.
+
+`IMS_API` is the token a screen injects, and `provideImsApi()` is the one place that
+decides who answers it (`useExisting`, so the store is never copied — a seam that minted
+a second workspace would be worse than no seam). C1a lands the contract and the wiring;
+C1b moves the features onto the token, the half that makes "a screen depends on the
+interface" true of screens rather than of a file.
 
 **C2 — one shape for "no".** Today a refusal is `null` (no such row, refused edit) or
 `false` (refused removal) and a screen decides what to say — which is how a guard and
@@ -684,7 +705,7 @@ compares a role name to decide what to show.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 171 runtime checks against the real store, no browser
+npm run check:store    # 178 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -896,6 +917,19 @@ hand-roll `localStorage` and assert on the store's own output:
   told it timed out. The harness never sleeps: an expiry it would have to *live
   through* is an expiry no check can hold, so it hands the store snapshots instead.
 
+- `check17.mjs` — **C1a, 7 checks:** the API seam says *which* calls read and which
+  persist, and the check re-derives that from the store rather than trusting the file.
+  A command is a method that runs `save()`, or one that calls a method which does — the
+  five composites (`punchIn`, `punchOut`, `raiseReorder`, `closeInspection`,
+  `setWorkOrderStatus`) are asserted to *not* mention `save()` themselves and still be
+  commands, which is the misclassification a hand-written list makes. Then the halves are
+  exhaustive and disjoint (every public member, and the two public fields `revision` /
+  `reseeded`, on exactly one side); the contract is `Pick`s over the store with no
+  hand-copied signature in the file; the two compile-time assertions exist (membership is
+  a build failure, not a runtime one); and the app is wired through `IMS_API` with
+  `useExisting: DataService` — the store answers the contract, as the same instance, and
+  no `useClass` anywhere.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -916,6 +950,10 @@ the cheapest way to prove an invariant still holds.
   and the stamp (`session.expiresAt`) is read rather than chosen. An expiry that
   cannot be read is a lapse, not an unlimited session — `check16` fails if a stamp
   appears anywhere but the two places that write one.
+- A new public member of the store must be classified in `api.ts` (C1a). Naming it in
+  neither union is a **compile error** (`NothingOutsideTheContract`), and putting it on
+  the wrong side fails `check17`: a command is a method that persists, directly or
+  through another command it calls.
 - Display strings are resolved at read time (`userName`, `locationPath`,
   `partyName`), never stored — an order names its customer by FK and nothing else,
   so a rename on the Parties grid reaches every contract without touching a single
