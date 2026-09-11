@@ -5,7 +5,7 @@
    toolbar search field's cap is shared too (`.filter-input.search`).
    ------------------------------------------------------------------ */
 
-/* The ledger's location scope: the same control the Items grid uses, capped so
+/* The ledger's location scope: the same control the Assets grid uses, capped so
    a long hierarchy name can't push the record count off the row. */
 .filter-input.location-scope {
   max-width: 300px;

@@ -8,7 +8,7 @@ import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { HandoffComponent } from './features/handoff/handoff.component';
 import { InspectionsComponent } from './features/inspections/inspections.component';
 import { InvoicingComponent } from './features/invoicing/invoicing.component';
-import { ItemsComponent } from './features/items/items.component';
+import { AssetsComponent } from './features/assets/assets.component';
 import { LocationsComponent } from './features/locations/locations.component';
 import { LogisticsComponent } from './features/logistics/logistics.component';
 import { MaintenanceComponent } from './features/maintenance/maintenance.component';
@@ -49,7 +49,9 @@ export const routes: Routes = [
   { path: 'handoff', component: HandoffComponent },
   { path: 'inspections', component: InspectionsComponent },
   { path: 'invoicing', component: InvoicingComponent, canActivate: [requireModule('billing')] },
-  { path: 'items', component: ItemsComponent },
+  { path: 'assets', component: AssetsComponent },
+  // The view is "Assets" now — keep the old URL working for bookmarks.
+  { path: 'items', redirectTo: 'assets', pathMatch: 'full' },
   { path: 'logistics', component: LogisticsComponent, canActivate: [requireModule('dispatch')] },
   { path: 'maintenance', component: MaintenanceComponent, canActivate: [requireModule('service')] },
   { path: 'orders', component: OrdersComponent },

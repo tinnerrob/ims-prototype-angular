@@ -20,8 +20,8 @@ interface InvTab {
 
 /** Tab strip (prototype `INV_TABS`). */
 const INV_TABS: InvTab[] = [
-  { key: 'serialized', label: 'Items (Serialized)', icon: 'bi-truck-front', addLabel: 'New Equipment' },
-  { key: 'bulk', label: 'Items (Bulk)', icon: 'bi-boxes', addLabel: 'New Bulk Resource' },
+  { key: 'serialized', label: 'Assets (Serialized)', icon: 'bi-truck-front', addLabel: 'New Equipment' },
+  { key: 'bulk', label: 'Assets (Bulk)', icon: 'bi-boxes', addLabel: 'New Bulk Resource' },
   { key: 'consumable', label: 'Consumables', icon: 'bi-capsule', addLabel: 'New Consumable' },
   { key: 'part', label: 'Stock Inventory', icon: 'bi-wrench-adjustable', addLabel: 'New Part' },
   { key: 'labor', label: 'Labor / Employees', icon: 'bi-person-badge', addLabel: 'New Labor Item' },
@@ -114,18 +114,18 @@ const BLANK_ITEM_FORM = {
 };
 
 /**
- * Items & Stock (core) — port of the prototype's Inventory view
+ * Assets (core) — port of the prototype's Inventory view
  * (js/pages/inventory.js): a vertical-driven tab strip with per-type record
  * counts and the per-type column set (fleet telemetry, stock levels, labor rates).
  */
 @Component({
-  selector: 'ims-items',
+  selector: 'ims-assets',
   standalone: true,
   imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
-  templateUrl: './items.component.html',
-  styleUrl: './items.component.scss',
+  templateUrl: './assets.component.html',
+  styleUrl: './assets.component.scss',
 })
-export class ItemsComponent {
+export class AssetsComponent {
   type: CatalogType = 'serialized';
 
   /** Location scope for the table: '' = anywhere, `NO_LOCATION` = not placed. */
@@ -182,7 +182,7 @@ export class ItemsComponent {
 
   /**
    * One tab's records, narrowed by the location scope and the page search. The
-   * search spans every tab on this page: a query typed while "Items (Serialized)"
+   * search spans every tab on this page: a query typed while "Assets (Serialized)"
    * is open also filters the other types, so the tab counts say where the
    * matches are.
    */

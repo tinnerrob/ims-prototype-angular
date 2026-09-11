@@ -55,7 +55,7 @@ screens can read the stamps they produce.
 
 **A3 — item ↔ location spine.** An item's *place* is a row in `locations` (an
 FK), not free text, so stock can be counted per location and a bin is a node in
-the hierarchy rather than a string beside it. Both item editors (Items & Stock,
+the hierarchy rather than a string beside it. Both item editors (Assets,
 Scheduler pool) write the same field; the column, the search and the record
 viewer read it; `itemsAtLocation()` answers "what is here?" for one node and for
 its whole subtree; a location holding stock can't be deleted out from under it.

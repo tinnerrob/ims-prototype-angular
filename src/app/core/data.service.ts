@@ -1511,7 +1511,7 @@ export class DataService {
   }
 
   /**
-   * The ledger for one row, newest first — what the Items page shows under a
+   * The ledger for one row, newest first — what the Assets page shows under a
    * record so a count correction or a move can be read back where it was made.
    */
   movementsFor(type: CatalogType, refId: string): Movement[] {

@@ -11,14 +11,14 @@ export interface SearchCount {
  *
  * The box belongs to the view on screen, not to the app. The shell renders it
  * only for views whose `VIEWS` entry declares a `search` placeholder (the eight
- * searchable pages — Items & Stock, Hand-Off, Receiving/Inspections, Parties &
+ * searchable pages — Assets, Hand-Off, Receiving/Inspections, Parties &
  * Orders, Fleet Telemetry, Labor & Timesheets, Field Service, Billing &
  * Invoicing), shows that view's wording, and hides it everywhere else.
  *
  * The mounted view reads `query()` and narrows its own lists through the shared
  * `matches()` rule, so the search *and* filter are one thing: what the box says
  * is what the page shows. A page searches all of itself — on a tabbed page
- * (Items & Stock, Hand-Off & Custody, Parties & Orders) the query keeps working
+ * (Assets, Hand-Off & Custody, Parties & Orders) the query keeps working
  * as tabs change and narrows every tab's rows, so the tab counts read as "where
  * are the matches" rather than "what is on this tab".
  *

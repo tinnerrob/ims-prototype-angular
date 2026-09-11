@@ -227,7 +227,7 @@ export function needsReorder(item: Item): boolean {
 }
 
 
-/** Per-type statuses offered in the Items & Stock editor. */
+/** Per-type statuses offered in the Assets editor. */
 export const ITEM_STATUSES: Record<CatalogType, ItemStatus[]> = {
   serialized: ['Available', 'On Rent', 'In Shop', 'Staged'],
   bulk: ['Available', 'Committed'],

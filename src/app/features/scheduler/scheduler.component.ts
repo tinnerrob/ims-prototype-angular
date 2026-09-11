@@ -99,7 +99,7 @@ interface Availability {
   note: string;
 }
 
-/** Catalog-type icon for the read-only asset viewer (matches the Items tabs). */
+/** Catalog-type icon for the read-only asset viewer (matches the Assets tabs). */
 const POOL_ICON: Record<string, string> = {
   serialized: 'bi-truck-front',
   bulk: 'bi-boxes',
@@ -886,7 +886,7 @@ export class SchedulerComponent implements OnDestroy {
       [item.costPrice, 'Cost price', true],
       [item.retailPrice, 'Retail price', true],
       // The place is an FK now, so show the path it resolves to (the same
-      // read-time resolution the Items grid uses) rather than a stored string.
+      // read-time resolution the Assets grid uses) rather than a stored string.
       [item.locationId ? this.data.locationPath(item.locationId) : '', 'Location'],
       [item.role, 'Role'],
       [item.hourlyCost, 'Cost / hr', true],
@@ -1006,7 +1006,7 @@ export class SchedulerComponent implements OnDestroy {
       status: f.status,
       qty: Number(f.qty) || 0,
       rateDaily: Number(f.rateDaily) || 0,
-      // Same rule as the Items editor: placement is one FK, and "not placed" is
+      // Same rule as the Assets editor: placement is one FK, and "not placed" is
       // stored as no value at all.
       locationId: f.locationId || undefined,
     };

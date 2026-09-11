@@ -8,7 +8,7 @@ import { SessionService } from '../../core/session.service';
 /** Core (always-on) modules listed on the admin page (prototype `CORE_MODULES`). */
 const CORE_MODULES = [
   'Operations Dashboard',
-  'Items & Stock',
+  'Assets',
   'Categories & Types',
   'Locations',
   'Item Hand-Off & Custody',

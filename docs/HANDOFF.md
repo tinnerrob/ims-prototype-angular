@@ -45,7 +45,7 @@ than editing a count, and a change of place or a physical count logs a
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's stock **and** its logged movements block removal |
 | Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
-| Items & Stock | `features/items` | typed catalog: list/CRUD per type, scoped by location; row actions **Move** (logs a `transfer`) and **Count** (logs a signed `adjust`), and the record viewer's **Ledger** section reads both back |
+| Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location; row actions **Move** (logs a `transfer`) and **Count** (logs a signed `adjust`), and the record viewer's **Ledger** section reads both back |
 | Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
@@ -127,7 +127,7 @@ detail right**, with orders as the top rows.
   `.res-card-head` / `.badge-status` badge row it fed are deleted.
 - **Pool select labels are the plain catalog names** (`poolTypes = CATALOG_TYPES`:
   "Bulk Resources", not "Items (Bulk Resources)") — "Items (…)" only made sense as
-  an Items-page tab label, and here it both duplicated the Assets card title and
+  an Assets-page tab label, and here it both duplicated the Assets card title and
   crowded the 340px pane. The card header is title-only for the same reason (the
   "drag to a block · dbl-click to view" hint moved into each card's `title` tooltip);
   a header hint ellipsed the title onto two lines.
@@ -361,13 +361,13 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   Inspections skips the viewer entirely: a log row opens the inspection editor.
 - **Topbar search = page search** (`src/app/core/page-search.service.ts`). The box is
   not global: the shell renders it only on the views whose `VIEWS` entry carries a
-  `search` placeholder — Items & Stock, Hand-Off, Receiving / Inspections, Parties &
+  `search` placeholder — Assets, Hand-Off, Receiving / Inspections, Parties &
   Orders, Fleet Telemetry, Labor & Timesheets, Field Service, Billing & Invoicing — and
   hides it on every other view (Dashboard, Scheduling, Locations, … have no search box).
   A page searches *all* of itself through the service's shared `matches()` rule (the
   same case-insensitive "any field contains the query" on every page), the query
   survives tab switches, and the tab pills/counts then read as matches instead of
-  totals (Items & Stock filters all seven types at once, Hand-Off all four lists,
+  totals (Assets filters all seven types at once, Hand-Off all four lists,
   Parties & Orders both sub-tabs — the point of "search the page, not the tab").
   The shell also shows a "shown of total" chip beside the box: a page publishes it once
   from its constructor with `search.report(() => ({ shown, total }))`, a thunk the

@@ -706,7 +706,7 @@
   font-size: 13px;
 }
 /* Every list page opens with the same toolbar row — `[search field] … [record
-   count]` (Hand-Off, Items & Stock, …) — so the field's cap lives here instead
+   count]` (Hand-Off, Assets, …) — so the field's cap lives here instead
    of once per page SCSS file. */
 .filter-input.search { max-width: 340px; }
 .batt-bar { height: 6px; border-radius: 3px; background: var(--slate-200); overflow: hidden; width: 56px; }

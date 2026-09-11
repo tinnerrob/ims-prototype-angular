@@ -18,8 +18,8 @@ interface CategoryTab {
 
 /** Tab strip from the prototype's `CAT_TYPES` (js/pages/categories.js). */
 const CAT_TYPES: CategoryTab[] = [
-  { key: 'serialized', label: 'Items (Serialized)', icon: 'bi-truck-front' },
-  { key: 'bulk', label: 'Items (Bulk)', icon: 'bi-boxes' },
+  { key: 'serialized', label: 'Assets (Serialized)', icon: 'bi-truck-front' },
+  { key: 'bulk', label: 'Assets (Bulk)', icon: 'bi-boxes' },
   { key: 'consumable', label: 'Consumables', icon: 'bi-capsule' },
   { key: 'labor', label: 'Labor / Employees', icon: 'bi-person-badge' },
   { key: 'part', label: 'Stock Inventory', icon: 'bi-wrench-adjustable' },
