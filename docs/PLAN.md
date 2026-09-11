@@ -42,8 +42,8 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ `5560a98` |
 | A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ `c1812bf` |
 | A10 | The last hole A8 named: `orders.party` (a stored copy of the counterparty's name) leaves the model — the screens read the join — and `partyRemovalBlockers()` keeps the FK from dangling | ✅ `99653e1` |
-| A11 | Negotiated rates per party: `price_cards` + `price_card_lines` hang off `parties`, an order bills at the card in force on the day its booking starts (`cardRateFor()`), a supplier's card is the PO editor's cost default (one rule, re-applied when the supplier changes), and the Pricing page edits them | ✅ `13f8f5b` |
-| A11.2 | The invoice bills what the Gross prints: whole weeks/months per period (`wholeUnitsBilled()`), on the line's own days, at the party's own cadence (`partyCycleDays()` — the only reader `parties.billing_cycle` ever had), with "Run Next Cycle" (`runNextCycle()`) advancing every active order, so a booking's cycles tile it and add up to its `lineTotal()` | ✅ |
+| A11 | Negotiated rates per party: `price_cards` + `price_card_lines` hang off `parties`, an order bills at the card in force on the day its booking starts (`cardRateFor()`), a supplier's card is the PO editor's cost default (one rule, re-applied when the supplier changes), and the Pricing page edits them | ✅ `13f8f5b` + `3d21cdd` |
+| A11.2 | The invoice bills what the Gross prints: whole weeks/months per period (`wholeUnitsBilled()`), on the line's own days, at the party's own cadence (`partyCycleDays()` — the only reader `parties.billing_cycle` ever had), with "Run Next Cycle" (`runNextCycle()`) advancing every active order, so a booking's cycles tile it and add up to its `lineTotal()` | ✅ `a8f1736` |
 
 ### Acceptance criteria per increment
 
