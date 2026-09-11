@@ -8,7 +8,8 @@
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "lint:ctor": "node scripts/check-field-init-order.js",
-    "lint:styles": "node scripts/audit-styles.js"
+    "lint:styles": "node scripts/audit-styles.js",
+    "check:store": "bash scripts/check-store.sh"
   },
   "private": true,
   "dependencies": {

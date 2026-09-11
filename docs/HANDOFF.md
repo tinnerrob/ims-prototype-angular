@@ -13,6 +13,10 @@ npm run build      # production build to dist/ims-web
 ```
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
+Runtime checks that don't need a browser: `npm run check:store` compiles the core
+services to JS and drives the real store from Node (28 checks across tenancy,
+attribution and the item↔location spine — see `docs/PLAN.md` → "Verification
+recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~652 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -271,6 +275,17 @@ The store models the SaaS boundary the API will implement, so these are load-bea
 - **Attribution is a foreign key, not a name.** `Movement.byUserId` (and every
   `createdBy/updatedBy`) holds a user id; display names come from
   `DataService.userName(id)`.
+- **An item's place is a foreign key too.** `Item.locationId` points into the
+  location hierarchy (`settings.locations`, an adjacency list), so a yard zone,
+  an aisle, a rack and a bin are one thing — the prototype's free-text
+  `bin: 'A-03'` string was folded into the tree (LOC-14 is the `Bin` row that
+  label now names) rather than kept beside it. Labels are resolved at read time
+  (`locationLabel()` for a cell, `locationPath()` for `Warehouse 1 › Aisle 1 ›
+  Bay A1-01`), and the two questions a stock system asks are store queries, not
+  screen logic: `itemsAtLocation(id, subtree)`. Removing a location is refused
+  while stock is stored *at* it (`removeLocation()` returns `false`) — that is
+  what keeps a stored FK always resolvable, so no screen has to invent a
+  fallback for a dangling place.
 - **Bumping `VERSION` replaces saved data**, so the shell must keep saying so
   (`DataService.reseeded` → the banner in `app.component.html`).
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
@@ -526,6 +541,12 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    cycle; port it if invoiced totals need to match the Gross the rest of the app now
    prints (`lineTotal()`). Order Details / queues / dashboards are already on the
    prototype figure.
+
+9. **Movements still name their place in free text** — `Movement.location` holds a
+   string ('Main Yard — Buckhead Hub'), so the ledger can't be read back per
+   location the way stock can. Items got their FK in A3; movements are **A4** in
+   `docs/PLAN.md` (move the field to `locationId`, pick it on the Hand-Off page,
+   resolve the path at read time like `locationPath()` does).
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo
