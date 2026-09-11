@@ -18,10 +18,11 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (103 checks across tenancy,
+services to JS and drives the real store from Node (113 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
-registry, the data-model document, the custody ledger, purchasing, and the
-transfer / adjust / reorder paths — see `docs/PLAN.md` → "Verification recipe").
+registry, the data-model document, the custody ledger, purchasing, the
+transfer / adjust / reorder paths, and configuration attribution — see
+`docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -287,7 +288,13 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   whose content moved, comparing against a shadow of the last persisted copy
   (`attributeWrites`, primed by `attributeSeed` in the constructor). New mutators
   therefore need no stamping discipline — but they must go through `save()`, and a
-  new table must be added to `auditedRows()` to be covered.
+  new table must be added to `auditedRows()` to be covered (`check9` fails if the
+  document's map names a store key the writer never covers). Every table a screen
+  writes is covered, **including configuration** (A9): the settings rows are keyed
+  by their natural key and the writer follows the row, so renaming a category or a
+  location type is an edit, never a delete plus a create. The only two tables
+  outside the writer are `tenants` and `users`, which `docs/DATA-MODEL.md` declares
+  as exceptions with the reason.
 - **Attribution is a foreign key, not a name.** `Movement.byUserId` (and every
   `createdBy/updatedBy`) holds a user id; display names come from
   `DataService.userName(id)`.
@@ -366,11 +373,14 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   must enforce, and what is deliberately not modelled yet). `check9.mjs` reads the
   doc, `models.ts` and `data.service.ts` as text and fails the harness if a model
   has no table, a table invents a name, a column is not a field, a `NOT NULL`
-  contradicts the type's optionality, an enum drifts, a foreign key dangles, the
-  five derived stock columns are not exactly `DERIVED_STOCK_KEYS`, or the per-type
-  status table stops matching `ITEM_STATUSES`. So: a new field is added to
-  `models.ts` (and used) *first*, then written into the doc — a column the model
-  does not have is a bug in the doc, not a wish.
+  contradicts the type's optionality, an enum drifts, a foreign key dangles, a
+  mapped table names a store key `auditedRows()` never writes (unless the doc
+  declares it an exception — only `tenants` and `users` are), the five derived
+  stock columns are not exactly `DERIVED_STOCK_KEYS`, or the per-type status table
+  stops matching `ITEM_STATUSES`. So: a new field is added to `models.ts` (and
+  used) *first*, then written into the doc — a column the model does not have is a
+  bug in the doc, not a wish, and a table the writer does not stamp is a hole the
+  harness names for you.
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
 - `src/app/core/page-search.service.ts` — the page-scoped topbar search (below).
 - `src/app/app.routes.ts` — route map (module routes are guarded).
@@ -653,11 +663,11 @@ The store models the SaaS boundary the API will implement, so these are load-bea
     constraints, so every rule the doc lists under "What the API must enforce" —
     never over-receive a line, never let a level hold nothing, never patch a
     derived column, keep the ledger append-only — is enforced by `DataService`
-    mutators returning `null`/`false`, not by a database. Two known holes the doc
-    names out loud and the API has to close: `location_types`, `categories`,
-    `tax_schedules`, `overheads`, `pricing` and `yard` are written **without**
-    tenant/author stamps (they are not in `auditedRows()`), and `orders.party` is a
-    stored copy of a party name the API should derive with a join.
+    mutators returning `null`/`false`, not by a database. One hole the doc named in
+    A8 is now closed (A9: the configuration tables are stamped like everything
+    else, and check9 fails if a mapped table is not), which leaves the other one it
+    names: `orders.party` is a stored copy of a party name the API should derive
+    with a join.
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

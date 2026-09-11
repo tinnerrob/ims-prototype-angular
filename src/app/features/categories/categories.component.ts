@@ -5,7 +5,7 @@ import { DataService } from '../../core/data.service';
 import { CatalogType, CategoryOption } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
-import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
@@ -162,6 +162,9 @@ export class CategoriesComponent {
             { label: 'Available In Editors', value: c.active !== false ? 'Yes' : 'No' },
           ],
         },
+        // A category is the workspace's row like an item is (A9), so the viewer
+        // answers "who added this, and who last touched it" the same way.
+        ...auditSections(c, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
       ],
     };
   }

@@ -12,7 +12,8 @@ It reads this document, `models.ts` and `data.service.ts` as text and fails if a
 model has no table, a table invents a name, a column is not a field, a `NOT NULL`
 disagrees with the type's optionality, an enum's members drift, a foreign key
 points at a table that does not exist, a table `auditedRows()` writes is missing
-from the map, or the columns the store derives are not the ones called derived
+from the map (or a mapped table that writer does not stamp is not declared an
+exception below), or the columns the store derives are not the ones called derived
 here. **A column here that `models.ts` does not have is a bug, not a wish** —
 propose the field first.
 
@@ -128,13 +129,16 @@ the demo fixture.
 These are rows a workspace edits in Admin, not documents the app posts. Two
 honest notes before them:
 
-- **They are not audited yet.** `locations` is the only settings row in
-  `auditedRows()`, so `location_types`, `categories`, `tax_schedules`,
-  `overheads`, `pricing` and `yard` are written without tenant stamps — a real
-  hole, and the API closes it with the same `tenant_id` + audit columns every
-  other table has (which is why they appear below).
+- **They are audited like anything else (A9).** These were the last rows written
+  without stamps — `auditedRows()` covered `locations` and nothing else in this
+  section — so who added a category, who retired a location type or who changed a
+  tax rate was simply not recorded. A settings row is a person's write, so it
+  carries the same `tenant_id` + audit columns as every other table, and a
+  *rename* (a category, a location type, a tax code) keeps the row's history: the
+  natural key moves, the row does not.
 - **A settings row is unique per tenant**, so their keys are composite with
-  `tenant_id` rather than a surrogate id.
+  `tenant_id` rather than a surrogate id (which is why `pricing` and `yard` show
+  `tenant_id` as their own primary key).
 
 ### `locations` — `Location`
 
@@ -991,9 +995,11 @@ not the tenant's data.
 ## Table ↔ model ↔ resource map
 
 One row per table, with the model it comes from, the key it has in the store
-(what `auditedRows()` calls it, and the fixture seeds under) and a resource path
-an API can expose. check9 reads this table: every audited table in the store must
-appear in it, and every table here must have a section above.
+(what `auditedRows()` calls it — configuration lives under `settings.*` in the
+snapshot, and a settings row is keyed by its **natural** key rather than an id) and
+a resource path an API can expose. check9 reads this table both ways: every table
+the store audits must appear here, and every table here that names a store key must
+be one the store audits.
 
 | table | model | store key | resource |
 |---|---|---|---|
@@ -1001,11 +1007,11 @@ appear in it, and every table here must have a section above.
 | `tenant_modules` | `Tenant.disabledModules` | — | `/api/tenant/modules` |
 | `users` | `User` | `users` | `/api/users` |
 | `locations` | `Location` | `locations` | `/api/locations` |
-| `location_types` | `LocationType` | `settings.locationTypes` | `/api/settings/location-types` |
-| `categories` | `CategoryOption` | `settings.categories` | `/api/settings/categories` |
-| `tax_schedules` | `TaxSchedule` | `settings.taxSchedules` | `/api/settings/tax-schedules` |
-| `overheads` | `Overhead` | `settings.overheads` | `/api/settings/overheads` |
-| `pricing` | `PricingSettings` | `settings.pricing` | `/api/settings/pricing` |
+| `location_types` | `LocationType` | `locationTypes` | `/api/settings/location-types` |
+| `categories` | `CategoryOption` | `categories:<type>` | `/api/settings/categories` |
+| `tax_schedules` | `TaxSchedule` | `taxSchedules` | `/api/settings/tax-schedules` |
+| `overheads` | `Overhead` | `overheads` | `/api/settings/overheads` |
+| `pricing` | `PricingSettings` | `pricing` | `/api/settings/pricing` |
 | `yard` | `Yard` | `yard` | `/api/settings/yard` |
 | `items` | `Item` | `items` | `/api/items` |
 | `stock_levels` | `StockLevel` | `stockLevels` | `/api/stock-levels` |
@@ -1030,6 +1036,26 @@ appear in it, and every table here must have a section above.
 `store` is the last row because it is the one table that should *not* survive to
 the API: it is the localStorage snapshot (`_v` + the tables), the client's stand-in
 for a database. On the server it becomes a schema version and a migration history.
+
+A store key with a path in it (`orders[].lineItems`, `workOrders[].parts`) is a row
+*inside* another table's row: it is attributed by its parent, whose `updated_by` is
+the writer, and `tenant_id` reaches it through the parent's key. `—` is a table the
+store does not keep as rows at all (the snapshot, and the tenant's licence flags).
+
+**Declared exceptions**: `tenants`, `users` — the two mapped tables a write does
+not stamp, and why:
+
+- `tenants` — the workspace is its own boundary. `tenants.id` is the one id a
+  `tenant_id` column cannot scope, and the row is created by the platform (a sign-up
+  or the console), not by a workspace's person. `created_at` stands on its own.
+- `users` — a person is created by a sign-up, not by another row's author; a
+  `created_by` would be a stranger's id from another tenant or a self-reference on
+  insert. `users.tenant_id` is stored, so the row is scoped even though it is not
+  stamped.
+
+Anything else a screen writes is in `auditedRows()`. That is what the reverse check
+in `check9.mjs` holds: add a settings table and forget the writer, and the harness
+fails rather than the hole being discovered later.
 
 ## Not in the model yet (deliberately)
 
@@ -1058,9 +1084,6 @@ each is an increment waiting for its turn:
 - **Soft delete.** Rows are removed (`removeItem`, `removeLocation`), and the
   guard is contents/history rather than a deleted flag. A financial system
   usually wants `deleted_at` on the catalog side; this model does not have one.
-- **The audit columns on configuration.** Listed above as a real hole:
-  `location_types`, `categories`, `tax_schedules`, `overheads`, `pricing` and
-  `yard` are written without `tenant_id`/`created_by` today.
 - **Per-vertical category seeds, and per-vertical view gating or titles.** A7
   settled that the registry carries tabs, labels, columns and new-record
   defaults; it deliberately does not decide which categories a vertical seeds, or

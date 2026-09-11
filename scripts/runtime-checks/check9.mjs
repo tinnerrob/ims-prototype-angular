@@ -239,7 +239,8 @@ check('NOT NULL agrees with the model: a nullable field is never documented as r
 check('every table the store audits is documented, and every documented table is mapped', () => {
   const storeKeys = [...STORE.matchAll(/add\((['"`])([\w$:{}]+)\1,/g)].map((m) => m[2].split(':')[0]);
   assert.ok(storeKeys.length >= 15, `${storeKeys.length} audited tables found in auditedRows()`);
-  const mapped = new Set(MAP.map((r) => r.storeKey));
+  const audited = new Set(storeKeys);
+  const mapped = new Set(MAP.map((r) => r.storeKey.replace(/<.*$/, '')).flatMap((k) => [k, k.split(':')[0]]));
   const missing = storeKeys.filter((k) => !mapped.has(k));
   assert.deepEqual(missing, [], `audited but unmapped: ${missing.join(', ')}`);
   for (const r of MAP) {
@@ -255,6 +256,32 @@ check('every table the store audits is documented, and every documented table is
   }
   for (const table of TABLES.keys()) {
     assert.ok(MAP.some((r) => r.table === table), `\`${table}\` has a section but is not in the map`);
+  }
+
+  /* The other direction (A9): no table a screen writes may be un-audited, and the
+   * only ones that may be are the two the doc declares — a nested row is attributed
+   * by its parent, and `—` is not a table of rows at all. */
+  const declared = [
+    ...(DOC.match(/\*\*Declared exceptions\*\*:([^\n]*)/)?.[1] ?? '').matchAll(/`(\w+)`/g),
+  ].map((m) => m[1]);
+  /** A map row's store key as `auditedRows()` spells it (`categories:<type>` → `categories`). */
+  const plain = (k) => k.split(':')[0].replace(/<.*$/, '');
+  assert.ok(declared.length, 'the doc still declares which tables are not audited');
+  for (const table of declared) {
+    const row = MAP.find((r) => r.table === table);
+    assert.ok(row, `the doc declares \`${table}\` an exception, which the map does not have`);
+    assert.ok(
+      !audited.has(plain(row.storeKey)),
+      `\`${table}\` is declared an exception but the store audits it now — drop the claim`,
+    );
+  }
+  for (const r of MAP) {
+    if (r.storeKey === '—' || /[.[]/.test(r.storeKey)) continue; // no rows of its own / inside a parent row
+    if (declared.includes(r.table)) continue;
+    assert.ok(
+      audited.has(plain(r.storeKey)),
+      `\`${r.table}\` names store key \`${r.storeKey}\`, which auditedRows() never writes — a settings row written without tenant/author stamps`,
+    );
   }
 });
 

@@ -253,6 +253,16 @@ export class DataService {
 
   /** Last persisted content signature per row, keyed `table:id`. */
   private readonly shadow = new Map<string, string>();
+  /**
+   * The store key a row was first seen under, by identity.
+   *
+   * Most rows are keyed by an id that never moves. A configuration row is keyed
+   * by its *natural* key instead (`categories.type` + name, a location type's
+   * name, a tax code), and those mutators rename in place — the row object is the
+   * same row, its key is not. Following the object keeps a rename from reading as
+   * a delete plus a fresh create, which would lose who added the row.
+   */
+  private readonly rowKeys = new WeakMap<AuditFields, string>();
   /** True when `hydrate()` adopted a persisted snapshot (so the fixtures it
    *  already contains must not be posted a second time). */
   private restored = false;
@@ -495,12 +505,22 @@ export class DataService {
     };
   }
 
-  /** Every audited row in the store, keyed `table:id` (see `shadow`). */
+  /**
+   * Every audited row in the store, keyed `table:id` (see `shadow`).
+   *
+   * Configuration belongs here too (A9): a settings row is written by a person in
+   * Admin, so it is stamped like any other row. Those tables have no surrogate id
+   * — their key *is* their meaning (`location_types.name`, `categories.type` +
+   * `name`, `tax_schedules.code`) — so `keyOf` names it, and the two singletons
+   * (`pricing`, `yard`) are one row per tenant with a key that says so.
+   */
   private auditedRows(): [string, AuditFields][] {
     const out: [string, AuditFields][] = [];
-    const add = (table: string, rows: AuditFields[]) => {
+    const add = (table: string, rows: AuditFields[], keyOf?: (row: AuditFields) => string) => {
       for (const r of rows) {
-        const key = (r as { id?: string; orderId?: string }).id ?? (r as { orderId?: string }).orderId ?? '';
+        const key = keyOf
+          ? keyOf(r)
+          : ((r as { id?: string; orderId?: string }).id ?? (r as { orderId?: string }).orderId ?? '');
         out.push([`${table}:${key}`, r]);
       }
     };
@@ -519,6 +539,15 @@ export class DataService {
     add('dispatches', this.db.dispatches);
     add('invoices', this.db.invoices);
     add('locations', this.db.settings.locations);
+    // Configuration (A9): the rows Admin edits, stamped like everything else.
+    add('locationTypes', this.db.settings.locationTypes, (r) => (r as LocationType).name);
+    for (const [type, rows] of Object.entries(this.db.settings.categories)) {
+      add(`categories:${type}`, rows, (r) => (r as CategoryOption).name);
+    }
+    add('taxSchedules', this.db.settings.taxSchedules, (r) => (r as TaxSchedule).code);
+    add('overheads', this.db.settings.overheads);
+    add('pricing', [this.db.settings.pricing], () => 'settings');
+    add('yard', [this.db.yard], () => 'settings');
     return out;
   }
 
@@ -540,6 +569,7 @@ export class DataService {
       row.updatedAt ??= row.createdAt;
       row.updatedBy ??= row.createdBy;
       this.shadow.set(key, contentSignature(row));
+      this.rowKeys.set(row, key);
     }
     this.attributed = true;
   }
@@ -548,7 +578,11 @@ export class DataService {
   private attributeWrites(): void {
     const a = this.actor();
     const seen = new Set<string>();
-    for (const [key, row] of this.auditedRows()) {
+    for (const [fresh, row] of this.auditedRows()) {
+      // A row whose natural key moved is the same row: follow it, so a rename
+      // takes the edit stamps instead of being read as a delete and a create.
+      const key = this.rowKeys.get(row) ?? fresh;
+      if (key === fresh) this.rowKeys.set(row, key);
       seen.add(key);
       const content = contentSignature(row);
       const before = this.shadow.get(key);

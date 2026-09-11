@@ -39,6 +39,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A6 | One SKU, many places: `stock_levels(item_id, location_id, qty)` as the truth for counted stock, with `qtyOnHand` as its sum and a move / count that act on a place | ✅ |
 | A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ |
 | A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ |
+| A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ |
 
 ### Acceptance criteria per increment
 
@@ -146,6 +147,26 @@ five derived stock columns are not the ones the store derives, or the per-type
 status table stops matching `ITEM_STATUSES`. A column the model does not have is
 a bug in the doc, not a wish — so a new field is proposed in TypeScript first.
 
+**A9 — every table is a tenant's.** A8 closed by naming a hole out loud: the
+settings tables were the one place a screen writes rows that `auditedRows()` did
+not cover, so Admin could add a category, retire a location type or change a tax
+rate and nothing recorded who. They are now rows like any other — the six
+configuration types carry `AuditFields`, the writer stamps them (seeded rows
+backfilled by the same pass that backfills everything else, a new one attributed
+to the acting user, an edit re-stamping `updatedBy` without touching the create
+stamps). Two things about *settings* rows are special and are handled rather than
+hidden: they have no surrogate id, so the writer keys them by their natural key
+(`location_types.name`, `categories.type` + `name`, `tax_schedules.code`, and one
+`settings` row each for `pricing` / `yard`), and because the rename mutators move
+that key *in place*, the writer follows the row — a rename takes the edit stamps
+instead of reading as a delete plus a fresh create that would lose the original
+author. The other direction is now guarded too: `check9` fails if a mapped table
+names a store key `auditedRows()` never writes, so the hole cannot be reopened by
+a new settings table — and the two tables that genuinely cannot take a stamp from
+a request context (`tenants` — the workspace is its own boundary; `users` — a
+person is created by a sign-up, and `users.tenant_id` already scopes the row) are
+**declared exceptions** in the document, with the reason, rather than left silent.
+
 
 ## Open decisions (need the owner's call)
 
@@ -186,7 +207,7 @@ a bug in the doc, not a wish — so a new field is proposed in TypeScript first.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 103 runtime checks against the real store, no browser
+npm run check:store    # 113 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -200,7 +221,7 @@ hand-roll `localStorage` and assert on the store's own output:
   session switching, the schema-bump reseed.
 - `check2.mjs` — **A2, 8 checks:** seeded rows backfilled, new rows stamped,
   edits stamped without smearing untouched rows, movement authorship, deletion.
-- `check3.mjs` — **A3, 11 checks:** the seeded hierarchy, `locationPath()` /
+- `check3.mjs` — **A3, 12 checks:** the seeded hierarchy, `locationPath()` /
   `locationLabel()`, the depth-first option walk and its cycle guard, every stock
   row placed (and labour deliberately not), the `bin` string gone, the same
   warehouse rule for shop units, `itemsAtLocation()` direct vs. subtree, the
@@ -274,10 +295,24 @@ hand-roll `localStorage` and assert on the store's own output:
   declared rename and a declared parent/map key allowed to differ); **`NOT NULL`
   agreeing with the type's optionality**, so a nullable field is never documented
   as required; every table `auditedRows()` writes appearing in the map, with a
-  section; every enum matching its union member for member, and every column type
-  being a documented enum or a scalar; every `REFERENCES` naming a real table; the
-  five derived stock columns the doc marks derived being exactly
-  `DERIVED_STOCK_KEYS`; and the per-type status table matching `ITEM_STATUSES`.
+  section — **and the other direction: every mapped table that names a store key
+  being one `auditedRows()` writes, unless the doc declares it an exception** (so
+  a settings table written without stamps fails the harness); every enum matching
+  its union member for member, and every column type being a documented enum or a
+  scalar; every `REFERENCES` naming a real table; the five derived stock columns
+  the doc marks derived being exactly `DERIVED_STOCK_KEYS`; and the per-type status
+  table matching `ITEM_STATUSES`.
+
+- `check10.mjs` — **A9, 10 checks:** every configuration row (location types,
+  categories, tax schedules, overheads, the `pricing` and `yard` singletons)
+  carrying all five stamps after the seed backfill, each naming a user the store
+  resolves; a category added in-session attributed to the acting user; an edit
+  (`updateTaxSchedule`, `updatePricing`) re-stamping `updatedBy` while the create
+  stamps stand; **a rename keeping the row it renamed** — the natural key moves, so
+  the stamps must follow the row (checked for a location type *and* a category,
+  which is what fails if the writer keys rows by name alone); a settings write not
+  smearing its neighbours; and the whole settings surface still stamped after an
+  unrelated write.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
@@ -285,7 +320,9 @@ the cheapest way to prove an invariant still holds.
 ## Conventions worth restating
 
 - A new table must be added to `DataService.auditedRows()` or it is written
-  without tenant/author stamps.
+  without tenant/author stamps — and `check9` fails if the document's map names a
+  store key the writer never covers (unless the doc declares the table an
+  exception, which only `tenants` and `users` are).
 - A new seed shape must bump `VERSION`, and the shell must keep telling the user
   their data was replaced.
 - Display strings are resolved at read time (`userName`, `locationPath`), never
@@ -339,8 +376,14 @@ the cheapest way to prove an invariant still holds.
   write a `NOT NULL` the type does not promise and the harness fails. A column the
   model does not have is a bug in the doc — so a new field is proposed in
   `models.ts` (and used) first, then written down.
-- Configuration rows are the exception the doc names out loud:
-  `location_types`, `categories`, `tax_schedules`, `overheads`, `pricing` and
-  `yard` are still written *without* tenant stamps, because they are not in
-  `auditedRows()`. The API adds `tenant_id` + the audit columns to them; until
-  then the doc marks them as the hole they are.
+- **Configuration is a tenant's data, so it is stamped (A9).** A settings row
+  (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`,
+  `yard`) is written by a person in Admin, so it is in `auditedRows()` like any
+  other table. Two consequences worth knowing before editing one: it has no
+  surrogate id, so the writer keys it by its **natural** key
+  (`location_types.name`, `categories.type` + `name`, `tax_schedules.code`), and
+  because a rename mutates that key in place the writer **follows the row** — a
+  rename is an edit, never a delete plus a create. Only `tenants` and `users` are
+  outside the writer, and `docs/DATA-MODEL.md` declares both as exceptions with
+  the reason; a new table needs a `store key` in the doc's map *and* an
+  `auditedRows()` entry, or `check9` fails.

@@ -55,8 +55,15 @@ export const CATALOG_TYPES: CatalogTypeDef[] = [
 
 export const CATALOG_TYPE_KEYS: CatalogType[] = CATALOG_TYPES.map((t) => t.key);
 
-/** Category option row (prototype `IMS.settings.categories[type][]`). */
-export interface CategoryOption {
+/**
+ * Category option row (prototype `IMS.settings.categories[type][]`).
+ *
+ * Configuration is a tenant's data like the catalog is (A9): the Categories page
+ * is what a workspace edits in Admin, so a row here is written by a person and
+ * carries the same stamps as any other row — "who added this category" is a
+ * question the screen may ask.
+ */
+export interface CategoryOption extends AuditFields {
   name: string;
   /** Inactive categories stay in the list but drop out of item pickers. */
   active: boolean;
@@ -460,7 +467,7 @@ export const PURCHASABLE_TYPES: CatalogType[] = CATALOG_TYPES.map((t) => t.key).
  * Location type — user-defined, e.g. Site, Yard, Building, Rack, Bin
  * (prototype `IMS.settings.branches`, extended for the hierarchy).
  */
-export interface LocationType {
+export interface LocationType extends AuditFields {
   name: string;
   /** Inactive types stay in the list but drop out of the location pickers. */
   active: boolean;
@@ -487,7 +494,7 @@ export interface Location extends AuditFields {
 }
 
 /** Sales-tax jurisdiction (prototype `IMS.settings.taxSchedules`). */
-export interface TaxSchedule {
+export interface TaxSchedule extends AuditFields {
   code: string;
   state: string;
   county: string;
@@ -497,7 +504,7 @@ export interface TaxSchedule {
 }
 
 /** Overhead / service-fee configuration (prototype `IMS.settings.overheads`). */
-export interface Overhead {
+export interface Overhead extends AuditFields {
   id: string;
   name: string;
   category: 'Facility' | 'Freight/Logistics' | 'Compliance';
@@ -520,7 +527,7 @@ export const OVERHEAD_CHARGE_TYPES: Overhead['chargeType'][] = [
 export type RiskPremiumKey = 'standard' | 'coastal' | 'hazmat';
 
 /** Pricing rules engine (prototype `IMS.settings.pricing`). */
-export interface PricingSettings {
+export interface PricingSettings extends AuditFields {
   dailyMinHours: number;
   weeklyHours: number;
   cycleDays: number;
@@ -533,7 +540,7 @@ export interface PricingSettings {
 export const WEEKEND_POLICIES: PricingSettings['weekendPolicyDefault'][] = ['bill', 'skip', 'overtime'];
 
 /** The operating yard (geofence centre on the telemetry map). */
-export interface Yard {
+export interface Yard extends AuditFields {
   name: string;
   lat: number;
   lng: number;

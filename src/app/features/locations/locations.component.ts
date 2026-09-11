@@ -5,7 +5,7 @@ import { DataService } from '../../core/data.service';
 import { Location, LocationType } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
-import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
@@ -377,6 +377,9 @@ export class LocationsComponent {
             { label: 'Removable', value: this.removalBlockers(loc.id).length ? 'No — ' + this.removalBlockers(loc.id).join(' and ') : 'Yes' },
           ],
         },
+        // Who set the place up and who last moved it — a location is a settings row
+        // and settings rows are stamped too (A9), so the same block as elsewhere.
+        ...auditSections(loc, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
       ],
     };
   }
@@ -399,6 +402,8 @@ export class LocationsComponent {
             { label: 'Available In Editor', value: t.active !== false ? 'Yes' : 'No' },
           ],
         },
+        // A type is a settings row: stamped since A9, and shown like any other.
+        ...auditSections(t, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
       ],
     };
   }
