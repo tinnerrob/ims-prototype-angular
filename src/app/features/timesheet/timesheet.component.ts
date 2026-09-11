@@ -125,28 +125,44 @@ export class TimesheetComponent implements OnDestroy {
   }
 
   days(): Date[] {
-    const a = this.anchor;
+    const start = this.periodStart(this.anchor);
+    const out: Date[] = [];
     if (this.view === 'month') {
-      const n = new Date(a.getFullYear(), a.getMonth() + 1, 0).getDate();
-      const out: Date[] = [];
-      for (let i = 1; i <= n; i++) out.push(new Date(a.getFullYear(), a.getMonth(), i));
+      const n = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+      for (let i = 0; i < n; i++) out.push(new Date(start.getFullYear(), start.getMonth(), i + 1));
       return out;
     }
     if (this.view === 'week') {
-      const w = new Date(a);
-      w.setDate(w.getDate() - ((w.getDay() + 6) % 7));
-      w.setHours(0, 0, 0, 0);
-      const out: Date[] = [];
       for (let i = 0; i < 7; i++) {
-        const d = new Date(w);
+        const d = new Date(start);
         d.setDate(d.getDate() + i);
         out.push(d);
       }
       return out;
     }
-    const d = new Date(a);
-    d.setHours(0, 0, 0, 0);
-    return [d];
+    return [start];
+  }
+
+  /** Monday 00:00 of the week holding `d` — the first column of a Week view. */
+  private mondayOf(d: Date): Date {
+    const w = new Date(d);
+    w.setDate(w.getDate() - ((w.getDay() + 6) % 7));
+    w.setHours(0, 0, 0, 0);
+    return w;
+  }
+
+  /**
+   * First column of the period holding `d` in the current view — the day itself
+   * for Day, its Monday for Week, the 1st for Month. `days()` walks on from it and
+   * `rangeLabel()` names it, so the grid, the label and the "Today" reset all
+   * speak about the same day (and the label matches what the reset lands on).
+   */
+  private periodStart(d: Date): Date {
+    if (this.view === 'month') return new Date(d.getFullYear(), d.getMonth(), 1);
+    if (this.view === 'week') return this.mondayOf(d);
+    const day = new Date(d);
+    day.setHours(0, 0, 0, 0);
+    return day;
   }
 
   dayKeys(): string[] {
@@ -196,14 +212,33 @@ export class TimesheetComponent implements OnDestroy {
     this.anchor = a;
   }
 
+  /**
+   * Is the pager already sitting on today's period? (Named `atToday` because the
+   * day-header flag is `isToday(d)`.) The item hand-off & custody board disables
+   * its "Today" button the same way, so the control never reads as a no-op you can
+   * keep pressing; the calendars page by period, so the test is the period — the
+   * day in Day view, its week in Week, its month in Month, exactly what the label
+   * names.
+   */
+  atToday(): boolean {
+    return dISO(this.periodStart(this.anchor)) === dISO(this.periodStart(new Date()));
+  }
+
+  /**
+   * Jump back to today, keeping the Day/Week/Month granularity — the hand-off
+   * board's "Today", placed right after its period navigation. Like `nav()` it
+   * leaves lane expansion alone: the same employees are on the board either way,
+   * so the lanes stay stacked exactly as the user left them.
+   */
+  goToday(): void {
+    this.anchor = this.periodStart(new Date());
+  }
+
   setView(v: LabView): void {
     this.view = v;
     /* a different granularity re-stacks every lane, so start from collapsed */
     this.expanded.clear();
-    const a = new Date(this.anchor);
-    if (v === 'month') this.anchor = new Date(a.getFullYear(), a.getMonth(), 1);
-    else if (v === 'week') a.setDate(a.getDate() - ((a.getDay() + 6) % 7));
-    if (v === 'week') this.anchor = a;
+    this.anchor = this.periodStart(this.anchor);
   }
 
   /* -------------------------------- lanes ------------------------------- */

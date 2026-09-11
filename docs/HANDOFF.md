@@ -312,13 +312,26 @@ detail right**, with orders as the top rows.
   fields the old pane had (Contract, Date) plus the live overage preview
   (`editOverage()`), and the log's **Overage** column badges any check-in over its meter
   allowance (prototype `meterOverage`).
-- **Date navigators sit on the left:** every period pager — the range label between ‹ ›
-  arrows — sits at the left of its bar/header: it takes up the free space and packs its
-  content against its start, so the Scheduler and Timesheet timeline navs read
-  `‹ range › … [Day|Week|Month]` (the toggle keeps the right end), Hand-Off's day stepper +
-  Today button sit right after the card title (`me-auto`), and the Inspection log's
-  navigator (`.log-pager`, only rendered with a Day/Week/Month filter) leads that header
-  before the chips + **Log Inspection** button. See `.period-pager` in `styles.scss`.
+- **Date navigators sit on the left … except in a timeline nav:** every period pager — the
+  range label between ‹ › arrows — takes up the free space and packs its content against one
+  edge, so the page reads selector-first and controls-last. The Scheduler and Timesheet
+  timeline navs use `.period-pager.end`, which packs the pager against the **right** end:
+  `[Day|Week|Month] … ‹ range › [Today]`. Hand-Off's day stepper + Today button sit right
+  after the card title (`me-auto`), the Inspection log's navigator (`.log-pager`, only
+  rendered with a Day/Week/Month filter) leads that header before the chips +
+  **Log Inspection** button. See `.period-pager` in `styles.scss`.
+- **A "Today" reset trails the period navigation** (Hand-Off's board was the first: ‹ › day
+  stepper, then `Today`, then the action). The two calendars now carry the same control in
+  the same place — `goToday()` + `isToday()` on the Scheduler, `goToday()` + `atToday()` on
+  Labor & Timesheets (`atToday` only because `isToday(d)` there is the day-header flag) —
+  with the hand-off board's semantics: **keep the Day/Week/Month granularity**, land on the
+  first day the pager would show for that view (Monday / the 1st / today — the same day
+  `periodLabel()` names, via the shared `periodStart`/`periodStartOf` helper), and
+  **disable the button while that period is already on screen** so it never reads as a
+  no-op you can keep pressing. Side effects mirror each calendar's own pager: the Scheduler
+  clears the expanded lanes and the focused order (exactly like `shift()`), the Timesheet
+  leaves lane expansion alone (like `nav()` — the same employees are on the board either
+  way).
 - **One label wording for every navigator** (`periodLabel()` in `core/data.service.ts`, used
   by the Scheduler, Labor & Timesheets, the inspection log and Hand-Off): `Monday, Aug 17, 2026`
   for a day, `Week of Aug 17, 2026` for a Monday-anchored week (first day only — no end date)

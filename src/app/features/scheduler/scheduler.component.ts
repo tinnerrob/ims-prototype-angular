@@ -264,6 +264,43 @@ export class SchedulerComponent implements OnDestroy {
     this.selectedOrderId = '';
   }
 
+  /**
+   * First day of the period holding `d` in the current view — the day itself for
+   * Day, its Monday for Week, the 1st for Month. The same day `periodStart()`
+   * hands the range label, so the pager, the label and the "Today" reset all
+   * speak about the same day.
+   */
+  private periodStartOf(d: Date): number {
+    if (this.view === 'month') return this.startOfDay(new Date(d.getFullYear(), d.getMonth(), 1));
+    if (this.view === 'week') return this.mondayOf(d.getTime());
+    return this.startOfDay(d);
+  }
+
+  /**
+   * Is the pager already sitting on today's period? The item hand-off & custody
+   * board disables its "Today" button when the board is showing today (`isToday()`
+   * there), so the control never reads as a no-op you can keep pressing; the
+   * calendars page by period, so the test is the period — the day in Day view,
+   * its week in Week, its month in Month, i.e. exactly what the label names.
+   */
+  isToday(): boolean {
+    const now = new Date();
+    return this.periodStartOf(new Date(this.anchor)) === this.periodStartOf(now);
+  }
+
+  /**
+   * Jump back to today, keeping the Day/Week/Month granularity — the hand-off
+   * board's "Today", placed right after its period navigation. Lands on the first
+   * day the pager would show for the view, and takes `shift()`'s side effects: a
+   * different period means the expanded lanes and the focused order are no longer
+   * the ones on screen.
+   */
+  goToday(): void {
+    this.anchor = this.periodStartOf(new Date());
+    this.expanded.clear();
+    this.selectedOrderId = '';
+  }
+
   /** Switch Day/Week/Month, re-anchoring so the new period contains the cursor
    *  date (prototype `setLabView` / `#viewToggle`). */
   setView(v: View): void {
