@@ -71,8 +71,29 @@ export interface Party extends AuditFields {
   billingAddress: string;
   billingCycle: string;
   notes: string;
+  /**
+   * Which side of a transaction this counterparty can be (a role, not a type).
+   *
+   * Customers and suppliers are the same kind of row — a business the tenant
+   * deals with, with one address and one contact — so they share this table and
+   * differ by the roles they carry. Orders pick `customer` partners, purchase
+   * orders pick `supplier` partners, and a partner that is both (a dealer that
+   * buys and rents) is one row with two roles rather than two rows that can
+   * drift apart. Absent = treated as a customer (every pre-A5 row).
+   */
+  kinds?: PartyKind[];
   active?: boolean;
 }
+
+/** What a counterparty is to us (see `Party.kinds`). */
+export type PartyKind = 'customer' | 'supplier';
+
+export const PARTY_KINDS: PartyKind[] = ['customer', 'supplier'];
+
+export const PARTY_KIND_LABEL: Record<PartyKind, string> = {
+  customer: 'Customer',
+  supplier: 'Supplier',
+};
 
 export type OrderStatus = 'draft' | 'active' | 'closed';
 
@@ -244,6 +265,13 @@ export interface Movement extends AuditFields {
   locationId?: string;
   kind: MovementKind;
   qty: number;
+  /**
+   * The purchase receipt this movement came from — the buying-side counterpart
+   * of `orderId`. A `receive` movement points at the receipt (which points at
+   * the purchase order and its supplier), so "where did this stock come from?"
+   * is a join, not a note.
+   */
+  receiptId?: string | null;
   at: string; // ISO timestamp
   /** User id that performed the movement (see `DataService.userName`). */
   byUserId: string;
@@ -257,6 +285,115 @@ export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
   transfer: 'Transfer',
   adjust: 'Adjust',
 };
+
+/* ------------------------------ purchasing ------------------------------ */
+/*
+ * The buying side of the spine: a supplier is a party (see `Party.kinds`), a
+ * purchase order says what was ordered, and a *receipt* is the document that
+ * makes stock exist. Two rules shape the types below, and both are deliberate:
+ *
+ * 1. `PurchaseOrder` stores no copy of what arrived. How much of a line has been
+ *    received is summed from the receipts (`receipts[].lines[]`), so an order
+ *    cannot claim stock the ledger doesn't have — the same "derive at read time,
+ *    never store a second copy" rule the location spine follows.
+ * 2. A receipt is posted, never edited. It moved quantities and placed rows, so
+ *    it is append-only like a movement; a wrong receipt is corrected by a new
+ *    adjustment, not by rewriting history.
+ */
+
+/** The document's own lifecycle — chosen by a person, not derived. */
+export type PurchaseOrderStatus = 'draft' | 'ordered' | 'cancelled';
+
+export const PURCHASE_ORDER_STATUSES: PurchaseOrderStatus[] = ['draft', 'ordered', 'cancelled'];
+
+export const PO_STATUS_LABEL: Record<PurchaseOrderStatus, string> = {
+  draft: 'Draft',
+  ordered: 'Ordered',
+  cancelled: 'Cancelled',
+};
+
+/**
+ * How much has turned up, summed from the receipts. Kept out of the stored row
+ * on purpose (see the note above), and shown beside the lifecycle status.
+ */
+export type PurchaseProgress = 'none' | 'partial' | 'received';
+
+export const PO_PROGRESS_LABEL: Record<PurchaseProgress, string> = {
+  none: 'Awaiting delivery',
+  partial: 'Partially received',
+  received: 'Received',
+};
+
+export interface PurchaseOrderLine {
+  id: string;
+  type: CatalogType;
+  /**
+   * The catalog row this line restocks (parts, consumables, bulk, kits,
+   * attachments — a receipt tops the row up). Absent for a serialized line,
+   * which describes units that do not exist yet: receiving it creates one row
+   * per unit (see `ReceiptLine.refId`).
+   */
+  refId?: string;
+  /** What was ordered. Required when `refId` is absent (a new unit). */
+  description: string;
+  qty: number;
+  unitCost: number;
+  /** Billable daily rate to bill a *new* unit at (serialized lines only). */
+  rateDaily?: number;
+}
+
+export interface PurchaseOrder extends AuditFields {
+  id: string;
+  /** FK -> `parties.id`, a partner carrying the `supplier` kind. */
+  supplierId: string;
+  status: PurchaseOrderStatus;
+  orderedAt: string; // "YYYY-MM-DD"
+  expectedAt: string; // "YYYY-MM-DD"
+  /** The supplier's own number / quote, for matching their paperwork. */
+  reference?: string;
+  notes?: string;
+  lines: PurchaseOrderLine[];
+}
+
+export interface ReceiptLine {
+  id: string;
+  poLineId: string;
+  type: CatalogType;
+  /**
+   * The row the stock landed on: the restocked SKU, or the unit this line
+   * created. Always a real row, so a receipt can be read back into
+   * `itemsAtLocation()` — the receiving side of the item ↔ location spine.
+   */
+  refId: string;
+  qty: number;
+  unitCost: number;
+}
+
+/** A posted goods receipt: the document that makes `qtyOnHand` mean something. */
+export interface Receipt extends AuditFields {
+  id: string;
+  /** FK -> `purchase_orders.id`. */
+  poId: string;
+  /** FK -> `parties.id` (copied from the order, as the document's own fact). */
+  supplierId: string;
+  /** FK -> `settings.locations` — where the stock was put away. */
+  locationId: string;
+  at: string; // ISO timestamp
+  note?: string;
+  lines: ReceiptLine[];
+}
+
+/** Serialized units arrive as whole rows (one machine, one row). */
+export function isUnitStock(type: CatalogType): boolean {
+  return type === 'serialized';
+}
+
+/** Labor is a person, not stock — nothing can be purchased into it. */
+export function isPurchasable(type: CatalogType): boolean {
+  return type !== 'labor';
+}
+
+export const PURCHASABLE_TYPES: CatalogType[] = CATALOG_TYPES.map((t) => t.key).filter(isPurchasable);
 
 /**
  * Location type — user-defined, e.g. Site, Yard, Building, Rack, Bin

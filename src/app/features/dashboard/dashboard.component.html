@@ -119,8 +119,18 @@
           <span class="l">{{ r.ref }} · {{ r.label }}</span>
           <span class="r d-flex align-items-center gap-2">
             <span class="text-danger">{{ data.int(r.qtyOnHand) }} / &#64; {{ data.int(r.reorderPoint) }}</span>
-            <button class="btn btn-ims btn-sm2" type="button" (click)="triggerReorder(r.type, r.ref)">
-              <i class="bi bi-arrow-repeat"></i> Reorder
+            <!-- Two different things, side by side on purpose: "Order" is how stock
+                 really arrives (a purchase order → receipt), while "Restock" is the
+                 prototype's one-click count correction. -->
+            <button class="btn btn-ims-outline btn-sm2" type="button"
+                    title="Raise a purchase order for this item"
+                    (click)="openView('purchasing')">
+              <i class="bi bi-bag-check"></i> Order
+            </button>
+            <button class="btn btn-ims btn-sm2" type="button"
+                    title="Set on-hand to twice the reorder point (a count correction, not a purchase)"
+                    (click)="triggerReorder(r.type, r.ref)">
+              <i class="bi bi-arrow-repeat"></i> Restock
             </button>
           </span>
         </div>

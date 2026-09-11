@@ -47,7 +47,9 @@ check('every seeded row carries tenant + author stamps', () => {
 
 check('the ledger names a user, and its author is that user', () => {
   const ms = d.listMovements();
-  assert.equal(ms.length, 5);
+  // Five custody issues (A4) + the four rows the seeded receipts landed (A5:
+  // two new loader units, the buckets they topped up, and the hose restock).
+  assert.equal(ms.length, 9);
   for (const m of ms) {
     assert.match(m.byUserId, /^USR-\d+$/);
     assert.equal(m.createdBy, m.byUserId);

@@ -932,7 +932,7 @@ export class SchedulerComponent implements OnDestroy {
   /** Open the New Order editor (prototype `orderModal`). */
   openOrder(): void {
     const start = this.periodStartISO();
-    const party = this.data.listParties()[0];
+    const party = this.data.customerParties()[0];
     this.orderForm = {
       active: true,
       partyId: party?.id ?? '',

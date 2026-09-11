@@ -1,0 +1,37 @@
+/* ------------------------------------------------------------------
+   Purchasing & Receiving. The card, sub-tab strip, tables, modals and badges
+   all come from the global design system (src/styles.scss), so only the bits
+   this page introduces live here: the delivery-progress bar under a PO's status
+   badge and the compact line editor.
+   ------------------------------------------------------------------ */
+
+/* How much of the order has arrived, under its status badge. The width is set
+   from `poProgressPct()` — derived from the receipts, never a stored figure. */
+.po-bar {
+  margin-top: 5px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+.po-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ims-accent, #0d6efd);
+}
+
+/* The lines editor: a header row with its add button, over a scrolling grid. */
+.line-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.table-wrap.po-lines table td {
+  vertical-align: middle;
+}
+.table-wrap.po-lines input.form-control-sm,
+.table-wrap.po-lines select.form-select-sm {
+  min-width: 90px;
+}

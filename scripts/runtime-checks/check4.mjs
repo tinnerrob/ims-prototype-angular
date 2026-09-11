@@ -29,7 +29,8 @@ const d = new DataService();
 
 check('no movement stores a display string — every place is a resolvable FK', () => {
   const moves = d.listMovements();
-  assert.equal(moves.length, 5, 'seeded chain-of-custody rows');
+  // Five custody issues (A4) + the four rows the A5 receipts landed.
+  assert.equal(moves.length, 9, 'seeded ledger rows');
   for (const m of moves) {
     assert.equal(m.location, undefined, `${m.id} no longer carries free text`);
     assert.equal(typeof m.locationId, 'string', `${m.id} has a location FK`);
@@ -41,33 +42,46 @@ check('a seeded movement is logged where its own unit sits', () => {
   // The seed derives the place from the unit's placement rather than repeating a
   // label, so the shelf and the ledger agree from the first record.
   for (const m of d.listMovements()) {
-    const item = d.getItem('serialized', m.refId);
-    assert.ok(item, `${m.refId} exists`);
+    const item = d.getItem(m.type, m.refId);
+    assert.ok(item, `${m.refId} (${m.type}) exists`);
     assert.equal(m.locationId, item.locationId, `${m.id} left from where ${m.refId} sits`);
   }
 });
 
 check("the ledger's place reads back as a path, built at read time", () => {
-  const m = d.listMovements()[0];
+  const issue = d.listMovements().find((m) => m.refId === 'BL-119' && m.kind === 'issue');
   assert.equal(
-    d.locationPath(m.locationId),
+    d.locationPath(issue.locationId),
     'Atlanta Main Campus › Main Yard › Yard A — Equipment Staging',
     'yard path through the hierarchy',
+  );
+  const arrived = d.listMovements().find((m) => m.kind === 'receive' && m.locationId === 'LOC-03');
+  assert.equal(
+    d.locationPath(arrived.locationId),
+    'Atlanta Main Campus › Main Yard › Yard A — Equipment Staging',
+    'and the receiving side reads back the same way',
+  );
+  const restock = d.listMovements().find((m) => m.kind === 'receive' && m.locationId === 'LOC-19');
+  assert.equal(
+    d.locationPath(restock.locationId),
+    'Atlanta Main Campus › Warehouse 1 › Aisle 3 › Bay C-04',
+    'a receipt into a bin reads back to the shelf it stocked',
   );
   assert.equal(d.locationPath(undefined), '—', 'an unplaced movement reads as a dash');
 });
 
 check('movementsAtLocation answers per node, and per subtree by default', () => {
   const atYard = d.movementsAtLocation('LOC-03');
-  assert.equal(atYard.length, 5, 'logged at the staging zone itself');
+  // Five issues left from the staging zone; the A5 receipt landed three rows there.
+  assert.equal(atYard.length, 8, 'logged at the staging zone itself');
   assert.ok(atYard.every((m) => m.locationId === 'LOC-03'));
   // "What left Yard A this month?" means the whole yard, not the node row: the
   // zone sits under LOC-02, which holds none of the rows directly.
   assert.equal(d.locationMovementCount('LOC-02'), 0, 'nothing is logged at the yard node');
-  assert.equal(d.movementsAtLocation('LOC-02').length, 5, 'its subtree has them');
+  assert.equal(d.movementsAtLocation('LOC-02').length, 8, 'its subtree has them');
   assert.equal(d.movementsAtLocation('LOC-02', false).length, 0, 'unless the caller asks narrowly');
   assert.equal(d.movementsAtLocation('LOC-10').length, 0, 'an unrelated site has no history');
-  assert.equal(d.locationSubtreeMovementCount('LOC-01'), 5, 'the site totals its yards');
+  assert.equal(d.locationSubtreeMovementCount('LOC-01'), 9, 'the campus totals its yard and warehouse');
 });
 
 check('an issue is logged where the unit sits, without the caller saying so', () => {
@@ -157,11 +171,11 @@ check('an empty, unreferenced node still removes (the guard is not a blanket ref
 
 check('both blockers come from the one guard the grid and the button share', () => {
   // LOC-03 is the equipment staging zone: it holds the machines, the bulk stock
-  // and the attachments, *and* it is where the seeded issues left from (plus
-  // BL-118's own issue above).
+  // and the attachments — plus the units the A5 receipts landed there — *and* it
+  // is where the seeded issues left from (plus BL-118's own issue above).
   assert.deepEqual(d.locationRemovalBlockers('LOC-03'), [
-    '27 item(s) stored here',
-    '6 movement(s) logged here',
+    '29 item(s) stored here',
+    '9 movement(s) logged here',
   ]);
   assert.equal(d.removeLocation('LOC-03'), false);
   assert.equal(d.getItem('serialized', 'BL-119').locationId, 'LOC-03', 'stock stays put');

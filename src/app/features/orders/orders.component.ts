@@ -63,13 +63,16 @@ export class OrdersComponent {
     // the active/closed filter), so report what the open tab is showing.
     this.search.report(() => ({
       shown: this.tab === 'customers' ? this.parties().length : this.orderMatches().length,
-      total: this.tab === 'customers' ? this.data.listParties().length : this.data.listOrders().length,
+      total: this.tab === 'customers' ? this.data.customerParties().length : this.data.listOrders().length,
     }));
   }
 
   /** Customers matching the page search (the sub-tab pill counts these). */
   parties(): Party[] {
-    return this.data.listParties().filter((p) =>
+    // Only partners carrying the customer role: a supplier is a row in the same
+    // table (see `Party.kinds`) but it isn't someone you rent equipment to, so it
+    // belongs on the Purchasing page, not in this picker or grid.
+    return this.data.customerParties().filter((p) =>
       this.search.matches(
         p.id,
         p.name,
@@ -170,7 +173,7 @@ export class OrdersComponent {
   /* ------------------------------- orders ------------------------------ */
 
   newOrder(): void {
-    const party = this.data.listParties()[0];
+    const party = this.data.customerParties()[0];
     this.orderForm = {
       partyId: party?.id ?? '',
       projectName: '',

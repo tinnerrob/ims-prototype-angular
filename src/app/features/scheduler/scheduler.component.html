@@ -390,7 +390,7 @@
             <div class="col-md-4 field-group">
               <label class="form-label">Customer</label>
               <select class="form-select" [(ngModel)]="orderForm.partyId">
-                @for (p of data.listParties(); track p.id) {
+                @for (p of data.customerParties(); track p.id) {
                   <option [value]="p.id">{{ p.name }}</option>
                 }
               </select>

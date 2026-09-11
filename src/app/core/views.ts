@@ -87,6 +87,15 @@ export const VIEWS: ViewDef[] = [
     icon: 'bi-folder2-open',
     group: 'movement',
   },
+  {
+    id: 'purchasing',
+    title: 'Purchasing & Receiving',
+    desc: 'Core: suppliers, purchase orders, and the receipts that bring stock in and place it.',
+    search: 'Search suppliers, purchase orders, receipts…',
+    nav: 'Purchasing & Receiving',
+    icon: 'bi-bag-check',
+    group: 'movement',
+  },
 
   /* ---- Modules · Opt-in (gated by ModulesService) ---- */
   {

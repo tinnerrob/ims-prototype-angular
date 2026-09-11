@@ -1,0 +1,468 @@
+<div class="page-head"></div>
+
+<div class="card">
+  <!-- The page header already names this view ("Purchasing & Receiving"), so this
+       bar carries no title of its own: the sub-tab strip anchors the left, its
+       primary action the right, and the divider under the bar separates both from
+       the search / record-count row below. -->
+  <div class="card-header">
+    <div class="subtabs">
+      @for (t of tabs; track t.key) {
+        <button class="subtab" type="button" [class.active]="tab === t.key" (click)="selectTab(t.key)">
+          <i class="bi {{ t.icon }}"></i>{{ t.label }}
+          <span class="count-pill">{{ count(t.key) }}</span>
+        </button>
+      }
+    </div>
+    @if (tab === 'suppliers') {
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openSupplier()">
+        <i class="bi bi-plus-lg"></i> New Supplier
+      </button>
+    } @else if (tab === 'orders') {
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openPo()">
+        <i class="bi bi-plus-lg"></i> New Purchase Order
+      </button>
+    } @else {
+      <span class="text-muted2 text-12">Receipts are posted from a purchase order — they are never edited.</span>
+    }
+  </div>
+
+  <div class="card-body">
+    <div class="d-flex align-items-center justify-content-end flex-wrap mb-3 gap-2">
+      <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
+    </div>
+
+    <!-- ============================ SUPPLIERS ============================ -->
+    @if (tab === 'suppliers') {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Supplier</th><th>Contact</th><th>Phone</th><th>Terms</th>
+              <th class="num">POs</th><th class="num">Open</th><th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (p of suppliers(); track p.id) {
+              <tr class="row-open" (click)="showSupplierView($event, p)" [imsTip]="tipSupplier(p)">
+                <td>
+                  <span class="strong">{{ p.name }}</span>
+                  @if (p.active === false) {
+                    <span class="badge-status st-out"><i class="bi bi-circle-fill"></i>Inactive</span>
+                  }
+                  <div class="text-muted2 text-xs">{{ p.email }}</div>
+                </td>
+                <td class="text-12">{{ p.contact || '—' }}</td>
+                <td class="mono text-muted2 text-12">{{ p.phone || '—' }}</td>
+                <td class="text-12">{{ p.billingCycle || '—' }}</td>
+                <td class="num">{{ supplierOrders(p) }}</td>
+                <td class="num">
+                  @if (data.supplierOpenOrderCount(p.id) > 0) {
+                    <span class="badge-status st-reorder">{{ data.supplierOpenOrderCount(p.id) }}</span>
+                  } @else {
+                    <span class="text-muted2">—</span>
+                  }
+                </td>
+                <td class="text-end text-nowrap">
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openSupplier(p)">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                          [disabled]="supplierOrders(p) > 0"
+                          [title]="supplierOrders(p) > 0
+                            ? 'Remove — blocked: ' + supplierOrders(p) + ' purchase order(s) name this supplier'
+                            : 'Remove'"
+                          (click)="removeSupplier(p)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="7" class="text-center text-muted2 py-4">{{ emptyLabel('suppliers') }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- ========================= PURCHASE ORDERS ========================= -->
+    @if (tab === 'orders') {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>PO</th><th>Supplier</th><th>Ordered</th><th>Expected</th>
+              <th class="num">Lines</th><th class="num">Value</th><th>Received</th><th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (po of orders(); track po.id) {
+              <tr class="row-open" (click)="showPoView($event, po)" [imsTip]="tipPo(po)">
+                <td>
+                  <span class="strong mono">{{ po.id }}</span>
+                  @if (po.reference) {
+                    <div class="text-muted2 text-xs">{{ po.reference }}</div>
+                  }
+                </td>
+                <td class="text-12">{{ data.partyName(po.supplierId) }}</td>
+                <td class="mono text-muted2 text-12">{{ data.fmtDate(po.orderedAt) }}</td>
+                <td class="mono text-muted2 text-12">{{ data.fmtDate(po.expectedAt) }}</td>
+                <td class="num">{{ po.lines.length }}</td>
+                <td class="num">{{ data.money(data.poValue(po)) }}</td>
+                <td>
+                  <span [class]="poBadge(po)">{{ poLabel(po) }}</span>
+                  <!-- How much has arrived is summed from the receipts, so the bar
+                       can only ever show a figure the documents support. -->
+                  <div class="po-bar" [title]="data.money(data.poReceivedValue(po)) + ' of ' + data.money(data.poValue(po))">
+                    <span [style.width.%]="poProgressPct(po)"></span>
+                  </div>
+                </td>
+                <td class="text-end text-nowrap">
+                  <button class="btn btn-ims btn-sm2" type="button"
+                          [disabled]="!canReceive(po)"
+                          [title]="canReceive(po) ? 'Post a receipt against this order' : 'Nothing left to receive on this order'"
+                          (click)="openReceive(po)">
+                    <i class="bi bi-box-arrow-in-down"></i> Receive
+                  </button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openPo(po)">
+                    <i class="bi bi-pencil"></i>
+                  </button>
+                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                          [disabled]="removeBlocked(po)"
+                          [title]="removeTitle(po)"
+                          (click)="removePo(po)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr><td colspan="8" class="text-center text-muted2 py-4">{{ emptyLabel('orders') }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <!-- ============================= RECEIPTS ============================ -->
+    @if (tab === 'receipts') {
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Receipt</th><th>Purchase Order</th><th>Supplier</th><th>Put away at</th>
+              <th class="num">Items</th><th class="num">Value</th><th>Posted</th><th>By</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of receipts(); track r.id) {
+              <tr class="row-open" (click)="showReceiptView($event, r)" [imsTip]="tipReceipt(r)">
+                <td class="strong mono">{{ r.id }}</td>
+                <td class="mono text-12">{{ r.poId }}</td>
+                <td class="text-12">{{ data.partyName(r.supplierId) }}</td>
+                <td class="text-12">{{ data.locationPath(r.locationId) }}</td>
+                <td class="num">{{ receiptQty(r) }}</td>
+                <td class="num">{{ data.money(receiptValue(r)) }}</td>
+                <td class="mono text-muted2 text-12">{{ data.fmtDT(r.at) }}</td>
+                <td class="text-12">{{ data.userName(r.createdBy) }}</td>
+              </tr>
+            } @empty {
+              <tr><td colspan="8" class="text-center text-muted2 py-4">{{ emptyLabel('receipts') }}</td></tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  </div>
+</div>
+
+<!-- ===== Supplier editor (a partner carrying the supplier role) ===== -->
+@if (supplierOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="supplierDirty()" (dismiss)="closeSupplier()">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi {{ editingSupplierId ? 'bi-pencil-square' : 'bi-plus-circle' }}"></i>
+            {{ editingSupplierId ? 'Edit Supplier — ' + editingSupplierId : 'New Supplier' }}
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-8 field-group">
+              <label class="form-label">Supplier Name *</label>
+              <input class="form-control" [(ngModel)]="supplierForm.name" />
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Payment Terms</label>
+              <input class="form-control" [(ngModel)]="supplierForm.billingCycle" placeholder="net-30, prepaid…" />
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Contact</label>
+              <input class="form-control" [(ngModel)]="supplierForm.contact" />
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Phone</label>
+              <input class="form-control" [(ngModel)]="supplierForm.phone" />
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Email</label>
+              <input class="form-control" [(ngModel)]="supplierForm.email" />
+            </div>
+            <div class="col-md-12 field-group">
+              <label class="form-label">Address</label>
+              <input class="form-control" [(ngModel)]="supplierForm.billingAddress" />
+            </div>
+            <div class="col-md-12 field-group">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" rows="2" [(ngModel)]="supplierForm.notes"></textarea>
+            </div>
+            <div class="col-md-12 field-group">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sup-active" [(ngModel)]="supplierForm.active" />
+                <label class="form-check-label" for="sup-active">Active</label>
+              </div>
+              <div class="form-hint">
+                A supplier is a partner row — the same table the customers live in, carrying the
+                <strong>supplier</strong> role. Purchase orders name partners, never a typed-in vendor string.
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!supplierForm.name.trim()" (click)="saveSupplier()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- ===== Purchase-order editor (header + lines) ===== -->
+@if (poOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="poDirty()" (dismiss)="closePo()">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi {{ editingPoId ? 'bi-pencil-square' : 'bi-plus-circle' }}"></i>
+            {{ editingPoId ? 'Purchase Order — ' + editingPoId : 'New Purchase Order' }}
+          </h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-5 field-group">
+              <label class="form-label">Supplier *</label>
+              <select class="form-select" [(ngModel)]="poForm.supplierId">
+                @for (s of data.supplierParties(); track s.id) {
+                  <option [value]="s.id">{{ s.name }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-3 field-group">
+              <label class="form-label">Status</label>
+              <select class="form-select" [(ngModel)]="poForm.status">
+                @for (s of statuses; track s) {
+                  <option [value]="s">{{ statusLabel[s] }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-2 field-group">
+              <label class="form-label">Ordered</label>
+              <input class="form-control" type="date" [(ngModel)]="poForm.orderedAt" />
+            </div>
+            <div class="col-md-2 field-group">
+              <label class="form-label">Expected</label>
+              <input class="form-control" type="date" [(ngModel)]="poForm.expectedAt" />
+            </div>
+            <div class="col-md-4 field-group">
+              <label class="form-label">Supplier Reference</label>
+              <input class="form-control" [(ngModel)]="poForm.reference" placeholder="their order / quote number" />
+            </div>
+            <div class="col-md-8 field-group">
+              <label class="form-label">Notes</label>
+              <input class="form-control" [(ngModel)]="poForm.notes" />
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="line-head">
+            <span class="strong">Lines</span>
+            <button class="btn btn-ims-outline btn-sm2" type="button" (click)="addLine()">
+              <i class="bi bi-plus-lg"></i> Add Line
+            </button>
+          </div>
+          <div class="table-wrap po-lines">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Item Type</th><th>Stock / Description</th><th class="num">Qty</th>
+                  <th class="num">Unit Cost</th><th class="num">Rate / Day</th><th class="num">Received</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (l of poForm.lines; track $index; let i = $index) {
+                  <tr>
+                    <td>
+                      <select class="form-select form-select-sm" [(ngModel)]="l.type" (ngModelChange)="l.refId = ''">
+                        @for (t of purchasable; track t) {
+                          <option [value]="t">{{ t }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td>
+                      @if (isUnit(l.type)) {
+                        <input class="form-control form-control-sm" [(ngModel)]="l.description" placeholder="e.g. CAT 259D3 Compact Track Loader" />
+                      } @else {
+                        <select class="form-select form-select-sm" [(ngModel)]="l.refId" (ngModelChange)="syncLine(l)">
+                          <option value="">— pick stock —</option>
+                          @for (o of lineOptions(l.type); track o.id) {
+                            <option [value]="o.id">{{ o.label }}</option>
+                          }
+                        </select>
+                      }
+                    </td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="1" [(ngModel)]="l.qty" /></td>
+                    <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.unitCost" /></td>
+                    <td class="num">
+                      @if (isUnit(l.type)) {
+                        <input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.rateDaily" />
+                      } @else {
+                        <span class="text-muted2">—</span>
+                      }
+                    </td>
+                    <td class="num text-muted2">{{ l.id ? data.poLineReceived(l.id) : 0 }}</td>
+                    <td class="text-end">
+                      <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove line" (click)="removeLine(i)">
+                        <i class="bi bi-x-lg"></i>
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!poForm.supplierId" (click)="savePo()">
+            <i class="bi bi-check2"></i> Save Record
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- ===== Receiving editor (posts a receipt against one PO) ===== -->
+@if (receiveOpen) {
+  @if (receivePo(); as po) {
+    <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeReceive()">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-box-arrow-in-down"></i>Receive Against {{ po.id }}</h5>
+            <button type="button" class="btn-close" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
+              <div>
+                <span class="strong">{{ data.partyName(po.supplierId) }}</span>
+                <div class="text-muted2 text-12">{{ po.notes || 'No order notes' }}</div>
+              </div>
+              <span class="badge-status st-on">{{ poLabel(po) }}</span>
+            </div>
+
+            <div class="field-group">
+              <label class="form-label" for="rec-location">Put away at *</label>
+              <select id="rec-location" class="form-select" [(ngModel)]="receiveLocationId">
+                <option value="">— choose a location —</option>
+                @for (o of data.locationOptions(); track o.id) {
+                  <option [value]="o.id">{{ o.label }}</option>
+                }
+              </select>
+              <div class="form-hint">
+                Received stock lands here: an existing SKU is re-placed, and a new serialized unit is
+                created in this location. The movement is logged against the same place.
+              </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Only what is still outstanding: a line can never receive more than
+                 the order asked for (the store refuses the whole posting). -->
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Line</th><th class="num">Ordered</th><th class="num">Received</th>
+                    <th class="num">Outstanding</th><th class="num">Receive now</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of receivable(po); track row.line.id) {
+                    <tr>
+                      <td>
+                        <span class="strong">{{ row.line.description }}</span>
+                        <div class="text-muted2 text-xs">
+                          {{ row.line.type }} · {{ data.money(row.line.unitCost) }} each
+                        </div>
+                      </td>
+                      <td class="num">{{ row.line.qty }}</td>
+                      <td class="num text-muted2">{{ data.poLineReceived(row.line.id) }}</td>
+                      <td class="num">{{ row.outstanding }}</td>
+                      <td class="num">
+                        <input
+                          class="form-control form-control-sm text-end"
+                          type="number"
+                          min="0"
+                          [max]="row.outstanding"
+                          [(ngModel)]="receiveQty[row.line.id]"
+                        />
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+
+            <div class="field-group mt-3">
+              <label class="form-label">Receipt note (optional)</label>
+              <input class="form-control" [(ngModel)]="receiveNote" placeholder="Delivery note, condition, signature…" />
+            </div>
+
+            <div class="rec-summary">
+              <div class="list-line">
+                <span class="l text-muted2">Posting</span>
+                <span class="r">{{ receiveRows() }} row(s) created / topped up</span>
+              </div>
+              <div class="list-line">
+                <span class="l text-muted2">Value received</span>
+                <span class="r strong">{{ data.money(receiveValue()) }}</span>
+              </div>
+              <div class="list-line">
+                <span class="l text-muted2">Ledger</span>
+                <span class="r">one <strong>receive</strong> movement per landed row</span>
+              </div>
+            </div>
+            <div class="form-hint">
+              A posted receipt is a document, not a draft: it has no edit and no delete. Correct a mistake
+              with a new adjustment, exactly as the custody ledger does.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ims" [disabled]="!receiveReady()" (click)="confirmReceive()">
+              <i class="bi bi-check2"></i> Post Receipt
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop show d-block"></div>
+  }
+}
+
+<ims-record-view [view]="viewer" (closed)="closeViewer()"></ims-record-view>

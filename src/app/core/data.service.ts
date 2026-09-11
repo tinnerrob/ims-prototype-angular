@@ -23,7 +23,17 @@ import {
   OrderLine,
   Overhead,
   Party,
+  PARTY_KIND_LABEL,
+  PartyKind,
+  PO_PROGRESS_LABEL,
+  PO_STATUS_LABEL,
   PricingSettings,
+  PurchaseOrder,
+  PurchaseOrderLine,
+  PurchaseOrderStatus,
+  PurchaseProgress,
+  Receipt,
+  ReceiptLine,
   RentalSub,
   TaxSchedule,
   Tenant,
@@ -38,6 +48,7 @@ import {
   WorkOrderPart,
   WorkOrderStatus,
   Yard,
+  isUnitStock,
   needsReorder,
 } from './models';
 
@@ -45,6 +56,49 @@ import {
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
+const pad3 = (n: number) => String(n).padStart(3, '0');
+
+/**
+ * Moving-average unit cost after receiving `qty` at `unitCost` — what a receipt
+ * does to a stocked row's cost, so a screen can show one cost per SKU without
+ * storing a cost history (the receipts *are* the history).
+ */
+function movingCost(onHand: number, current: number | undefined, qty: number, unitCost: number): number {
+  if (!current || onHand <= 0) return round2(unitCost);
+  return round2((onHand * current + qty * unitCost) / (onHand + qty));
+}
+
+/**
+ * What `logMovement` is written from. `at` / `byUserId` default to now and the
+ * session; the API takes both from the request context (the seed pins them so a
+ * fixture doesn't move with the clock or with whoever is signed in).
+ */
+export interface MovementInput {
+  type: CatalogType;
+  refId: string;
+  kind: MovementKind;
+  qty: number;
+  orderId?: string | null;
+  party?: string;
+  locationId?: string;
+  receiptId?: string | null;
+  byUserId?: string;
+  at?: string;
+  note?: string;
+}
+
+/** What `receiveAgainst` is posted from (see the rules on that method). */
+export interface ReceiveInput {
+  poId: string;
+  /** FK -> `settings.locations`: where the stock is put away. */
+  locationId: string;
+  /** Quantity to receive *now*, keyed by PO line id (missing = not delivered). */
+  qty: Record<string, number>;
+  note?: string;
+  at?: string;
+  byUserId?: string;
+}
 
 /** "HH:mm" -> minutes past midnight (prototype `hmMin`). */
 export function hmMin(s: string | null | undefined): number {
@@ -161,7 +215,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 7;
+  private readonly VERSION = 8;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -175,6 +229,9 @@ export class DataService {
 
   /** Last persisted content signature per row, keyed `table:id`. */
   private readonly shadow = new Map<string, string>();
+  /** True when `hydrate()` adopted a persisted snapshot (so the fixtures it
+   *  already contains must not be posted a second time). */
+  private restored = false;
   /** False until the seed/restored rows have been attributed once. */
   private attributed = false;
 
@@ -203,6 +260,10 @@ export class DataService {
     orders: Order[];
     items: Record<string, Item[]>;
     movements: Movement[];
+    /** What was ordered from suppliers (no copy of what arrived — see models). */
+    purchaseOrders: PurchaseOrder[];
+    /** Posted goods receipts: the documents that created the stock. */
+    receipts: Receipt[];
     inspections: Inspection[];
     workOrders: WorkOrder[];
     timesheets: Timesheet[];
@@ -230,6 +291,9 @@ export class DataService {
      *  derived from the unit's own seeded placement, which exists only once
      *  `items` above has been initialised. */
     movements: [],
+    purchaseOrders: this.seedPurchaseOrders(),
+    /** Posted by `seedReceipts()` in the constructor (see below). */
+    receipts: [],
     inspections: this.seedInspections(),
     workOrders: this.seedWorkOrders(),
     timesheets: this.seedTimesheets(),
@@ -243,10 +307,23 @@ export class DataService {
     // The chain-of-custody seed is derived from the units it moved, so it runs
     // once `items` exists (see the `movements` field above).
     this.db.movements = this.seedMovements();
+    // Restore before posting anything: the seed's receipts write through
+    // `save()`, which would otherwise land on top of the snapshot `hydrate()`
+    // still has to read (and would make an old-schema snapshot look current).
     this.hydrate();
+    const seeded = !this.restored;
+    // Receipts are *posted*, not hand-written: the fixture runs the same
+    // operation the Purchasing page runs, so the seed cannot describe stock the
+    // ledger doesn't have (or a PO whose lines disagree with what arrived). A
+    // restored snapshot already contains them — posting twice would land the
+    // stock twice.
+    if (seeded) this.seedReceipts();
     // Attribute the rows we start with (and remember them), so the first write
     // of the session is diffed against a known baseline.
     this.attributeSeed();
+    // The fixture posting above persisted on its way in; write once more now
+    // that every row carries its tenant/author stamps.
+    if (seeded) this.save();
   }
 
   /* ----------------------------- persistence ---------------------------- */
@@ -257,6 +334,7 @@ export class DataService {
       const raw = localStorage.getItem(this.KEY);
       const snap = raw ? JSON.parse(raw) : null;
       if (snap && snap._v === this.VERSION) {
+        this.restored = true;
         if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
         if (Array.isArray(snap.settings?.locations)) this.db.settings.locations = snap.settings.locations;
         if (Array.isArray(snap.settings?.locationTypes)) this.db.settings.locationTypes = snap.settings.locationTypes;
@@ -268,6 +346,8 @@ export class DataService {
         if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
         if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
         if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
+        if (Array.isArray(snap.purchaseOrders)) this.db.purchaseOrders = snap.purchaseOrders;
+        if (Array.isArray(snap.receipts)) this.db.receipts = snap.receipts;
         if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
         if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
         if (Array.isArray(snap.timesheets)) this.db.timesheets = snap.timesheets;
@@ -334,6 +414,8 @@ export class DataService {
           orders: this.db.orders,
           items: this.db.items,
           movements: this.db.movements,
+          purchaseOrders: this.db.purchaseOrders,
+          receipts: this.db.receipts,
           inspections: this.db.inspections,
           workOrders: this.db.workOrders,
           timesheets: this.db.timesheets,
@@ -386,6 +468,8 @@ export class DataService {
     add('parties', this.db.parties);
     add('orders', this.db.orders);
     add('movements', this.db.movements);
+    add('purchaseOrders', this.db.purchaseOrders);
+    add('receipts', this.db.receipts);
     add('inspections', this.db.inspections);
     add('workOrders', this.db.workOrders);
     add('timesheets', this.db.timesheets);
@@ -490,16 +574,35 @@ export class DataService {
 
   /* ------------------------------- parties ------------------------------ */
 
+  /**
+   * Counterparties by role (`Party.kinds`). Orders pick customers, purchase
+   * orders pick suppliers, and both read the same table, so a partner that is
+   * both shows up in each list without a duplicate row.
+   */
   listParties(): Party[] {
     return [...this.db.parties];
+  }
+
+  customerParties(): Party[] {
+    return this.db.parties.filter((p) => !p.kinds || p.kinds.includes('customer'));
+  }
+
+  supplierParties(): Party[] {
+    return this.db.parties.filter((p) => (p.kinds ?? []).includes('supplier'));
+  }
+
+  /** Roles of a party as text — a grid cell / record-view field. */
+  partyKindLabel(p: Party): string {
+    const kinds = p.kinds ?? [];
+    return kinds.length ? kinds.map((k) => PARTY_KIND_LABEL[k]).join(' · ') : PARTY_KIND_LABEL.customer;
   }
 
   getParty(id: string): Party | undefined {
     return this.db.parties.find((p) => p.id === id);
   }
 
-  createParty(data: Omit<Party, 'id' | 'active'>): Party {
-    const rec: Party = { ...data, id: this.nextPartyId(), active: true };
+  createParty(data: Omit<Party, 'id'> & { active?: boolean }): Party {
+    const rec: Party = { ...data, id: this.nextPartyId(), active: data.active !== false };
     this.db.parties.push(rec);
     this.save();
     return rec;
@@ -798,9 +901,15 @@ export class DataService {
     return (this.db.items[type] ?? []).find((i) => i.id === id);
   }
 
-  createItem(type: CatalogType, data: Omit<Item, 'type' | 'id'>): Item {
+  /** Create a catalog row (no persist) — `createItem` and receipts share it. */
+  private addItemRow(type: CatalogType, data: Omit<Item, 'type' | 'id'>): Item {
     const rec: Item = { ...data, type, id: this.nextItemId(type) };
     (this.db.items[type] ??= []).push(rec);
+    return rec;
+  }
+
+  createItem(type: CatalogType, data: Omit<Item, 'type' | 'id'>): Item {
+    const rec = this.addItemRow(type, data);
     this.save();
     return rec;
   }
@@ -1299,16 +1408,19 @@ export class DataService {
    *   that place *becomes* the unit's placement — a return is a re-homing, and
    *   the shelf and the ledger must not disagree about where it is.
    */
-  logMovement(input: {
-    type: CatalogType;
-    refId: string;
-    kind: MovementKind;
-    qty: number;
-    orderId?: string | null;
-    party?: string;
-    locationId?: string;
-    note?: string;
-  }): Movement {
+  logMovement(input: MovementInput): Movement {
+    const rec = this.appendMovement(input);
+    this.applyCustody(rec);
+    this.save();
+    return rec;
+  }
+
+  /**
+   * Shape a movement and push it without persisting — the one place a ledger row
+   * is built, so `logMovement` and the receipt posting can't drift apart (a
+   * posting writes several movements and persists once).
+   */
+  private appendMovement(input: MovementInput): Movement {
     const item = this.getItem(input.type, input.refId);
     const rec: Movement = {
       id: this.nextMovementId(),
@@ -1319,21 +1431,33 @@ export class DataService {
       orderId: input.orderId ?? null,
       party: input.party ?? '',
       locationId: input.locationId || item?.locationId || undefined,
-      at: new Date().toISOString(),
-      byUserId: this.sessionUserId(),
+      receiptId: input.receiptId ?? null,
+      at: input.at ?? new Date().toISOString(),
+      byUserId: input.byUserId ?? this.sessionUserId(),
       note: input.note ?? '',
     };
     this.db.movements.push(rec);
-    // Serialized items are whole-unit custody: an issue rents it out, a return frees it.
-    if (input.type === 'serialized' && item) {
-      item.status = input.kind === 'issue' ? 'On Rent' : 'Available';
-      item.orderId = input.kind === 'issue' ? (input.orderId ?? null) : null;
-      // A return puts the unit back somewhere — the place that was chosen, which
-      // is also the place this movement is logged at.
-      if (input.kind === 'return' && rec.locationId) item.locationId = rec.locationId;
-    }
-    this.save();
     return rec;
+  }
+
+  /**
+   * Custody follows the ledger for serialized units only: an issue rents a unit
+   * out, a return frees it and re-places it. The other kinds (receive, transfer,
+   * adjust) record a fact about stock without moving custody — a receipt creates
+   * its units already `Available`, so it has nothing to flip.
+   */
+  private applyCustody(rec: Movement): void {
+    if (rec.type !== 'serialized') return;
+    const item = this.getItem('serialized', rec.refId);
+    if (!item) return;
+    if (rec.kind === 'issue') {
+      item.status = 'On Rent';
+      item.orderId = rec.orderId ?? null;
+    } else if (rec.kind === 'return') {
+      item.status = 'Available';
+      item.orderId = null;
+      if (rec.locationId) item.locationId = rec.locationId;
+    }
   }
 
   /** Latest movement for a serialized asset (prototype `hoLatest`). */
@@ -1373,6 +1497,339 @@ export class DataService {
       if (!Number.isNaN(n) && n > max) max = n;
     }
     return 'MV-' + String(max + 1).padStart(3, '0');
+  }
+
+  /* ----------------------------- purchasing ----------------------------- */
+  /*
+   * The buying side of the spine: **suppliers are parties** (`Party.kinds`, see
+   * `supplierParties()`), a purchase order is what was *ordered*, and a
+   * **receipt** is the document that makes stock exist.
+   *
+   * Three rules, all deliberate:
+   *
+   * 1. A PO stores no copy of what arrived. `poLineReceived()` sums the
+   *    receipts, so an order cannot claim stock the ledger doesn't have.
+   * 2. A receipt lands real rows: it tops an existing SKU up (moving-average
+   *    cost) or creates one row per serialized unit, always at a location FK,
+   *    and logs one `receive` movement per landed row.
+   * 3. A posted receipt is immutable (no update, no remove): it moved quantities
+   *    and placed stock, so it is append-only like a movement.
+   */
+
+  listPurchaseOrders(): PurchaseOrder[] {
+    return [...this.db.purchaseOrders].sort((a, b) => (a.orderedAt < b.orderedAt ? 1 : -1));
+  }
+
+  getPurchaseOrder(id: string): PurchaseOrder | undefined {
+    return this.db.purchaseOrders.find((p) => p.id === id);
+  }
+
+  /** The ids `createPurchaseOrder` / `receiveAgainst` will assign next. */
+  previewPurchaseOrderId(): string {
+    return this.nextPurchaseOrderId();
+  }
+
+  previewReceiptId(): string {
+    return this.nextReceiptId();
+  }
+
+  createPurchaseOrder(data: Omit<PurchaseOrder, 'id'>): PurchaseOrder {
+    const rec = this.normalizePurchaseOrder({ ...data, id: this.nextPurchaseOrderId() });
+    this.db.purchaseOrders.push(rec);
+    this.save();
+    return rec;
+  }
+
+  /**
+   * Patch a PO. Stock that already arrived wins over an edit: a line that has
+   * received quantity cannot be dropped or shrunk below what came in (the
+   * receipt, not the order, is the record of that stock), and a PO that has
+   * delivered cannot be cancelled. The order's *lifecycle* status stays the
+   * chooser's; progress is always derived (see `poProgress`).
+   */
+  updatePurchaseOrder(id: string, patch: Partial<PurchaseOrder>): boolean {
+    const po = this.getPurchaseOrder(id);
+    if (!po) return false;
+    const next = this.normalizePurchaseOrder({ ...po, ...patch, id: po.id });
+    if (patch.lines) {
+      const arrived = new Map(next.lines.map((l) => [l.id, this.poLineReceived(l.id)]));
+      next.lines = next.lines.map((l) => ({ ...l, qty: Math.max(l.qty, arrived.get(l.id) ?? 0) }));
+      for (const before of po.lines) {
+        if (this.poLineReceived(before.id) > 0 && !next.lines.some((l) => l.id === before.id)) {
+          next.lines.push(before); // a delivered line can't be deleted
+        }
+      }
+    }
+    if (patch.status === 'cancelled' && this.poProgress(po) !== 'none') next.status = po.status;
+    Object.assign(po, next);
+    this.save();
+    return true;
+  }
+
+  /** Why a PO can't be removed right now (empty when it can) — grid tooltip. */
+  purchaseOrderRemovalBlockers(id: string): string[] {
+    const receipts = this.db.receipts.filter((r) => r.poId === id).length;
+    return receipts > 0 ? [`${receipts} receipt(s) posted against it`] : [];
+  }
+
+  /** Remove a PO. Refused while a receipt points at it (append-only history). */
+  removePurchaseOrder(id: string): boolean {
+    const i = this.db.purchaseOrders.findIndex((p) => p.id === id);
+    if (i < 0 || this.purchaseOrderRemovalBlockers(id).length > 0) return false;
+    this.db.purchaseOrders.splice(i, 1);
+    this.save();
+    return true;
+  }
+
+  /** Ordered value of a PO (what the paperwork says it will cost). */
+  poValue(po: PurchaseOrder): number {
+    return round2(po.lines.reduce((sum, l) => sum + l.qty * l.unitCost, 0));
+  }
+
+  /** Value of what has actually been received so far. */
+  poReceivedValue(po: PurchaseOrder): number {
+    return round2(po.lines.reduce((sum, l) => sum + this.poLineReceived(l.id) * l.unitCost, 0));
+  }
+
+  /** How much of one line has arrived — summed from the receipts, not stored. */
+  poLineReceived(poLineId: string): number {
+    let sum = 0;
+    for (const r of this.db.receipts) {
+      for (const l of r.lines) if (l.poLineId === poLineId) sum += l.qty;
+    }
+    return sum;
+  }
+
+  /** Still to arrive on a line (never negative). */
+  poLineOutstanding(line: PurchaseOrderLine): number {
+    return Math.max(0, line.qty - this.poLineReceived(line.id));
+  }
+
+  /** Delivery progress across the PO — derived, so it can't drift from receipts. */
+  poProgress(po: PurchaseOrder): PurchaseProgress {
+    if (!po.lines.length) return 'none';
+    const arrived = po.lines.map((l) => this.poLineReceived(l.id));
+    if (arrived.every((n, i) => n >= po.lines[i].qty)) return 'received';
+    return arrived.some((n) => n > 0) ? 'partial' : 'none';
+  }
+
+  /** What the grid shows: the lifecycle status unless the receipts say more. */
+  poStatusLabel(po: PurchaseOrder): string {
+    if (po.status === 'draft') return PO_STATUS_LABEL.draft;
+    if (po.status === 'cancelled') return PO_STATUS_LABEL.cancelled;
+    return PO_PROGRESS_LABEL[this.poProgress(po)];
+  }
+
+  /** Badge class for the status above (the shared `st-*` vocabulary). */
+  poStatusClass(po: PurchaseOrder): string {
+    if (po.status === 'draft') return 'st-closed';
+    if (po.status === 'cancelled') return 'st-out';
+    return { none: 'st-on', partial: 'st-reorder', received: 'st-available' }[this.poProgress(po)];
+  }
+
+  /** Lines that still have stock to come (the receiving editor's rows). */
+  receivableLines(po: PurchaseOrder): { line: PurchaseOrderLine; outstanding: number }[] {
+    return po.lines
+      .map((line) => ({ line, outstanding: this.poLineOutstanding(line) }))
+      .filter((r) => r.outstanding > 0);
+  }
+
+  /** Purchase orders placed with a supplier (grid counts / record views). */
+  supplierOrderCount(supplierId: string): number {
+    return this.db.purchaseOrders.filter((p) => p.supplierId === supplierId).length;
+  }
+
+  /** Open POs with a supplier: ordered, and not fully delivered. */
+  supplierOpenOrderCount(supplierId: string): number {
+    return this.db.purchaseOrders.filter(
+      (p) => p.supplierId === supplierId && p.status === 'ordered' && this.poProgress(p) !== 'received',
+    ).length;
+  }
+
+  /* ------------------------------- receipts ------------------------------ */
+
+  listReceipts(): Receipt[] {
+    return [...this.db.receipts].sort((a, b) => (a.at < b.at ? 1 : -1));
+  }
+
+  getReceipt(id: string): Receipt | undefined {
+    return this.db.receipts.find((r) => r.id === id);
+  }
+
+  /** How many items one receipt landed (grid cell). */
+  receiptQty(r: Receipt): number {
+    return r.lines.reduce((sum, l) => sum + l.qty, 0);
+  }
+
+  /** What the receipt is worth at the ordered cost (grid cell). */
+  receiptValue(r: Receipt): number {
+    return round2(r.lines.reduce((sum, l) => sum + l.qty * l.unitCost, 0));
+  }
+
+  /** Receipts put away at a location — the buying side of the location spine. */
+  receiptsAtLocation(locationId: string, subtree = false): Receipt[] {
+    const ids = subtree ? this.locationSubtreeIds(locationId) : new Set<string>([locationId]);
+    return this.db.receipts.filter((r) => ids.has(r.locationId));
+  }
+
+  /**
+   * Post a goods receipt — the operation that makes stock exist.
+   *
+   * Refused (returns `null`, writing nothing) when the order is a draft or
+   * cancelled, the destination isn't a real location, nothing positive was asked
+   * for, or a line would receive more than is outstanding: an order can't
+   * deliver more than it ordered, and a half-applied receipt would be worse than
+   * none.
+   *
+   * On success it writes, in one persisted save:
+   *   - the receipt row (one line per landed *row* — see `landStock`);
+   *   - the stock itself: rows topped up / units created, placed at the
+   *     destination with their cost updated;
+   *   - one `receive` movement per landed row, carrying `receiptId`.
+   *
+   * `at` / `byUserId` are the API's request context; the seed passes both so a
+   * fixture doesn't move with the clock or with whoever is signed in.
+   */
+  receiveAgainst(input: ReceiveInput): Receipt | null {
+    const po = this.getPurchaseOrder(input.poId);
+    if (!po || po.status === 'draft' || po.status === 'cancelled') return null;
+    if (!this.getLocation(input.locationId)) return null;
+    const wanted: { line: PurchaseOrderLine; qty: number }[] = [];
+    for (const line of po.lines) {
+      const qty = Math.floor(Number(input.qty[line.id] ?? 0));
+      if (qty <= 0) continue;
+      if (qty > this.poLineOutstanding(line)) return null;
+      wanted.push({ line, qty });
+    }
+    if (!wanted.length) return null;
+
+    const rec: Receipt = {
+      id: this.nextReceiptId(),
+      poId: po.id,
+      supplierId: po.supplierId,
+      locationId: input.locationId,
+      at: input.at ?? new Date().toISOString(),
+      note: input.note ?? '',
+      lines: [],
+    };
+    this.db.receipts.push(rec);
+    const by = input.byUserId ?? this.sessionUserId();
+    for (const { line, qty } of wanted) {
+      for (const landed of this.landStock(line, qty, input.locationId)) {
+        rec.lines.push({
+          id: `${rec.id}-${rec.lines.length + 1}`,
+          poLineId: line.id,
+          type: line.type,
+          refId: landed.refId,
+          qty: landed.qty,
+          unitCost: line.unitCost,
+        });
+        this.appendMovement({
+          type: line.type,
+          refId: landed.refId,
+          kind: 'receive',
+          qty: landed.qty,
+          party: this.partyName(po.supplierId),
+          locationId: input.locationId,
+          receiptId: rec.id,
+          byUserId: by,
+          at: rec.at,
+          note: `Received against ${po.id}`,
+        });
+      }
+    }
+    this.save();
+    return rec;
+  }
+
+  /**
+   * Land one ordered line at a location: the rows that exist afterwards.
+   *
+   * - **Serialized**: one row per unit, created here at the ordered cost and
+   *   billable rate. The count of rows *is* the stock, so a receipt can never
+   *   leave a quantity lying about a machine that isn't there.
+   * - **Everything else** (bulk, consumable, part, kit, attachment): the catalog
+   *   row is topped up, its cost becomes a moving average, and it is placed at
+   *   the destination — stock that arrived is stock that is *there*.
+   */
+  private landStock(line: PurchaseOrderLine, qty: number, locationId: string): ReceiptLine[] {
+    const catalog = line.refId ? this.getItem(line.type, line.refId) : undefined;
+    if (isUnitStock(line.type)) {
+      const out: ReceiptLine[] = [];
+      for (let i = 0; i < qty; i++) {
+        const unit = this.addItemRow(line.type, {
+          name: line.description || catalog?.name || line.type,
+          category: catalog?.category ?? '',
+          status: 'Available',
+          qty: 1,
+          rateDaily: line.rateDaily ?? catalog?.rateDaily ?? 0,
+          purchaseValue: line.unitCost,
+          costPrice: line.unitCost,
+          locationId,
+          active: true,
+        });
+        out.push({ id: '', poLineId: line.id, type: line.type, refId: unit.id, qty: 1, unitCost: line.unitCost });
+      }
+      return out;
+    }
+    if (!catalog) return [];
+    const onHand = catalog.qtyOnHand ?? catalog.qty ?? catalog.qtyAvailable ?? 0;
+    catalog.costPrice = movingCost(onHand, catalog.costPrice, qty, line.unitCost);
+    if (catalog.type === 'bulk') {
+      catalog.totalOwned = (catalog.totalOwned ?? 0) + qty;
+      catalog.qtyAvailable = (catalog.qtyAvailable ?? 0) + qty;
+      catalog.qty = catalog.qtyAvailable;
+    } else {
+      catalog.qtyOnHand = onHand + qty;
+      catalog.qty = catalog.qtyOnHand;
+    }
+    catalog.locationId = locationId;
+    if (catalog.status === 'Low' && !needsReorder(catalog)) catalog.status = 'In Stock';
+    return [{ id: '', poLineId: line.id, type: line.type, refId: catalog.id, qty, unitCost: line.unitCost }];
+  }
+
+  /** Normalise a PO on its way into the store: line ids, numbers, descriptions. */
+  private normalizePurchaseOrder(po: PurchaseOrder): PurchaseOrder {
+    const lines = po.lines.filter((l) => !!l.type && (!!l.refId || !!(l.description ?? '').trim()));
+    const seen = new Set<string>();
+    let seq = 0;
+    for (const l of lines) {
+      const m = l.id && l.id.match(/-(\d+)$/);
+      if (m) seq = Math.max(seq, Number(m[1]));
+    }
+    po.lines = lines.map((l) => {
+      const id = l.id && !seen.has(l.id) ? l.id : `${po.id}-${++seq}`;
+      seen.add(id);
+      return {
+        ...l,
+        id,
+        description: (l.description ?? '').trim() || this.getItem(l.type, l.refId ?? '')?.name || l.refId || '',
+        qty: Math.max(1, Math.floor(Number(l.qty) || 1)),
+        unitCost: round2(Number(l.unitCost) || 0),
+        rateDaily: l.rateDaily == null ? undefined : round2(Number(l.rateDaily) || 0),
+      };
+    });
+    return po;
+  }
+
+  private nextPurchaseOrderId(): string {
+    const year = new Date().getFullYear();
+    return `PO-${year}-${pad3(this.maxIdSequence(this.db.purchaseOrders, /^PO-\d{4}-(\d+)$/) + 1)}`;
+  }
+
+  private nextReceiptId(): string {
+    const year = new Date().getFullYear();
+    return `RC-${year}-${pad3(this.maxIdSequence(this.db.receipts, /^RC-\d{4}-(\d+)$/) + 1)}`;
+  }
+
+  /** Highest numeric suffix in a table whose ids end `-<n>` (id generators). */
+  private maxIdSequence(rows: { id: string }[], pattern: RegExp): number {
+    let max = 0;
+    for (const r of rows) {
+      const m = r.id.match(pattern);
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    return max;
   }
 
   /* ---------------------------- inspections ----------------------------- */
@@ -2225,6 +2682,62 @@ export class DataService {
         notes: 'Small jobs; no active orders.',
         active: true,
       },
+      /*
+       * Suppliers are the same kind of row as a customer — one partner table
+       * with roles on the row (`Party.kinds`) — so the buying side has a FK to
+       * point at from the day it exists: a purchase order names a *party*, not
+       * the vendor string the prototype's sub-rentals carried. A row seeded
+       * without `kinds` is a customer (every pre-A5 row), which is why only the
+       * suppliers below spell it out.
+       */
+      {
+        id: 'PTY-006',
+        name: 'United Rentals — Southeast',
+        contact: 'D. Whitfield',
+        phone: '(404) 555-0210',
+        email: 'orders@ur-southeast.com',
+        billingAddress: '4400 Buford Hwy, Norcross, GA',
+        billingCycle: 'net-30',
+        kinds: ['supplier'],
+        notes: 'Equipment purchases; fleet pricing.',
+        active: true,
+      },
+      {
+        id: 'PTY-007',
+        name: 'Fastenal Industrial Supply',
+        contact: 'Inside Sales',
+        phone: '(770) 555-0188',
+        email: 'atlanta@fastenal.com',
+        billingAddress: '2100 Industrial Blvd, Atlanta, GA',
+        billingCycle: 'net-30',
+        kinds: ['supplier'],
+        notes: 'Filters, hoses, hardware; weekly van stock.',
+        active: true,
+      },
+      {
+        id: 'PTY-008',
+        name: 'Wacker Neuson Southeast',
+        contact: 'P. Adeyemi',
+        phone: '(678) 555-0133',
+        email: 'sales@wackerneuson-se.com',
+        billingAddress: '900 Commerce Dr, McDonough, GA',
+        billingCycle: 'net-45',
+        kinds: ['supplier'],
+        notes: 'OEM dealer: compact equipment and OEM parts.',
+        active: true,
+      },
+      {
+        id: 'PTY-009',
+        name: 'SafetyMart Direct',
+        contact: 'R. Ivey',
+        phone: '(800) 555-0142',
+        email: 'orders@safetymartdirect.com',
+        billingAddress: '77 Distribution Ct, Savannah, GA',
+        billingCycle: 'prepaid',
+        kinds: ['supplier'],
+        notes: 'PPE consumables; prepaid card on file.',
+        active: true,
+      },
     ];
   }
 
@@ -2568,6 +3081,96 @@ export class DataService {
       if (found?.locationId) return found.locationId;
     }
     return YARD_STAGING;
+  }
+
+  /**
+   * Purchase-order seed — one PO per state the page has to render: an order still
+   * waiting, one delivered in full, and one part-delivered. The last two become
+   * delivered/partial by *posting* the receipts below, not by being written that
+   * way: there is no stored "received" column to seed (see `poProgress`).
+   */
+  private seedPurchaseOrders(): PurchaseOrder[] {
+    return [
+      {
+        id: 'PO-2026-001',
+        supplierId: 'PTY-007',
+        status: 'ordered',
+        orderedAt: '2026-09-04',
+        expectedAt: '2026-09-12',
+        reference: 'FAS-88214',
+        notes: 'Monthly filter and hose restock.',
+        lines: [
+          { id: 'PO-2026-001-1', type: 'part', refId: 'PRT-001', description: 'Hydraulic Filter 40um', qty: 12, unitCost: 17.25 },
+          { id: 'PO-2026-001-2', type: 'part', refId: 'PRT-002', description: 'Air Filter Element', qty: 6, unitCost: 20.4 },
+        ],
+      },
+      {
+        id: 'PO-2026-002',
+        supplierId: 'PTY-006',
+        status: 'ordered',
+        orderedAt: '2026-08-18',
+        expectedAt: '2026-08-28',
+        reference: 'UR-PO-55901',
+        notes: 'Two compact loaders for the Riverside Bridge job.',
+        lines: [
+          {
+            id: 'PO-2026-002-1',
+            type: 'serialized',
+            description: 'CAT 259D3 Compact Track Loader',
+            qty: 2,
+            unitCost: 78500,
+            rateDaily: 385,
+          },
+          { id: 'PO-2026-002-2', type: 'attachment', refId: 'ACC-002', description: '36" Ditch Bucket', qty: 2, unitCost: 41 },
+        ],
+      },
+      {
+        id: 'PO-2026-003',
+        supplierId: 'PTY-008',
+        status: 'ordered',
+        orderedAt: '2026-09-02',
+        expectedAt: '2026-09-15',
+        reference: 'WN-Q-33120',
+        notes: 'Excavator plus OEM hose stock.',
+        lines: [
+          {
+            id: 'PO-2026-003-1',
+            type: 'serialized',
+            description: 'Wacker Neuson ET42 Mini Excavator',
+            qty: 1,
+            unitCost: 62000,
+            rateDaily: 320,
+          },
+          { id: 'PO-2026-003-2', type: 'part', refId: 'PRT-005', description: 'Hydraulic Hose 1in x 6ft', qty: 12, unitCost: 33.5 },
+        ],
+      },
+    ];
+  }
+
+  /**
+   * Post the fixture receipts through the *same* path the page uses, with the
+   * clock and the actor pinned: a fixture that ran `receiveAgainst` at seed time
+   * can't describe stock the store doesn't have. By the time the app renders,
+   * PO-2026-002 is delivered, PO-2026-003 is partial, and the units those
+   * receipts landed are real rows in the catalog.
+   */
+  private seedReceipts(): void {
+    this.receiveAgainst({
+      poId: 'PO-2026-002',
+      locationId: YARD_STAGING,
+      qty: { 'PO-2026-002-1': 2, 'PO-2026-002-2': 2 },
+      note: 'Delivered on the lowboy; unloaded at Yard A.',
+      at: '2026-08-28T09:20:00',
+      byUserId: DEMO_OWNER_ID,
+    });
+    this.receiveAgainst({
+      poId: 'PO-2026-003',
+      locationId: 'LOC-19', // Bay C-04: the bin the hose stock already lives in
+      qty: { 'PO-2026-003-2': 4 }, // 4 of 12 — the excavator hasn't landed
+      note: 'Partial delivery: hose stock only.',
+      at: '2026-09-08T14:05:00',
+      byUserId: DEMO_OWNER_ID,
+    });
   }
 
   /**
