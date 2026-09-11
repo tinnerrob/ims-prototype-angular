@@ -161,7 +161,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 6;
+  private readonly VERSION = 7;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -226,7 +226,10 @@ export class DataService {
     parties: this.seedParties(),
     orders: this.seedOrders(),
     items: this.seedItems(),
-    movements: this.seedMovements(),
+    /** Filled by `seedMovements()` in the constructor — a movement's place is
+     *  derived from the unit's own seeded placement, which exists only once
+     *  `items` above has been initialised. */
+    movements: [],
     inspections: this.seedInspections(),
     workOrders: this.seedWorkOrders(),
     timesheets: this.seedTimesheets(),
@@ -237,6 +240,9 @@ export class DataService {
   };
 
   constructor() {
+    // The chain-of-custody seed is derived from the units it moved, so it runs
+    // once `items` exists (see the `movements` field above).
+    this.db.movements = this.seedMovements();
     this.hydrate();
     // Attribute the rows we start with (and remember them), so the first write
     // of the session is diffed against a known baseline.
@@ -1028,11 +1034,31 @@ export class DataService {
   }
 
   /**
-   * Remove a location. Refused (`false`) while stock is stored *at* it: those
-   * items point at this row, and clearing or re-pointing them silently is a data
-   * decision the grid must not take on the user's behalf — the same rule
-   * `removeLocationType` applies while a type is in use. Callers disable the
-   * action or abort on `false`.
+   * Why a location cannot be removed right now — empty when it can. The grid
+   * asks this for the button's tooltip and `removeLocation` asks it before
+   * acting, so the message and the guard can never disagree. Both reasons are
+   * "a stored FK points at this row and only a person can decide what to do
+   * about it".
+   */
+  locationRemovalBlockers(id: string): string[] {
+    const out: string[] = [];
+    const items = this.locationItemCount(id);
+    if (items > 0) out.push(`${items} item(s) stored here`);
+    const moves = this.locationMovementCount(id);
+    // History is append-only: a logged movement can never be re-pointed at
+    // another location, so a place the ledger mentions has to stay (deactivate
+    // it instead if the yard is closing).
+    if (moves > 0) out.push(`${moves} movement(s) logged here`);
+    return out;
+  }
+
+  /**
+   * Remove a location. Refused (`false`) while stock is stored *at* it or the
+   * ledger records a movement there: those rows point at this row, and clearing
+   * or re-pointing them silently is a data decision the grid must not take on
+   * the user's behalf — the same rule `removeLocationType` applies while a type
+   * is in use. Callers disable the action (see `locationRemovalBlockers`) or
+   * abort on `false`.
    *
    * On success its children are re-parented to the removed node's own parent
    * (move up one level) so the hierarchy stays intact and nothing is orphaned —
@@ -1042,7 +1068,7 @@ export class DataService {
   removeLocation(id: string): boolean {
     const i = this.db.settings.locations.findIndex((x) => x.id === id);
     if (i < 0) return false;
-    if (this.locationItemCount(id) > 0) return false;
+    if (this.locationRemovalBlockers(id).length > 0) return false;
     const [removed] = this.db.settings.locations.splice(i, 1);
     const up = removed.parentId ?? null;
     for (const child of this.db.settings.locations) {
@@ -1179,6 +1205,34 @@ export class DataService {
     return this.itemsAtLocation(id, true).length;
   }
 
+  /* ------------------------ placement (movements) ------------------------ */
+  /*
+   * The ledger's place is the same FK as the shelf's (`Movement.locationId`), so
+   * the two can be joined: "what is here?" reads the units, "what happened here?"
+   * reads the log. A movement is a *past* fact, so it never moves with a unit —
+   * that is what makes the log immutable.
+   */
+
+  /**
+   * Movements recorded at a location. `subtree` is the default here (unlike the
+   * item reader), because a movement is logged at the *node* it happened at
+   * rather than at a shelf: asking about a yard means asking about its zones.
+   */
+  movementsAtLocation(locationId: string, subtree = true): Movement[] {
+    const ids = subtree ? this.locationSubtreeIds(locationId) : new Set<string>([locationId]);
+    return this.db.movements.filter((m) => !!m.locationId && ids.has(m.locationId));
+  }
+
+  /** Movements logged *at* this node — the number that blocks its removal. */
+  locationMovementCount(id: string): number {
+    return this.movementsAtLocation(id, false).length;
+  }
+
+  /** Movements at this node or anywhere under it (Locations grid and tips). */
+  locationSubtreeMovementCount(id: string): number {
+    return this.movementsAtLocation(id, true).length;
+  }
+
   /* --------------------------- location types --------------------------- */
 
   /** All location types (Locations → Location Types grid). */
@@ -1233,7 +1287,18 @@ export class DataService {
     return [...this.db.movements].sort((a, b) => (a.at < b.at ? 1 : -1));
   }
 
-  /** Append an immutable movement + (for serialized items) flip custody status. */
+  /**
+   * Append an immutable movement + (for serialized items) flip custody status.
+   *
+   * The movement's *place* is resolved here, once, so no caller can log a
+   * movement at a location the unit was never at:
+   *
+   * - an **issue** leaves from where the unit sits (its own `locationId`) unless
+   *   the caller knows better;
+   * - a **return** comes back to the place the caller picked (`locationId`), and
+   *   that place *becomes* the unit's placement — a return is a re-homing, and
+   *   the shelf and the ledger must not disagree about where it is.
+   */
   logMovement(input: {
     type: CatalogType;
     refId: string;
@@ -1241,8 +1306,10 @@ export class DataService {
     qty: number;
     orderId?: string | null;
     party?: string;
+    locationId?: string;
     note?: string;
   }): Movement {
+    const item = this.getItem(input.type, input.refId);
     const rec: Movement = {
       id: this.nextMovementId(),
       type: input.type,
@@ -1251,18 +1318,19 @@ export class DataService {
       qty: input.qty,
       orderId: input.orderId ?? null,
       party: input.party ?? '',
+      locationId: input.locationId || item?.locationId || undefined,
       at: new Date().toISOString(),
       byUserId: this.sessionUserId(),
       note: input.note ?? '',
     };
     this.db.movements.push(rec);
     // Serialized items are whole-unit custody: an issue rents it out, a return frees it.
-    if (input.type === 'serialized') {
-      const it = this.getItem('serialized', input.refId);
-      if (it) {
-        it.status = input.kind === 'issue' ? 'On Rent' : 'Available';
-        it.orderId = input.kind === 'issue' ? (input.orderId ?? null) : null;
-      }
+    if (input.type === 'serialized' && item) {
+      item.status = input.kind === 'issue' ? 'On Rent' : 'Available';
+      item.orderId = input.kind === 'issue' ? (input.orderId ?? null) : null;
+      // A return puts the unit back somewhere — the place that was chosen, which
+      // is also the place this movement is logged at.
+      if (input.kind === 'return' && rec.locationId) item.locationId = rec.locationId;
     }
     this.save();
     return rec;
@@ -2461,7 +2529,14 @@ export class DataService {
   }
 
 
-  /** Append-only chain-of-custody seed (prototype `IMS.movements`). */
+  /**
+   * Append-only chain-of-custody seed (prototype `IMS.movements`).
+   *
+   * Each row's `locationId` is *the place the unit left from* — its own seeded
+   * placement — rather than a label repeated per row, so the ledger and the
+   * shelf can't disagree from the first record. It runs from the constructor
+   * (the `movements` field above is empty) because that lookup needs `items`.
+   */
   private seedMovements(): Movement[] {
     // item, order, customer contact, handled by (user id), at, note
     const rows: [string, string, string, string, string, string][] = [
@@ -2479,11 +2554,20 @@ export class DataService {
       qty: 1,
       orderId,
       party,
-      location: 'Main Yard — Buckhead Hub',
+      locationId: this.seedPlacement(refId),
       at,
       byUserId,
       note,
     }));
+  }
+
+  /** The seeded placement of one stock row, by id (movement-seed lookup). */
+  private seedPlacement(refId: string): string {
+    for (const rows of Object.values(this.db.items)) {
+      const found = rows.find((r) => r.id === refId);
+      if (found?.locationId) return found.locationId;
+    }
+    return YARD_STAGING;
   }
 
   /**

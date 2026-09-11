@@ -155,6 +155,31 @@ export class LocationsComponent {
     return this.data.locationSubtreeItemCount(id);
   }
 
+  /**
+   * Movements logged *at* this node — the second thing that blocks removal, and
+   * the reason a yard can't be deleted out of an append-only ledger.
+   */
+  movementCount(id: string): number {
+    return this.data.locationMovementCount(id);
+  }
+
+  /** Movements logged at this node or beneath it (the subtree total). */
+  subtreeMovementCount(id: string): number {
+    return this.data.locationSubtreeMovementCount(id);
+  }
+
+  /** Why this location can't be removed (empty when it can) — button tooltip. */
+  removalBlockers(id: string): string[] {
+    return this.data.locationRemovalBlockers(id);
+  }
+
+  /** Remove-tooltip: the blockers, or what happens to the children if there are none. */
+  removeTitle(loc: Location): string {
+    const blockers = this.removalBlockers(loc.id);
+    if (blockers.length) return 'Remove — blocked: ' + blockers.join(' and ');
+    return this.childCount(loc.id) > 0 ? 'Remove — its children move up one level' : 'Remove';
+  }
+
   /** Active location types for the editor (keeps a now-inactive current value). */
   typeOptions(): string[] {
     const active = this.data.activeLocationTypes();
@@ -328,6 +353,16 @@ export class LocationsComponent {
             { label: 'Items In Subtree', value: String(this.subtreeItemCount(loc.id)) },
           ],
         },
+        {
+          // What *happened* here: the ledger's place is the same FK, so the log
+          // reads back per node — "what left this yard?".
+          title: 'Movements Logged',
+          fields: [
+            { label: 'At This Location', value: String(this.movementCount(loc.id)) },
+            { label: 'In Subtree', value: String(this.subtreeMovementCount(loc.id)) },
+            { label: 'Removable', value: this.removalBlockers(loc.id).length ? 'No — ' + this.removalBlockers(loc.id).join(' and ') : 'Yes' },
+          ],
+        },
       ],
     };
   }
@@ -383,6 +418,8 @@ export class LocationsComponent {
       { label: 'Children', value: String(this.childCount(loc.id)) },
       { label: 'Items here', value: String(this.itemCount(loc.id)) },
       { label: 'Items in subtree', value: String(this.subtreeItemCount(loc.id)) },
+      { label: 'Movements here', value: String(this.movementCount(loc.id)) },
+      { label: 'Movements in subtree', value: String(this.subtreeMovementCount(loc.id)) },
       loc.address ? { label: 'Address', value: loc.address } : null,
       loc.phone ? { label: 'Phone', value: loc.phone } : null,
       loc.tz ? { label: 'Time zone', value: loc.tz } : null,

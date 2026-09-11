@@ -42,8 +42,22 @@
 
   <div class="card-body">
     <!-- The search itself is the shell's topbar box (one query for all four
-         tabs), so this row keeps only the record count in its usual place. -->
-    <div class="d-flex align-items-center justify-content-end flex-wrap mb-3 gap-2">
+         tabs), so this row keeps only the record count in its usual place — plus
+         the ledger's own control: which place's movements to read. -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+      @if (tab === 'log') {
+        <div class="d-flex align-items-center gap-2">
+          <label class="text-12 text-muted2 mb-0" for="ho-location-scope">Location</label>
+          <select id="ho-location-scope" class="filter-input location-scope" [(ngModel)]="locationFilter">
+            <option value="">Every location</option>
+            @for (o of locationOptions(); track o.id) {
+              <option [value]="o.id">{{ o.label }}</option>
+            }
+          </select>
+        </div>
+      } @else {
+        <span></span>
+      }
       <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
     </div>
 
@@ -143,7 +157,7 @@
                   <button
                     class="btn btn-ims btn-sm2"
                     type="button"
-                    title="Return this unit to the yard"
+                    title="Check this unit back in — you choose the place it returns to"
                     (click)="openReturn(item.id)"
                   >
                     <i class="bi bi-box-arrow-in-down"></i> Return
@@ -165,7 +179,7 @@
           <thead>
             <tr>
               <th>Movement</th><th>Kind</th><th>Item</th><th>Order / party</th>
-              <th>When</th><th>By</th><th>Note</th>
+              <th>Location</th><th>When</th><th>By</th><th>Note</th>
             </tr>
           </thead>
           <tbody>
@@ -175,12 +189,15 @@
                 <td><span class="badge-status {{ kindClass(m.kind) }}">{{ kindLabel[m.kind] }}</span></td>
                 <td class="strong mono">{{ m.refId }}</td>
                 <td class="text-12">{{ m.orderId || m.party || '—' }}</td>
+                <!-- The place the movement happened, read back through the
+                     hierarchy from its FK — never a stored label. -->
+                <td class="text-12">{{ data.locationPath(m.locationId) }}</td>
                 <td class="mono text-muted2 text-12">{{ data.fmtDT(m.at) }}</td>
                 <td class="text-12">{{ data.userName(m.byUserId) }}</td>
                 <td class="text-muted2 text-12">{{ m.note || '—' }}</td>
               </tr>
             } @empty {
-              <tr><td colspan="7" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
+              <tr><td colspan="8" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
             }
           </tbody>
         </table>
@@ -254,6 +271,23 @@
           </div>
 
           <div class="field-group mt-3">
+            <label class="form-label" for="ho-return-location">Return to *</label>
+            <select id="ho-return-location" class="form-select" [(ngModel)]="returnLocationId">
+              @for (o of locationOptions(); track o.id) {
+                <option [value]="o.id">{{ o.label }}</option>
+              }
+            </select>
+            <div class="form-hint">
+              @if (returnLocationId) {
+                The unit is re-placed here and the movement is logged against it:
+                <strong>{{ data.locationPath(returnLocationId) }}</strong>
+              } @else {
+                Choose where this unit goes back to — a return always re-homes it.
+              }
+            </div>
+          </div>
+
+          <div class="field-group mt-3">
             <label class="form-label">Return condition / note (optional)</label>
             <textarea
               class="form-control"
@@ -264,7 +298,7 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button type="button" class="btn btn-ims" (click)="confirmReturn()">
+          <button type="button" class="btn btn-ims" [disabled]="!returnReady()" (click)="confirmReturn()">
             <i class="bi bi-check2"></i> Confirm Return
           </button>
         </div>

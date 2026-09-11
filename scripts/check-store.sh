@@ -28,4 +28,4 @@ ln -s "$ROOT/node_modules" "$OUT/node_modules"
 cp scripts/runtime-checks/*.mjs "$OUT/"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs

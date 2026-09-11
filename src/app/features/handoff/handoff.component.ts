@@ -72,7 +72,17 @@ export class HandoffComponent {
   returnOpen = false;
   returnAssetId = '';
   returnNote = '';
+  /** Where the unit goes back to — a FK, chosen in the editor. */
+  returnLocationId = '';
   private returnSnap = '';
+
+  /**
+   * Custody-log location scope. The ledger is read *per place* — "what left
+   * Yard A this month?" — so the log offers the same hierarchy every other
+   * picker does, and the choice covers the node's whole subtree (a zone's
+   * movements are yard movements).
+   */
+  locationFilter = '';
 
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
@@ -152,7 +162,8 @@ export class HandoffComponent {
       case 'custody':
         return this.search.isBlank() ? 'Nothing is out right now.' : 'No matching units in custody.';
       default:
-        return this.search.isBlank() ? 'No movements logged yet.' : 'No matching movements.';
+        if (this.search.isBlank() && !this.locationFilter) return 'No movements logged yet.';
+        return `No movements match${this.locationFilter ? ' at ' + this.locationFilterLabel() : ''}.`;
     }
   }
 
@@ -224,22 +235,40 @@ export class HandoffComponent {
     });
   }
 
-  /** Chain-of-custody log, newest first. */
+  /** Chain-of-custody log, newest first.
+   *
+   * Filtered by the page search *and* the location scope: the ledger's place is
+   * a FK, so "what left Yard A this month?" is a subtree test here rather than
+   * relying on the yard's name appearing in a string.
+   */
   movements(): Movement[] {
+    const scope = this.locationFilter ? this.data.locationSubtreeIds(this.locationFilter) : null;
     return this.data
       .listMovements()
-      .filter((m) =>
-        this.matches(
-          m.id,
-          m.refId,
-          this.kindLabel[m.kind],
-          m.orderId,
-          m.party,
-          m.location,
-          m.note,
-          this.data.userName(m.byUserId),
-        ),
+      .filter(
+        (m) =>
+          (!scope || (!!m.locationId && scope.has(m.locationId))) &&
+          this.matches(
+            m.id,
+            m.refId,
+            this.kindLabel[m.kind],
+            m.orderId,
+            m.party,
+            this.data.locationPath(m.locationId),
+            m.note,
+            this.data.userName(m.byUserId),
+          ),
       );
+  }
+
+  /** Location options for this page's pickers (the store's one tree walker). */
+  locationOptions(): { id: string; label: string }[] {
+    return this.data.locationOptions();
+  }
+
+  /** The custody-log scope as a readable path, for the empty-state message. */
+  locationFilterLabel(): string {
+    return this.locationFilter ? this.data.locationPath(this.locationFilter) : 'every location';
   }
 
   /* ------------------------------- badges ------------------------------- */
@@ -281,7 +310,12 @@ export class HandoffComponent {
 
   /* ----------------------------- hand-off ------------------------------- */
 
-  /** Check a unit out to its order and append the custody event. */
+  /** Check a unit out to its order and append the custody event.
+   *
+   * The movement's place isn't asked for: an issue leaves from wherever the unit
+   * sits, and the store resolves that from the unit itself, so the log can't be
+   * told the hand-off happened somewhere the machine never was.
+   */
   checkOut(row: BoardRow): void {
     this.data.logMovement({
       type: 'serialized',
@@ -300,6 +334,10 @@ export class HandoffComponent {
   openReturn(assetId: string): void {
     this.returnAssetId = assetId;
     this.returnNote = '';
+    // A return re-homes the unit, so the editor starts at the place it came
+    // from (its own row) and the user picks a different one if it isn't going
+    // back where it lived.
+    this.returnLocationId = this.data.getItem('serialized', assetId)?.locationId ?? '';
     this.returnSnap = snapshotForm({ note: this.returnNote });
     this.returnOpen = true;
   }
@@ -318,19 +356,36 @@ export class HandoffComponent {
     this.returnOpen = false;
     this.returnAssetId = '';
     this.returnNote = '';
+    this.returnLocationId = '';
   }
 
-  /** Write the return movement and close the editor. */
+  /** A return must say where the unit goes back to. */
+  returnReady(): boolean {
+    return !!this.returnAssetId && !!this.returnLocationId;
+  }
+
+  /** Write the return movement and close the editor.
+   *
+   * The chosen place is both what the movement records and where the unit is
+   * re-placed — one write, so the ledger entry and the unit's own row can never
+   * disagree about where the machine ended up.
+   */
   confirmReturn(): void {
     const assetId = this.returnAssetId;
-    if (!assetId) return;
+    if (!this.returnReady()) return;
     this.data.logMovement({
       type: 'serialized',
       refId: assetId,
       kind: 'return',
       qty: 1,
-      party: 'Main yard',
-      note: this.returnNote.trim() || 'Returned to yard / available.',
+      // The party is *who had it* (the issue's own value), like every other row
+      // in the ledger; the place it went back to is the FK above. A historical
+      // display string no longer stands in for the destination.
+      party: this.returnCustody()?.party ?? '',
+      locationId: this.returnLocationId,
+      note:
+        this.returnNote.trim() ||
+        `Returned to ${this.data.locationLabel(this.returnLocationId)}.`,
     });
     this.closeReturn();
   }
@@ -466,7 +521,9 @@ export class HandoffComponent {
             { label: 'Quantity', value: String(m.qty) },
             { label: 'Order', value: m.orderId || '—', mono: true },
             { label: 'Party', value: m.party || '—' },
-            { label: 'Location', value: m.location || '—' },
+            // The ledger stores the place as a FK; the path is read back through
+            // the same hierarchy the unit's own row points at.
+            { label: 'Location', value: this.data.locationPath(m.locationId) },
             { label: 'Recorded At', value: this.data.fmtDT(m.at), mono: true },
             // The ledger stores the actor's user id, not their name: a rename or a
             // departure must not rewrite who moved what.
@@ -515,7 +572,7 @@ export class HandoffComponent {
       stampISO(m.at),
       m.orderId ? { label: 'Order', value: m.orderId } : null,
       m.party ? { label: 'Party', value: m.party } : null,
-      m.location ? { label: 'Location', value: m.location } : null,
+      m.locationId ? { label: 'Location', value: this.data.locationPath(m.locationId) } : null,
       { label: 'Qty', value: String(m.qty) },
       { label: 'By', value: this.data.userName(m.byUserId) },
       m.note ?? '',

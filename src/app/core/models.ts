@@ -230,8 +230,18 @@ export interface Movement extends AuditFields {
   refId: string;
   orderId?: string | null;
   party?: string;
-  /** Yard / location the movement happened at. */
-  location?: string;
+  /**
+   * Where the movement happened — a FK into `settings.locations`
+   * (`movements.location_id → locations.id`), the same column shape as
+   * `Item.locationId`.
+   *
+   * The ledger is append-only, so a name stored here could never be corrected
+   * when a yard is renamed, and "what left Yard A this month?" is an equality
+   * test rather than a substring search. The movement's *place* is therefore the
+   * same row the unit's own placement points at, and its label is resolved at
+   * read time (`locationPath`).
+   */
+  locationId?: string;
   kind: MovementKind;
   qty: number;
   at: string; // ISO timestamp
