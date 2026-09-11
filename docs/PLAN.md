@@ -472,7 +472,7 @@ Tenant administration is **E**'s.
 | # | Increment | Status |
 |---|---|---|
 | C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `2ffca74` |
-| C1b | The screens depend on the contract: every component, service and helper takes `IMS_API` (typed `ApiAdapter`) instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ✅ `C1b-sha` |
+| C1b | The screens depend on the contract: every component, service and helper takes `IMS_API` (typed `ApiAdapter`) instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ✅ `3439270` |
 | C2 | Commands answer in one shape: a typed result (value or `reason`) replacing the `null`/`false` sentinels, so a screen renders a refusal instead of guessing what `null` meant | ⏳ |
 | C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
 | C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
@@ -549,7 +549,7 @@ proof, since a seam only one implementation ever crosses is a rename. A refusal
 reaches the screen as a reason it prints. Nothing in the client reads `db.session` to
 decide who is writing or which workspace a row is in.
 
-**C1 is complete** (C1a `2ffca74`, C1b `C1b-sha`): the contract exists, the store is its
+**C1 is complete** (C1a `2ffca74`, C1b `3439270`): the contract exists, the store is its
 first implementation, every screen goes through `IMS_API`, and two harnesses plus two
 compile-time assertions hold the line. **C2 is next** — a command's refusal becoming one
 typed result instead of `null`/`false` — and it is the increment that makes "a refusal
