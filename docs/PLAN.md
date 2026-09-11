@@ -34,7 +34,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A2 | Audit trail: `AuditFields` on every table, `Movement.byUserId` FK, attribution in `save()`, seeded rows backfilled, audit block in record views | ✅ `592bc37` |
 | A3 | Item ↔ location spine: seed `locationId`, picker in both item editors, Location column + search, `itemsAtLocation()`, `bin` duplicate resolved, location removal guarded by contents | ✅ `d13bafa` |
 | A4 | Movements write real locations: `Movement.location` string → `locationId` FK, hand-off picks a location, custody log shows the path | ✅ `6fd10ad` |
-| A5 | Purchasing as core: supplier → PO → receipt → stock (absent entirely today) | ⏳ **needs a decision (see below)** |
+| A5 | Purchasing as core: supplier → PO → receipt → stock (absent entirely today) | ✅ `fc643e1` |
 | A6 | Vertical metadata registry: the per-vertical field/tab/label sets become data the tenant carries, not conditionals in components | ⏳ |
 | A7 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ⏳ |
 
@@ -68,8 +68,13 @@ the shelf alone — and a place the ledger mentions can no longer be deleted,
 because an append-only log can't be re-pointed at another location.
 
 **A5 — purchasing.** A receipt is how stock *arrives*; without it, `qtyOnHand`
-is a number someone typed. This is the largest missing core flow — see the
-decision below before starting.
+is a number someone typed. A5 answered it in core: suppliers are parties
+carrying a role, a purchase order holds what was ordered and **no copy of what
+arrived** (received quantity is summed from receipts, and delivery progress is
+derived), and `receiveAgainst()` is the one operation that creates stock — it
+lands real rows at a location FK, logs a `receive` movement per landed row, and
+updates a moving-average cost. A posted receipt is append-only, like the
+custody ledger it feeds.
 
 **A6 — vertical metadata.** A vertical currently re-shapes the app through
 conditionals scattered across components. It should be a registry (tabs, field
@@ -82,11 +87,16 @@ document rather than inferred from TypeScript.
 
 ## Open decisions (need the owner's call)
 
-1. **A5 scope.** Is purchasing (supplier → PO → receipt → stock/cost) in *this*
-   core pass, or does the core stop at custody and the money side stay an
-   industry module? It changes the A4/A6 ordering, because receipts are what
-   make per-location stock trustworthy and they are the natural first consumer of
-   `itemsAtLocation()`.
+1. **A5 scope — settled: purchasing is core.** The owner called it, and A5 is in
+   (`fc643e1`). What the decision did *not* settle, and what A6/A7 should not
+   quietly answer, is the next data-model question: **one SKU, one place.** A
+   receipt re-places the row it tops up, so a part cannot currently sit in two
+   bins at once with two quantities. Real stores do exactly that, and the honest
+   fix is a `stock_levels(item_id, location_id, qty)` table with `qtyOnHand`
+   becoming its sum — a change that ripples into `itemsAtLocation()`, the Items
+   grid's counts and the scheduler's conflict check, so it wants a deliberate
+   decision, not a drive-by. Say the word and it becomes its own increment
+   (`items.stock_levels` in A7's schema).
 2. **`bin` vs location.** Resolved in A3 by *deleting* `bin` and putting the bin
    into the hierarchy (Aisle → Rack → Bin), because the seeded location types
    already included `Bin` — i.e. two models of one fact. If the real yards keep a
@@ -102,7 +112,7 @@ document rather than inferred from TypeScript.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 39 runtime checks against the real store, no browser
+npm run check:store    # 55 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -127,6 +137,16 @@ hand-roll `localStorage` and assert on the store's own output:
   issue place, a return that re-homes the unit, the earlier issue keeping its old
   place, a caller-chosen place on a non-return, both removal blockers (stock and
   history) and that an unreferenced node still removes.
+- `check5.mjs` — **A5, 16 checks:** supplier roles partition the partner table,
+  the three PO states with progress derived from receipts (no stored received
+  column), units created / SKUs topped up at the ordered cost, a moving-average
+  cost, every receipt line placed at the receipt's location, one movement per
+  landed row carrying the receipt id, a second receipt completing a partial
+  line, the refusals that write nothing (over-receipt, draft, cancelled,
+  unknown, mis-located), edits that contradict arrivals, the removal guard,
+  attribution + receipt immutability, store-assigned line ids, a reload that
+  restores the receipts instead of posting them twice, and the partner-creation
+  path.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
@@ -146,3 +166,9 @@ the cheapest way to prove an invariant still holds.
 - A stored FK must stay resolvable, so a place can only be removed while nothing
   points at it (stock *and* log rows) — `locationRemovalBlockers()` is the single
   list both the guard and the grid's disabled button read.
+- A document that moved stock is append-only: a posted receipt has no edit and no
+  delete, and a PO that delivered can't be cancelled or shrunk. Correct a mistake
+  with a new movement, never by rewriting the document that caused it.
+- Stock arrives through `receiveAgainst()` and nowhere else. A counter that no
+  document backs (`qtyOnHand`, a PO's "received" total) is a bug waiting to
+  happen — sum the receipts instead.

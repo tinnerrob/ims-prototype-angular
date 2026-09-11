@@ -14,12 +14,12 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (39 checks across tenancy,
-attribution, the item↔location spine and the custody ledger — see `docs/PLAN.md`
-→ "Verification recipe").
+services to JS and drives the real store from Node (55 checks across tenancy,
+attribution, the item↔location spine, the custody ledger and purchasing — see
+`docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
-~652 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
+~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
 (raised from 4 kB), because `scheduler.component.scss` — by far the largest component
 stylesheet, everything else lives in `styles.scss` — is ~4.4 kB minified. Builds should
 otherwise be warning-free; a new component-style warning means a component's SCSS has
@@ -41,6 +41,7 @@ store, and the sidebar chip switches the acting user.
 | Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
 | Items & Stock | `features/items` | typed catalog: list/CRUD per type, scoped by location |
+| Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
 | **Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |
@@ -55,7 +56,8 @@ Routes: `/admin` redirects to `/admin/modules`; the Admin submenu entries are
 `/admin/locations`, `/admin/categories` and `/admin/modules`. The old
 `/categories` and `/locations` deep links redirect into the Admin section, and
 `/admin/location-types` redirects to `/admin/locations` (its types are now the
-second tab there).
+second tab there). Core views added by the foundation pass: `/purchasing`
+(Purchasing & Receiving, in the *Movement & Custody* nav group).
 
 ## Scheduler (the most complex view) — current behavior
 
@@ -296,6 +298,18 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   never re-points — which is why a location the ledger mentions is refused for
   removal too (`locationRemovalBlockers()`, read by both the guard and the grid's
   disabled button).
+- **Purchasing is how stock arrives.** A supplier is a *party* carrying the
+  `supplier` role (`Party.kinds`), so both sides of the business are one table
+  (`customerParties()` / `supplierParties()`); a purchase order is what was
+  ordered and **stores no copy of what arrived** (`poLineReceived()` sums the
+  receipts and `poProgress()` derives none/partial/received), and
+  `receiveAgainst()` is the one call that creates stock: it tops a SKU up by
+  quantity (moving-average cost), creates one row per serialized unit at the
+  ordered cost/rate, places all of it at a location FK, and logs a `receive`
+  movement per landed row (`Movement.receiptId` is the buying-side FK beside
+  `orderId`). A posted receipt is append-only — no edit, no delete — and a PO
+  with receipts can't be deleted; the seed posts its fixture through the same
+  call, with a pinned clock and actor.
 - **Bumping `VERSION` replaces saved data**, so the shell must keep saying so
   (`DataService.reseeded` → the banner in `app.component.html`).
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
@@ -552,11 +566,25 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    prints (`lineTotal()`). Order Details / queues / dashboards are already on the
    prototype figure.
 
-9. **Only `issue` and `return` are ever written.** `MovementKind` also types
-   `receive` / `transfer` / `adjust`, but no screen produces them — the ledger's
-   place FK (A4) is the seam the missing ones plug into: a receipt (A5) is a
-   `receive` at a location, and a yard-to-yard move is a `transfer`. Until then
-   `qtyOnHand` still changes only through an edit or a work-order posting.
+9. **Only `issue`, `return` and `receive` are ever written.** `MovementKind` also
+   types `transfer` / `adjust`; a yard-to-yard move and a count correction are
+   still logged only by hand (the Goods Receipt path posts `receive`, and the
+   `adjust` kind is used in the harness only). Until they get a screen, a
+   correction is an item edit, which leaves no trace — the ledger's `locationId`
+   and `receiptId` FKs are the seam they plug into.
+10. **A one-click restock still bypasses purchasing.** The dashboard's reorder
+    panel offers **Order** (opens Purchasing) beside **Restock**
+    (`triggerReorder()`), which sets `qtyOnHand` to twice the reorder point
+    without any document behind it — the prototype's behaviour, kept for parity.
+    The honest end state is for a reorder to raise a purchase order.
+11. **A sub-rental still names its vendor in free text.** `RentalSub.vendor` is a
+    string; it should be a `supplierId` FK now that suppliers exist (A5) — the
+    same change A3 made for `item.bin` and A4 for `movement.location`.
+12. **One SKU lives in one place.** `Item.locationId` is a single FK, so a
+    receipt re-places the row it tops up and a part can't be stocked in two bins
+    at once. Per-location quantities need a `stock_levels(item_id, location_id,
+    qty)` table (with `qtyOnHand` as its sum) — flagged as an open decision in
+    `docs/PLAN.md`, not to be decided by accident.
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

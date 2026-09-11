@@ -6,8 +6,9 @@
 # checks exercise are compiled with tsc and the harnesses in
 # `scripts/runtime-checks/` drive the *real* DataService against a hand-rolled
 # localStorage. That keeps A1 (tenancy), A2 (attribution), A3 (the item↔location
-# spine) and A4 (the ledger's place) honest without a UI, and it fails loudly if a
-# seed edit or a new mutator breaks an invariant.
+# spine), A4 (the ledger's place) and A5 (purchasing → receipt → stock) honest
+# without a UI, and it fails loudly if a seed edit or a new mutator breaks an
+# invariant.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
