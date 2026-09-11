@@ -323,5 +323,5 @@ check('the statuses offered per type match ITEM_STATUSES', () => {
   }
 });
 
-console.log(`  --  check9: ${n} checks`);
+console.log(`\ncheck9: ${n} checks`);
 
