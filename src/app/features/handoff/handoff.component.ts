@@ -6,7 +6,7 @@ import { Item, Movement, MovementKind, MOVEMENT_KIND_LABEL } from '../../core/mo
 import { PageSearchService } from '../../core/page-search.service';
 import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
-import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { stampDayRange, stampISO, stampRange } from '../../shared/tip/tip-format';
 import { assetTip, tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
@@ -237,7 +237,7 @@ export class HandoffComponent {
           m.party,
           m.location,
           m.note,
-          m.by,
+          this.data.userName(m.byUserId),
         ),
       );
   }
@@ -394,6 +394,7 @@ export class HandoffComponent {
             { label: 'Meter Hours', value: this.data.int(item?.meterHours ?? 0) },
           ],
         },
+        ...(item ? auditSections(item, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)) : []),
       ],
     };
   }
@@ -441,6 +442,7 @@ export class HandoffComponent {
             { label: 'Category', value: item.category || '—' },
           ],
         },
+        ...auditSections(item, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
       ],
     };
   }
@@ -466,7 +468,9 @@ export class HandoffComponent {
             { label: 'Party', value: m.party || '—' },
             { label: 'Location', value: m.location || '—' },
             { label: 'Recorded At', value: this.data.fmtDT(m.at), mono: true },
-            { label: 'Recorded By', value: m.by || '—' },
+            // The ledger stores the actor's user id, not their name: a rename or a
+            // departure must not rewrite who moved what.
+            { label: 'Recorded By', value: `${this.data.userName(m.byUserId)} (${m.byUserId})` },
             { label: 'Note', value: m.note || '—' },
           ],
         },
@@ -513,7 +517,7 @@ export class HandoffComponent {
       m.party ? { label: 'Party', value: m.party } : null,
       m.location ? { label: 'Location', value: m.location } : null,
       { label: 'Qty', value: String(m.qty) },
-      { label: 'By', value: m.by },
+      { label: 'By', value: this.data.userName(m.byUserId) },
       m.note ?? '',
     ]);
   }

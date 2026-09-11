@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { AuditFields } from '../../core/models';
 import { ModalDismissDirective } from '../modal-dismiss/modal-dismiss.directive';
 
 /**
@@ -28,6 +29,39 @@ export interface ViewModel {
   /** Badge modifier (`st-active`, `st-out`, …); defaults to `st-on`. */
   badgeClass?: string;
   sections: ViewSection[];
+}
+
+/**
+ * The audit block a record view can close with: who created the row and who last
+ * changed it. Shared so every page says it in the same words — and so the two
+ * facts the store stamps on every write (`AuditFields`) are readable from the UI
+ * that produced them, rather than only existing in storage.
+ *
+ * Returns a spreadable list (0 sections when a row carries no stamps yet, so an
+ * unmigrated payload renders nothing rather than an empty block):
+ *
+ *   sections: [ … , ...auditSections(item, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso))]
+ *
+ * `nameOf` resolves a user id to a display name, `fmtDT` an ISO stamp to text
+ * (both come from `DataService`, so a viewer needs no extra lookups).
+ */
+export function auditSections(
+  row: AuditFields,
+  nameOf: (id: string | null | undefined) => string,
+  fmtDT: (iso: string | null | undefined) => string,
+): ViewSection[] {
+  if (!row.createdAt && !row.updatedAt && !row.createdBy && !row.updatedBy) return [];
+  return [
+    {
+      title: 'Audit',
+      fields: [
+        { label: 'Created', value: fmtDT(row.createdAt), mono: true },
+        { label: 'Created By', value: nameOf(row.createdBy) },
+        { label: 'Last Updated', value: fmtDT(row.updatedAt), mono: true },
+        { label: 'Updated By', value: nameOf(row.updatedBy) },
+      ],
+    },
+  ];
 }
 
 /**

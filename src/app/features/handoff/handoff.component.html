@@ -176,7 +176,7 @@
                 <td class="strong mono">{{ m.refId }}</td>
                 <td class="text-12">{{ m.orderId || m.party || '—' }}</td>
                 <td class="mono text-muted2 text-12">{{ data.fmtDT(m.at) }}</td>
-                <td class="text-12">{{ m.by || '—' }}</td>
+                <td class="text-12">{{ data.userName(m.byUserId) }}</td>
                 <td class="text-muted2 text-12">{{ m.note || '—' }}</td>
               </tr>
             } @empty {

@@ -6,7 +6,7 @@ import { PageSearchService } from '../../core/page-search.service';
 import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
-import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { assetTip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
@@ -339,6 +339,9 @@ export class ItemsComponent {
             mono: c[0] === 'id',
           })),
         },
+        // Who set the record up and who last touched it — the two facts the store
+        // stamps on every write, so the screen that produces them can read them.
+        ...auditSections(item, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
       ],
     };
   }

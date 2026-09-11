@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 
 import {
+  AuditFields,
   CatalogType,
   CATALOG_TYPE_KEYS,
   CategoryOption,
@@ -123,6 +124,19 @@ function countWeekdays(a: string, b: string): number {
 /** The seeded demo workspace + the person the session starts as. */
 const DEMO_TENANT_ID = 'TNT-NORTHLINE';
 const DEMO_USER_ID = 'USR-003';
+/** Who the fixtures are attributed to (the workspace owner, in a real install). */
+const DEMO_OWNER_ID = 'USR-001';
+
+/** The audit columns, ignored when comparing a row with the last saved copy. */
+const AUDIT_KEYS = ['tenantId', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
+
+/**
+ * A row's content without its audit columns — the signature `attribute()` diffs
+ * against the last persisted copy to decide whether a row was edited.
+ */
+function contentSignature(row: object): string {
+  return JSON.stringify(row, (k, v) => (AUDIT_KEYS.includes(k) ? undefined : v));
+}
 
 /**
  * IMS — DataService (the JSON store / API seam).
@@ -147,6 +161,11 @@ export class DataService {
   /** True when a stored snapshot was from an older schema and the seed replaced
    *  it. The shell says so, rather than swapping the user's data out silently. */
   reseeded = false;
+
+  /** Last persisted content signature per row, keyed `table:id`. */
+  private readonly shadow = new Map<string, string>();
+  /** False until the seed/restored rows have been attributed once. */
+  private attributed = false;
 
   private db: {
     settings: {
@@ -208,6 +227,9 @@ export class DataService {
 
   constructor() {
     this.hydrate();
+    // Attribute the rows we start with (and remember them), so the first write
+    // of the session is diffed against a known baseline.
+    this.attributeSeed();
   }
 
   /* ----------------------------- persistence ---------------------------- */
@@ -280,6 +302,7 @@ export class DataService {
 
   /** Persist the full snapshot (writes are routed through here). */
   private save(): void {
+    if (this.attributed) this.attributeWrites();
     try {
       localStorage.setItem(
         this.KEY,
@@ -309,6 +332,102 @@ export class DataService {
     // The store changed either way, so anything derived from it (session,
     // module flags) recomputes even when persistence is unavailable.
     this.rev.update((n) => n + 1);
+  }
+
+  /* ----------------------------- attribution ----------------------------- */
+  /*
+   * Every write is attributed here, not in each mutator. `save()` is the store's
+   * single writer, so it is the one place that can guarantee no row is ever
+   * written without `tenantId` / `createdBy` / `updatedBy` — and a mutator added
+   * later cannot forget to stamp it (the discipline that rots otherwise).
+   *
+   * How it knows a row was edited: each row's content — audit columns excluded —
+   * is remembered after every persist. On the next write, a row whose content
+   * moved gets `updatedAt/updatedBy`; a row that was not there at all gets the
+   * create stamps too. That is the job a DB trigger does on INSERT/UPDATE.
+   */
+
+  /** The identity + time a write is attributed to (the API's request context). */
+  private actor(): { tenantId: string; userId: string; at: string } {
+    return {
+      tenantId: this.sessionTenantId(),
+      userId: this.sessionUserId(),
+      at: new Date().toISOString(),
+    };
+  }
+
+  /** Every audited row in the store, keyed `table:id` (see `shadow`). */
+  private auditedRows(): [string, AuditFields][] {
+    const out: [string, AuditFields][] = [];
+    const add = (table: string, rows: AuditFields[]) => {
+      for (const r of rows) {
+        const key = (r as { id?: string; orderId?: string }).id ?? (r as { orderId?: string }).orderId ?? '';
+        out.push([`${table}:${key}`, r]);
+      }
+    };
+    for (const [type, rows] of Object.entries(this.db.items)) add(`items:${type}`, rows);
+    add('parties', this.db.parties);
+    add('orders', this.db.orders);
+    add('movements', this.db.movements);
+    add('inspections', this.db.inspections);
+    add('workOrders', this.db.workOrders);
+    add('timesheets', this.db.timesheets);
+    add('rentals', this.db.rentals);
+    add('vehicles', this.db.vehicles);
+    add('dispatches', this.db.dispatches);
+    add('invoices', this.db.invoices);
+    add('locations', this.db.settings.locations);
+    return out;
+  }
+
+  /**
+   * Attribute the rows the seed (or a restored snapshot) started us with, and
+   * remember them as the baseline. This is what a migration does for rows that
+   * predate the columns (`UPDATE … SET created_by = … WHERE created_by IS NULL`),
+   * so no screen or report ever shows a blank author.
+   */
+  private attributeSeed(): void {
+    const when = `${this.db.tenants[0]?.createdAt ?? '2024-01-08'}T08:00:00`;
+    for (const [key, row] of this.auditedRows()) {
+      // A movement's author *is* the person who moved it, and its clock is its own
+      // `at`. Everything else was authored when the workspace was set up.
+      const mv = row as Partial<Movement>;
+      row.tenantId ??= DEMO_TENANT_ID;
+      row.createdAt ??= mv.at ?? when;
+      row.createdBy ??= mv.byUserId ?? DEMO_OWNER_ID;
+      row.updatedAt ??= row.createdAt;
+      row.updatedBy ??= row.createdBy;
+      this.shadow.set(key, contentSignature(row));
+    }
+    this.attributed = true;
+  }
+
+  /** Attribute everything written since the last persist (see the note above). */
+  private attributeWrites(): void {
+    const a = this.actor();
+    const seen = new Set<string>();
+    for (const [key, row] of this.auditedRows()) {
+      seen.add(key);
+      const content = contentSignature(row);
+      const before = this.shadow.get(key);
+      if (before === content) continue;
+      row.tenantId ??= a.tenantId;
+      if (before === undefined) {
+        row.createdAt = a.at;
+        row.createdBy = a.userId;
+      }
+      row.updatedAt = a.at;
+      row.updatedBy = a.userId;
+      this.shadow.set(key, content);
+    }
+    // A removed row leaves with the shadow — nothing to attribute afterwards.
+    for (const key of [...this.shadow.keys()]) if (!seen.has(key)) this.shadow.delete(key);
+  }
+
+  /** Display name for a user id — logs and record views show who, not an id. */
+  userName(id: string | null | undefined): string {
+    if (!id) return '—';
+    return this.getUser(id)?.name ?? id;
   }
 
   /* ------------------------------- format ------------------------------- */
@@ -1017,7 +1136,7 @@ export class DataService {
       orderId: input.orderId ?? null,
       party: input.party ?? '',
       at: new Date().toISOString(),
-      by: 'D. Reynolds',
+      byUserId: this.sessionUserId(),
       note: input.note ?? '',
     };
     this.db.movements.push(rec);
@@ -2221,14 +2340,15 @@ export class DataService {
 
   /** Append-only chain-of-custody seed (prototype `IMS.movements`). */
   private seedMovements(): Movement[] {
-    const rows: [string, string, string, string, string][] = [
-      ['BL-119', 'CT-2024-001', 'M. Halstead', '2026-08-20T07:15', 'Delivered to Downtown Plaza site.'],
-      ['FL-401', 'CT-2024-001', 'M. Halstead', '2026-08-20T08:05', 'Forklift offloaded with operator handoff.'],
-      ['SS-204', 'CT-2024-002', 'L. Bishop', '2026-09-01T06:45', 'Skid steer delivered to bridge site.'],
-      ['TL-605', 'CT-2024-002', 'L. Bishop', '2026-09-01T07:10', 'Telehandler staged for Riverside Bridge.'],
-      ['GN-511', 'CT-2024-003', 'R. Vance', '2026-09-02T06:30', 'Generator placed at refinery skid.'],
+    // item, order, customer contact, handled by (user id), at, note
+    const rows: [string, string, string, string, string, string][] = [
+      ['BL-119', 'CT-2024-001', 'M. Halstead', 'USR-003', '2026-08-20T07:15', 'Delivered to Downtown Plaza site.'],
+      ['FL-401', 'CT-2024-001', 'M. Halstead', 'USR-003', '2026-08-20T08:05', 'Forklift offloaded with operator handoff.'],
+      ['SS-204', 'CT-2024-002', 'L. Bishop', 'USR-005', '2026-09-01T06:45', 'Skid steer delivered to bridge site.'],
+      ['TL-605', 'CT-2024-002', 'L. Bishop', 'USR-005', '2026-09-01T07:10', 'Telehandler staged for Riverside Bridge.'],
+      ['GN-511', 'CT-2024-003', 'R. Vance', 'USR-004', '2026-09-02T06:30', 'Generator placed at refinery skid.'],
     ];
-    return rows.map(([refId, orderId, party, at, note], i) => ({
+    return rows.map(([refId, orderId, party, byUserId, at, note], i) => ({
       id: 'MV-' + String(i + 1).padStart(3, '0'),
       type: 'serialized' as CatalogType,
       refId,
@@ -2238,7 +2358,7 @@ export class DataService {
       party,
       location: 'Main Yard — Buckhead Hub',
       at,
-      by: 'D. Reynolds',
+      byUserId,
       note,
     }));
   }

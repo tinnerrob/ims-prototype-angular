@@ -6,6 +6,29 @@
  * prototype's `IMS` seed + the JSON `apiAdapter` contract.
  */
 
+/**
+ * The tenancy + author columns every table in the store carries.
+ *
+ * Optional in the types only because a fixture (or a JSON payload that has not
+ * been migrated yet) may omit them: the store stamps them on every write, and
+ * the seed backfills what predates this. The API owns the real values — this is
+ * the shape it has to have, written down where the schema designer will see it:
+ *
+ *   tenant_id  uuid NOT NULL REFERENCES tenants(id)   -- every query is scoped by it
+ *   created_at timestamptz NOT NULL DEFAULT now()
+ *   created_by uuid NOT NULL REFERENCES users(id)
+ *   updated_at timestamptz NOT NULL
+ *   updated_by uuid NOT NULL REFERENCES users(id)
+ */
+export interface AuditFields {
+  /** Owning workspace. */
+  tenantId?: string;
+  createdAt?: string; // ISO timestamp
+  createdBy?: string; // user id
+  updatedAt?: string; // ISO timestamp
+  updatedBy?: string; // user id
+}
+
 export type CatalogType =
   | 'serialized'
   | 'bulk'
@@ -39,7 +62,7 @@ export interface CategoryOption {
   active: boolean;
 }
 
-export interface Party {
+export interface Party extends AuditFields {
   id: string;
   name: string;
   contact: string;
@@ -70,7 +93,7 @@ export interface OrderLine {
   riskPremium?: RiskPremiumKey;
 }
 
-export interface Order {
+export interface Order extends AuditFields {
   orderId: string;
   partyId: string;
   party: string;
@@ -113,7 +136,7 @@ export type ItemStatus =
  *  unified `id` (the prototype calls these id/sku/partId/accId per type).
  *  The optional fields are the prototype's per-type extras (fleet telemetry,
  *  stock reorder points, labor rates); a feature only reads the ones it needs. */
-export interface Item {
+export interface Item extends AuditFields {
   id: string;
   type: CatalogType;
   name: string;
@@ -185,8 +208,11 @@ export const ITEM_STATUSES: Record<CatalogType, ItemStatus[]> = {
 export type MovementKind = 'issue' | 'return' | 'receive' | 'transfer' | 'adjust';
 
 /** Immutable chain-of-custody record (core). Issue = out to an order/party;
- *  return = back to a location. Never mutate a written movement. */
-export interface Movement {
+ *  return = back to a location. Never mutate a written movement.
+ *
+ *  `byUserId` is a foreign key, not a name: the ledger has to answer "who" with
+ *  a person the system knows, so a rename or a departure cannot rewrite history. */
+export interface Movement extends AuditFields {
   id: string;
   type: CatalogType;
   refId: string;
@@ -197,7 +223,8 @@ export interface Movement {
   kind: MovementKind;
   qty: number;
   at: string; // ISO timestamp
-  by: string;
+  /** User id that performed the movement (see `DataService.userName`). */
+  byUserId: string;
   note?: string;
 }
 
@@ -227,7 +254,7 @@ export interface LocationType {
  * mirrors a DB `locations` table with a self-referencing `parent_id` column
  * and a `location_type` column.
  */
-export interface Location {
+export interface Location extends AuditFields {
   id: string;
   name: string;
   /** Location type name (see `LocationType`). */
@@ -309,7 +336,7 @@ export const INSPECTION_CHECK_LABEL: Record<InspectionCheckKey, string> = {
 };
 
 /** Yard in/out inspection (prototype `IMS.inspections`). */
-export interface Inspection {
+export interface Inspection extends AuditFields {
   id: string;
   itemId: string; // serialized asset id
   orderId?: string | null;
@@ -553,7 +580,7 @@ export interface WorkOrderPart {
 }
 
 /** Service / maintenance work order (prototype `IMS.workOrders`). */
-export interface WorkOrder {
+export interface WorkOrder extends AuditFields {
   id: string;
   itemId: string; // serialized asset under service
   type: string; // service type: Preventive | Repair | Inspection
@@ -591,7 +618,7 @@ export const TIMESHEET_KIND: Record<TimesheetTarget, { label: string; icon: stri
 export const TIMESHEET_TARGETS: TimesheetTarget[] = ['order', 'workorder', 'shop', 'overhead', 'idle', 'lunch'];
 
 /** A labour clock segment (prototype `IMS.timesheets` row). */
-export interface Timesheet {
+export interface Timesheet extends AuditFields {
   id: string;
   empId: string; // labor item id (EMP-…)
   date: string; // "YYYY-MM-DD"
@@ -607,7 +634,7 @@ export interface Timesheet {
 }
 
 
-export interface RentalSub {
+export interface RentalSub extends AuditFields {
   id: string;
   /** Catalog item when the sub-rental maps to one (prototype `assetId`). */
   itemId?: string | null;
@@ -621,7 +648,7 @@ export interface RentalSub {
   note?: string;
 }
 
-export interface Vehicle {
+export interface Vehicle extends AuditFields {
   id: string;
   name: string;
   plate: string;
@@ -633,7 +660,7 @@ export type DispatchStatus = 'Staged' | 'En Route' | 'Delivered' | 'Pending Retu
 export const DISPATCH_STATUSES: DispatchStatus[] = ['Staged', 'En Route', 'Delivered', 'Pending Return'];
 
 /** Dispatch board row (prototype `IMS.dispatches`). */
-export interface Dispatch {
+export interface Dispatch extends AuditFields {
   id: string;
   orderId: string;
   assetId?: string | null;
@@ -654,7 +681,7 @@ export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
 };
 
 /** Cycle invoice (prototype `IMS.invoices`). */
-export interface Invoice {
+export interface Invoice extends AuditFields {
   id: string;
   orderId: string;
   cycle: number;
