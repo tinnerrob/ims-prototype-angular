@@ -158,6 +158,13 @@ already knew the account existed). An unsigned session is not "the first user":
 `activeUser` is `undefined`, `can()` answers no rights, and signing out survives a
 reload.
 
+**The fixture's pick-list is not a table (B2).** `DataService.demoAccounts()` returns
+a `DemoAccount` — a seeded person *with* the password this build publishes — because
+the demo's six roles have to stay enterable once a credential is required, and the
+sign-in screen prints that list. Nothing else reads it, no real deployment has an
+equivalent (the server never returns a password), and it is not a column of any
+table: the *credential* is always the salt and the digest above.
+
 ## Configuration
 
 These are rows a workspace edits in Admin, not documents the app posts. Two
@@ -1257,4 +1264,10 @@ each is an increment waiting for its turn:
   address and one password; an invitation that mints a credential for somebody else,
   a reset that replaces one, a second factor and a federated identity are all
   deliberately outside B and E — named here so the absence is a decision.
+- **A write with no actor.** The store attributes every write to whoever the session
+  names, and B2's route guard means no screen is reachable without one — but the store
+  does not *refuse* a write made while nobody is signed in: a mutator called with an
+  empty session would stamp `byUserId: ''`. Nothing in the app can do that today (no
+  screen renders, and the fixture's own posting runs while the seed's session is still
+  in place), and a server cannot: a request without a principal is a `401`.
 

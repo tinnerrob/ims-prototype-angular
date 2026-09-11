@@ -8,6 +8,8 @@ globalThis.localStorage = {
   clear: () => mem.clear(),
 };
 
+import { signInAs } from './sign-in.mjs';
+
 const { DataService } = await import('./data.service.js');
 
 let n = 0;
@@ -26,6 +28,10 @@ const check = (label, fn) => {
 
 mem.clear();
 const d = new DataService();
+
+/* B2: the fixture ships signed out, so these checks — which assert who authored
+   an in-session write — sign in as the seeded manager first. */
+await signInAs(d, 'USR-003');
 
 check('the seeded hierarchy is deeper than one level (a real tree)', () => {
   const locs = d.listLocations();

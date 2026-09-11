@@ -8,6 +8,8 @@ globalThis.localStorage = {
   clear: () => mem.clear(),
 };
 
+import { signInAs } from './sign-in.mjs';
+
 const { DataService } = await import('./data.service.js');
 
 /** The counted types, whose stock lives in `stock_levels` (see check7). */
@@ -30,6 +32,9 @@ const check = (label, fn) => {
 
 mem.clear();
 const d = new DataService();
+/* B2: the fixture ships signed out, so these checks — which assert who authored
+   an in-session write — sign in as the seeded manager first. */
+await signInAs(d, 'USR-003');
 const poOf = (id) => d.getPurchaseOrder(id);
 const receiptOf = (poId) => d.listReceipts().find((r) => r.poId === poId);
 /** The seed's own rows, captured before any check edits the fixture. */

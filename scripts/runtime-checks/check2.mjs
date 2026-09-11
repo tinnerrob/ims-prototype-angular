@@ -8,14 +8,16 @@ globalThis.localStorage = {
   clear: () => mem.clear(),
 };
 
+import { signInAs } from './sign-in.mjs';
+
 const { DataService } = await import('./data.service.js');
 const { can } = await import('./models.js');
 
 let n = 0;
-const check = (label, fn) => {
+const check = async (label, fn) => {
   n++;
   try {
-    fn();
+    await fn();
     console.log(`  ok  ${label}`);
   } catch (e) {
     console.log(`FAIL  ${label}\n      ${e.message}`);
@@ -27,7 +29,11 @@ const check = (label, fn) => {
 mem.clear();
 const d = new DataService();
 
-check('every seeded row carries tenant + author stamps', () => {
+/* B2: the fixture ships signed out, so the checks that assert *who* wrote a row
+   sign in as the seeded manager first — the same thing a client must now do. */
+await signInAs(d, 'USR-003');
+
+await check('every seeded row carries tenant + author stamps', async () => {
   const rows = [
     ...d.allItems(),
     ...d.listParties(),
@@ -45,7 +51,7 @@ check('every seeded row carries tenant + author stamps', () => {
   }
 });
 
-check('the ledger names a user, and its author is that user', () => {
+await check('the ledger names a user, and its author is that user', async () => {
   const ms = d.listMovements();
   // Five custody issues (A4) + the four rows the seeded receipts landed (A5:
   // two new loader units, the buckets they topped up, and the hose restock).
@@ -59,7 +65,7 @@ check('the ledger names a user, and its author is that user', () => {
   assert.equal(d.userName(null), '—');
 });
 
-check('a new record is attributed to the acting user', () => {
+await check('a new record is attributed to the acting user', async () => {
   const item = d.createItem('part', { name: 'Test Widget', category: d.categoriesFor('part')[0], status: 'In Stock', qty: 4, rateDaily: 0 });
   assert.equal(item.createdBy, 'USR-003');
   assert.equal(item.updatedBy, 'USR-003');
@@ -67,10 +73,10 @@ check('a new record is attributed to the acting user', () => {
   assert.ok(item.createdAt);
 });
 
-check('an edit re-stamps updatedBy without touching the create stamps', () => {
+await check('an edit re-stamps updatedBy without touching the create stamps', async () => {
   const item = d.listItems('part').find((i) => i.name === 'Test Widget');
   const created = { at: item.createdAt, by: item.createdBy };
-  d.setSessionUser('USR-004');
+  await signInAs(d, 'USR-004');
   // A *real* field: a counted row's quantities are its stock levels' sum (see
   // check7), so a patch carrying `qtyOnHand` is stripped and would write nothing.
   d.updateItem('part', item.id, { reorderPoint: 9 });
@@ -80,36 +86,36 @@ check('an edit re-stamps updatedBy without touching the create stamps', () => {
   assert.equal(after.createdBy, created.by, 'author is history');
   assert.equal(after.createdAt, created.at);
   assert.notEqual(after.updatedAt, after.createdAt, 'updated moved');
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
-check('a nested edit attributes the parent row', () => {
+await check('a nested edit attributes the parent row', async () => {
   const order = d.listOrders()[0];
-  d.setSessionUser('USR-005');
+  await signInAs(d, 'USR-005');
   d.updateOrderLineQty(order.orderId, order.lineItems[0].id, 3);
   const after = d.getOrder(order.orderId);
   assert.equal(after.updatedBy, 'USR-005');
   assert.equal(after.createdBy, order.createdBy, 'create stamps untouched');
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
-check('an untouched row is not re-stamped', () => {
+await check('an untouched row is not re-stamped', async () => {
   const order = d.getOrder(d.listOrders()[1].orderId);
   const stamp = order.updatedAt;
   d.createItem('part', { name: 'Another', category: d.categoriesFor('part')[0], status: 'In Stock', qty: 1, rateDaily: 0 });
   assert.equal(d.getOrder(order.orderId).updatedAt, stamp, 'writes do not smear across rows');
 });
 
-check('a movement logged now is attributed to the session user', () => {
-  d.setSessionUser('USR-004');
+await check('a movement logged now is attributed to the session user', async () => {
+  await signInAs(d, 'USR-004');
   const mv = d.logMovement({ type: 'consumable', refId: 'SG-LFT-001', kind: 'adjust', qty: -2, note: 'Count correction' });
   assert.equal(mv.byUserId, 'USR-004');
   assert.equal(d.userName(mv.byUserId), 'Ray Chen');
   assert.equal(mv.createdBy, 'USR-004');
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
-check('a deleted row stops being tracked', () => {
+await check('a deleted row stops being tracked', async () => {
   const item = d.listItems('part').find((i) => i.name === 'Another');
   d.removeItem('part', item.id);
   assert.equal(d.getItem('part', item.id), undefined);

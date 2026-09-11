@@ -1,0 +1,86 @@
+<!-- ============ Sign in (B2) ============
+     The one screen outside the app shell. Routes are children of a guarded parent, so
+     this is what a signed-out visitor — or a session that ended — actually meets. -->
+<div class="signin">
+  <div class="signin-card card">
+    <div class="signin-head">
+      <div class="brand-mark"><i class="bi bi-layers-half"></i></div>
+      <div>
+        <div class="strong">IMS</div>
+        <div class="text-muted2 text-12">Universal Inventory Suite</div>
+      </div>
+    </div>
+
+    <div class="card-body">
+      <div class="strong mb-1">Sign in</div>
+      <div class="text-muted2 small mb-3">
+        @if (tenantName()) {
+          Workspace <strong>{{ tenantName() }}</strong>. Your role decides what you may
+          do — no screen decides it for itself.
+        }
+      </div>
+
+      <form (ngSubmit)="submit()">
+        <div class="field-group">
+          <label class="form-label" for="signin-email">Email</label>
+          <input
+            id="signin-email"
+            class="form-control"
+            type="email"
+            name="email"
+            autocomplete="username"
+            [disabled]="busy()"
+            [(ngModel)]="email"
+          />
+        </div>
+        <div class="field-group">
+          <label class="form-label" for="signin-password">Password</label>
+          <input
+            id="signin-password"
+            class="form-control"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            [disabled]="busy()"
+            [(ngModel)]="password"
+          />
+        </div>
+
+        <!-- The refusal the store answered with, printed once: an unknown address and
+             a wrong password say the same thing, so this line cannot be used to find
+             out who works here. -->
+        @if (error()) {
+          <div class="signin-error" role="alert">
+            <i class="bi bi-exclamation-triangle"></i><span>{{ error() }}</span>
+          </div>
+        }
+
+        <button class="btn btn-ims w-100" type="submit" [disabled]="busy()">
+          <i class="bi bi-box-arrow-in-right me-1"></i>{{ busy() ? 'Checking…' : 'Sign in' }}
+        </button>
+      </form>
+    </div>
+
+    <!-- The seeded roles are this build's demonstration, so the screen that asks for a
+         credential also publishes the fixture's — otherwise the demo would lock itself
+         out. A real deployment renders no such list (`DataService.demoAccounts()`). -->
+    <div class="signin-demo">
+      <div class="signin-demo-head text-muted2 small">
+        <i class="bi bi-people"></i>
+        <span>
+          Demo accounts — the seeded six, with the passwords this build publishes. Pick
+          one to sign in as that role.
+        </span>
+      </div>
+      @for (a of accounts; track a.userId) {
+        <button class="signin-account" type="button" [disabled]="busy()" (click)="useAccount(a)">
+          <span class="signin-account-id">
+            <span class="strong">{{ a.name }}</span>
+            <span class="text-muted2 small">{{ a.email }} · {{ a.password }}</span>
+          </span>
+          <span class="role-tag">{{ roleName(a) }}</span>
+        </button>
+      }
+    </div>
+  </div>
+</div>

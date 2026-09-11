@@ -6,6 +6,7 @@ import {
   CATALOG_TYPE_KEYS,
   CategoryOption,
   Credential,
+  DemoAccount,
   Dispatch,
   DispatchStatus,
   INDUSTRY_MODULES,
@@ -368,7 +369,7 @@ async function credentialDigest(salt: string, password: string): Promise<string>
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 12;
+  private readonly VERSION = 13;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -512,6 +513,13 @@ export class DataService {
     // Attribute the rows we start with (and remember them), so the first write
     // of the session is diffed against a known baseline.
     this.attributeSeed();
+    // A fresh seed ships **signed out** (B2). The workspace above is set up *as*
+    // the seeded manager — that is why the fixture posting runs before this line
+    // and keeps its author — and then the session is emptied, so what a visitor
+    // meets is the sign-in form. A session the fixture invented for you is exactly
+    // what "the session stops being a stand-in" removes; restoring a snapshot
+    // (above) keeps whatever session the person actually left behind.
+    if (seeded) this.db.session = { ...this.db.session, userId: '' };
     // The fixture posting above persisted on its way in; write once more now
     // that every row carries its tenant/author stamps.
     if (seeded) this.save();
@@ -3380,26 +3388,31 @@ export class DataService {
     return (await credentialDigest(credential.salt, password)) === credential.hash;
   }
 
-  /**
-   * Switch who the session is acting as — the shell's user switcher, which stands
-   * in for sign-in *in the UI* until B2 replaces it with sign-in / sign-out (this
-   * increment adds the credential and the proof path; the switcher still has to go
-   * through them). Follows the user's tenant.
+  /*
+   * `setSessionUser()` and `setSessionTenant()` (the demo switcher's store path)
+   * are gone as of B2. They let the client *assert* who it was — the exact thing a
+   * credential exists to stop — and the shell that called them now signs out to the
+   * form instead. Nothing replaced them: `signIn()` is the only way a session starts.
    */
-  setSessionUser(userId: string): void {
-    const u = this.getUser(userId);
-    if (!u) return;
-    this.db.session.userId = u.id;
-    this.db.session.tenantId = u.tenantId;
-    this.save();
-  }
 
-  setSessionTenant(tenantId: string): void {
-    if (!this.getTenant(tenantId)) return;
-    this.db.session.tenantId = tenantId;
-    const first = this.listUsers(tenantId)[0];
-    if (first) this.db.session.userId = first.id;
-    this.save();
+  /**
+   * The seeded people with the password the sign-in screen publishes (B2).
+   *
+   * Fixture-only, and the only reader of `DEMO_PASSWORDS`. A real deployment has no
+   * equivalent: the server never hands a password back, and the form's pick-list
+   * exists precisely because this build's permissions *are* the demonstration —
+   * with a credential required, the six roles would otherwise be unreachable.
+   */
+  demoAccounts(): DemoAccount[] {
+    return this.db.users
+      .filter((u) => DEMO_PASSWORDS[u.id])
+      .map((u) => ({
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        password: DEMO_PASSWORDS[u.id],
+      }));
   }
 
   /**
@@ -4563,7 +4576,7 @@ export class DataService {
   }
 
   /**
-   * Seeded people — one per role, so the shell's user switcher can demonstrate
+   * Seeded people — one per role, so the sign-in screen's demo list can demonstrate
    * exactly what each permission set can and cannot do.
    */
   private seedUsers(): User[] {

@@ -862,6 +862,21 @@ export type SignInFailure = 'invalid' | 'inactive';
 /** What `signIn()` answers: the person, or the one reason a screen may print. */
 export type SignInResult = { ok: true; user: User } | { ok: false; reason: SignInFailure };
 
+/**
+ * A seeded person **with the password the sign-in screen publishes** (B2).
+ *
+ * Not a table and not a shape any real deployment has: it is the fixture's own
+ * pick-list, so the demo's six roles stay enterable now that a credential is
+ * required. `DataService.demoAccounts()` is the only thing that produces one.
+ */
+export interface DemoAccount {
+  userId: string;
+  name: string;
+  email: string;
+  role: RoleKey;
+  password: string;
+}
+
 /** True when the user's role holds the capability. Null/undefined → no rights. */
 export function can(user: Pick<User, 'role'> | null | undefined, perm: Permission): boolean {
   return !!user && roleDef(user.role).permissions.includes(perm);

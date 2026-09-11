@@ -9,16 +9,18 @@ globalThis.localStorage = {
   clear: () => mem.clear(),
 };
 
-const { DataService } = await import('./data.service.js');
+import { signInAs } from './sign-in.mjs';
+
+const { DataService, DEMO_PASSWORDS } = await import('./data.service.js');
 const { SessionService } = await import('./session.service.js');
 const { ModulesService } = await import('./modules.service.js');
 const { can } = await import('./models.js');
 
 let n = 0;
-const check = (label, fn) => {
+const check = async (label, fn) => {
   n++;
   try {
-    fn();
+    await fn();
     console.log(`  ok  ${label}`);
   } catch (e) {
     console.log(`FAIL  ${label}\n      ${e.message}`);
@@ -30,26 +32,30 @@ const check = (label, fn) => {
 mem.clear();
 const data = new DataService();
 
-check('session starts as the seeded manager', () => {
-  assert.equal(data.activeUser.name, 'Dana Reynolds');
-  assert.equal(data.activeUser.role, 'manager');
-  assert.equal(data.activeTenant.name, 'Northline Equipment Co.');
+await check('a fresh fixture ships no session (B2) — and signing in starts one', async () => {
+  assert.equal(data.activeUser, undefined, 'nobody is signed in');
+  assert.equal(can(data.activeUser, 'items.view'), false, 'so nobody holds a capability');
+  assert.equal(data.activeTenant.name, 'Northline Equipment Co.', 'the workspace still reads');
   assert.equal(data.activeTenant.plan, 'professional');
+  const dana = await signInAs(data, 'USR-003');
+  assert.equal(dana.name, 'Dana Reynolds');
+  assert.equal(data.activeUser.role, 'manager');
+  assert.equal(data.sessionUserId(), 'USR-003');
 });
 
-check('one seeded user per role', () => {
+await check('one seeded user per role', () => {
   const roles = data.listUsers().map((u) => u.role).sort();
   assert.deepEqual(roles, ['admin', 'field', 'manager', 'owner', 'viewer', 'warehouse']);
 });
 
-check('vertical is tenant data', () => {
+await check('vertical is tenant data', () => {
   assert.equal(data.vertical, 'HeavyEquipment');
   data.setVertical('Warehouse');
   assert.equal(data.vertical, 'Warehouse');
   assert.equal(data.activeTenant.vertical, 'Warehouse');
 });
 
-check('module flags default ON and are stored on the tenant', () => {
+await check('module flags default ON and are stored on the tenant', () => {
   assert.equal(data.moduleFlags()['billing'], true);
   data.setTenantModule('billing', false);
   assert.equal(data.moduleFlags()['billing'], false);
@@ -59,7 +65,7 @@ check('module flags default ON and are stored on the tenant', () => {
   assert.equal(data.moduleFlags()['billing'], true);
 });
 
-check('the pre-tenancy module key is folded in once, then dropped', () => {
+await check('the pre-tenancy module key is folded in once, then dropped', () => {
   mem.clear();
   mem.set('ims-web.modules', JSON.stringify({ telemetry: false, billing: false }));
   const d2 = new DataService();
@@ -68,31 +74,35 @@ check('the pre-tenancy module key is folded in once, then dropped', () => {
   assert.equal(d2.moduleFlags()['scheduling'], true);
 });
 
-check('session switching follows the user and their tenant', () => {
-  data.setSessionUser('USR-006');
+await check('signing in as another person follows them and their tenant (B2)', async () => {
+  await signInAs(data, 'USR-006');
   assert.equal(data.activeUser.name, 'Sandra Patel');
   assert.equal(can(data.activeUser, 'stock.move'), false);
   assert.equal(can(data.activeUser, 'items.view'), true);
-  data.setSessionUser('USR-003');
+  await signInAs(data, 'USR-003');
   assert.equal(data.activeUser.role, 'manager');
 });
 
-check('SessionService derives from the store (signals stay in step)', () => {
+await check('SessionService derives from the store (signals stay in step)', async () => {
+  await signInAs(data, 'USR-003');
   const session = new SessionService(data);
   assert.equal(session.user().name, 'Dana Reynolds');
   assert.equal(session.tenant().slug, 'northline');
   assert.equal(session.role().label, 'Manager');
-  assert.equal(session.users().length, 6);
+  assert.equal(session.signedIn(), true, 'the guard asks exactly this');
   assert.equal(session.can('stock.adjust'), true);
-  assert.equal(session.isCurrent('USR-003'), true);
-  session.switchUser('USR-006');
-  assert.equal(session.user().name, 'Sandra Patel', 'signal follows the switch');
+  // The service's own path in — a credential, not an assertion about who we are.
+  assert.equal((await session.signIn('sandra@northline.example', DEMO_PASSWORDS['USR-006'])).ok, true);
+  assert.equal(session.user().name, 'Sandra Patel', 'the signal follows the sign-in');
   assert.equal(session.can('stock.adjust'), false);
   assert.equal(session.role().label, 'Viewer');
-  session.switchUser('USR-003');
+  session.signOut();
+  assert.equal(session.signedIn(), false, 'and Sign out ends it');
+  assert.equal(session.can('items.view'), false);
+  await signInAs(data, 'USR-003');
 });
 
-check('ModulesService reads the tenant licence flags', () => {
+await check('ModulesService reads the tenant licence flags', () => {
   const mods = new ModulesService(data);
   assert.equal(mods.isEnabled('dispatch'), true);
   mods.setEnabled('dispatch', false);
@@ -102,7 +112,7 @@ check('ModulesService reads the tenant licence flags', () => {
   assert.equal(mods.isEnabled('dispatch'), true);
 });
 
-check('a schema bump reseeds and says so', () => {
+await check('a schema bump reseeds and says so', () => {
   const stale = JSON.parse(localStorage.getItem('ims-web.store'));
   stale._v = 4;
   stale.parties = [];

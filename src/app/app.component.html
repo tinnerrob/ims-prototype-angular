@@ -1,155 +1,157 @@
-<div class="app-shell">
-  <!-- ============ SIDEBAR ============ -->
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-mark"><i class="bi bi-layers-half"></i></div>
-      <div class="brand-text">
-        <span class="brand-name">IMS</span>
-        <span class="brand-sub">Universal Inventory Suite</span>
+<!-- The shell is the signed-in app (B2). With no session there is nothing to show
+     but the sign-in form, which is the one route that renders outside it: a guard on
+     the routes' parent is what makes that true, so it is never a hidden-screen
+     illusion. -->
+@if (session.user(); as user) {
+  <div class="app-shell">
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark"><i class="bi bi-layers-half"></i></div>
+        <div class="brand-text">
+          <span class="brand-name">IMS</span>
+          <span class="brand-sub">Universal Inventory Suite</span>
+        </div>
       </div>
-    </div>
-    <nav class="side-nav">
-      @for (g of groups; track g.title) {
-        <div class="nav-section">{{ g.title }}</div>
-        @for (item of navItems(g); track item.id) {
-          <a
-            class="nav-item"
-            [routerLink]="'/' + item.id"
-            routerLinkActive="active"
-            [routerLinkActiveOptions]="{ exact: false }"
-          >
-            <i class="bi {{ item.icon }}"></i><span>{{ item.nav }}</span>
-            @if (item.modTag) {
-              <span class="nav-mod-tag">MOD</span>
-            }
-            @if (item.id === 'telemetry' && geoAlerts() > 0) {
-              <span class="nav-badge badge-alert" title="Open geofence alerts">{{ geoAlerts() }}</span>
-            }
-          </a>
-        }
-      }
-    </nav>
-    <div class="sidebar-footer">
-      <div class="sim-status"><span class="pulse-dot"></span> GPS Link LIVE</div>
-
-      <!-- Who the app is acting as. Switching stands in for sign-in until the API
-           owns authentication, and it is the honest way to demo a role model:
-           the permission set — not the screen — decides what each person may do. -->
-      @if (session.user(); as user) {
-        <button
-          class="user-chip"
-          type="button"
-          aria-haspopup="true"
-          [attr.aria-expanded]="userMenuOpen"
-          title="Switch user"
-          (click)="toggleUserMenu()"
-        >
-          <span class="avatar">{{ user.initials }}</span>
-          <span class="user-meta">
-            <span class="user-name">{{ user.name }}</span>
-            <span class="user-role">{{ user.title }}</span>
-          </span>
-          <i class="bi bi-three-dots"></i>
-        </button>
-      }
-
-      @if (userMenuOpen) {
-        <div class="user-menu" role="menu" aria-label="Switch user">
-          <div class="user-menu-head">
-            <span class="strong">{{ session.tenant()?.name }}</span>
-            <span class="text-muted2 small">{{ planLabel() }} · {{ session.role().label }}</span>
-          </div>
-          @for (u of session.users(); track u.id) {
-            <button
-              class="user-menu-row"
-              type="button"
-              role="menuitem"
-              [class.current]="session.isCurrent(u.id)"
-              (click)="switchUser(u.id)"
+      <nav class="side-nav">
+        @for (g of groups; track g.title) {
+          <div class="nav-section">{{ g.title }}</div>
+          @for (item of navItems(g); track item.id) {
+            <a
+              class="nav-item"
+              [routerLink]="'/' + item.id"
+              routerLinkActive="active"
+              [routerLinkActiveOptions]="{ exact: false }"
             >
-              <span class="avatar avatar-sm">{{ u.initials }}</span>
-              <span class="user-menu-meta">
-                <span class="strong">{{ u.name }}</span>
-                <span class="text-muted2 small">{{ u.title }}</span>
-              </span>
-              <span class="role-tag">{{ roleName(u) }}</span>
-            </button>
+              <i class="bi {{ item.icon }}"></i><span>{{ item.nav }}</span>
+              @if (item.modTag) {
+                <span class="nav-mod-tag">MOD</span>
+              }
+              @if (item.id === 'telemetry' && geoAlerts() > 0) {
+                <span class="nav-badge badge-alert" title="Open geofence alerts">{{ geoAlerts() }}</span>
+              }
+            </a>
           }
-          <div class="user-menu-foot text-muted2 small">
-            Roles gate what each person can do — no screen decides it for itself.
-          </div>
-        </div>
-      }
-    </div>
-  </aside>
+        }
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sim-status"><span class="pulse-dot"></span> GPS Link LIVE</div>
 
-  <!-- ============ MAIN ============ -->
-  <main class="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <button class="btn btn-link d-lg-none" id="menuToggle" type="button" (click)="toggleSidebar()">
-          <i class="bi bi-list"></i>
-        </button>
-        <div class="topbar-titles">
-          <h1>{{ view?.title }}</h1>
-          <div class="topbar-sub">{{ subtitle() }}</div>
-        </div>
-      </div>
-      <div class="topbar-right">
-        <!-- Page search: the box belongs to the view on screen, so it is only
-             rendered on the views the registry marks searchable (`VIEWS[].search`)
-             and it filters that page live — × / Escape clear it, and the chip
-             reports how much of the page survives the query. -->
-        @if (search.active()) {
-          <div class="global-search">
-            <i class="bi bi-search"></i>
-            <input
-              type="text"
-              [placeholder]="search.placeholder()"
-              [attr.aria-label]="search.placeholder()"
-              [ngModel]="search.query()"
-              (ngModelChange)="setSearch($event)"
-              (keydown.escape)="clearSearch()"
-            />
-            @if (search.query()) {
-              <button class="search-clear" type="button" title="Clear search" (click)="clearSearch()">
-                <i class="bi bi-x-lg"></i>
-              </button>
-            }
-            @if (search.results(); as r) {
-              <span class="search-count" title="Matches on this page">{{ r.shown }} of {{ r.total }}</span>
-            }
+        <!-- Who the app is signed in as (B2). The switcher that used to live here is
+             gone: a session now starts at the sign-in form with a credential, and this
+             chip is how a session *ends*. -->
+        @if (session.user(); as user) {
+          <button
+            class="user-chip"
+            type="button"
+            aria-haspopup="true"
+            [attr.aria-expanded]="userMenuOpen"
+            title="Account"
+            (click)="toggleUserMenu()"
+          >
+            <span class="avatar">{{ user.initials }}</span>
+            <span class="user-meta">
+              <span class="user-name">{{ user.name }}</span>
+              <span class="user-role">{{ user.title }}</span>
+            </span>
+            <i class="bi bi-three-dots"></i>
+          </button>
+        }
+
+        @if (userMenuOpen) {
+          <div class="user-menu" role="menu" aria-label="Account">
+            <div class="user-menu-head">
+              <span class="strong">{{ session.tenant()?.name }}</span>
+              <span class="text-muted2 small">{{ planLabel() }} · {{ session.role().label }}</span>
+            </div>
+            <button class="user-menu-row" type="button" role="menuitem" (click)="signOut()">
+              <i class="bi bi-box-arrow-right"></i>
+              <span class="user-menu-meta">
+                <span class="strong">Sign out</span>
+                <span class="text-muted2 small">Ends the session on this browser</span>
+              </span>
+            </button>
+            <div class="user-menu-foot text-muted2 small">
+              Roles gate what each person can do — no screen decides it for itself.
+            </div>
           </div>
         }
-        <button class="icon-btn" type="button" title="Notifications" (click)="openNotifications()">
-          <i class="bi bi-bell"></i>
-          @if (notifications() > 0) {
-            <span class="notif-count">{{ notifications() }}</span>
-          }
-        </button>
-        <span class="topbar-date">{{ today }}</span>
       </div>
-    </header>
+    </aside>
 
-    <div class="content">
-      <!-- A schema bump replaces the stored snapshot with the seed. Say so: data
-           that disappears without explanation is the fastest way to lose trust. -->
-      @if (reseeded()) {
-        <div class="shell-notice" role="status">
-          <i class="bi bi-arrow-repeat"></i>
-          <span>
-            Saved demo data was written by an older version of the schema, so the seed has replaced
-            it. Everything below is the seeded dataset.
-          </span>
-          <button class="btn btn-ims-outline btn-sm2" type="button" (click)="dismissNotice()">
-            Dismiss
+    <!-- ============ MAIN ============ -->
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="btn btn-link d-lg-none" id="menuToggle" type="button" (click)="toggleSidebar()">
+            <i class="bi bi-list"></i>
           </button>
+          <div class="topbar-titles">
+            <h1>{{ view?.title }}</h1>
+            <div class="topbar-sub">{{ subtitle() }}</div>
+          </div>
         </div>
-      }
-      <router-outlet />
-    </div>
-  </main>
-</div>
+        <div class="topbar-right">
+          <!-- Page search: the box belongs to the view on screen, so it is only
+               rendered on the views the registry marks searchable (`VIEWS[].search`)
+               and it filters that page live — × / Escape clear it, and the chip
+               reports how much of the page survives the query. -->
+          @if (search.active()) {
+            <div class="global-search">
+              <i class="bi bi-search"></i>
+              <input
+                type="text"
+                [placeholder]="search.placeholder()"
+                [attr.aria-label]="search.placeholder()"
+                [ngModel]="search.query()"
+                (ngModelChange)="setSearch($event)"
+                (keydown.escape)="clearSearch()"
+              />
+              @if (search.query()) {
+                <button class="search-clear" type="button" title="Clear search" (click)="clearSearch()">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              }
+              @if (search.results(); as r) {
+                <span class="search-count" title="Matches on this page">{{ r.shown }} of {{ r.total }}</span>
+              }
+            </div>
+          }
+          <button class="icon-btn" type="button" title="Notifications" (click)="openNotifications()">
+            <i class="bi bi-bell"></i>
+            @if (notifications() > 0) {
+              <span class="notif-count">{{ notifications() }}</span>
+            }
+          </button>
+          <span class="topbar-date">{{ today }}</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <!-- A schema bump replaces the stored snapshot with the seed. Say so: data
+             that disappears without explanation is the fastest way to lose trust. -->
+        @if (reseeded()) {
+          <div class="shell-notice" role="status">
+            <i class="bi bi-arrow-repeat"></i>
+            <span>
+              Saved demo data was written by an older version of the schema, so the seed has replaced
+              it. Everything below is the seeded dataset.
+            </span>
+            <button class="btn btn-ims-outline btn-sm2" type="button" (click)="dismissNotice()">
+              Dismiss
+            </button>
+          </div>
+        }
+        <router-outlet />
+      </div>
+    </main>
+  </div>
+} @else {
+  <!-- Signed out. The router has already been sent here by `requireAuth`, and the
+       only route that may render is `/signin`. -->
+  <router-outlet />
+}
+
 
 <!-- Confirmation prompts ("discard changes?"), mounted once for the whole app. -->
 <ims-confirm-dialog></ims-confirm-dialog>

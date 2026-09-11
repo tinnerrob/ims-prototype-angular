@@ -310,7 +310,7 @@ any phase yet, and this section says so rather than implying them.
 | # | Increment | Status |
 |---|---|---|
 | B1 | A credential in a table of its own (`user_credentials` — a per-person salt and a digest, never a password) and the store's one sign-in path: `signIn(email, password)` proves it, `signOut()` drops the session, and an empty session acts as nobody | ✅ `90ff25d` |
-| B2 | Sign-in as a screen: every route carries `requireAuth`, an unauthenticated visitor lands on the form, the shell chip names who is signed in and offers **Sign out**, and the seeded demo accounts are listed so the workspace is still enterable | ⏳ |
+| B2 | Sign-in as a screen: the fixture **ships signed out**, every screen is a child of a route parent carrying `requireAuth`, the shell chip names who is signed in and offers **Sign out** (the switcher is gone), and the seeded demo accounts are listed so the workspace is still enterable | ⏳ |
 | B3 | The session has an *end*: an idle expiry the store stamps and rolls on activity, so an unattended tab stops acting as someone without a reload | ⏳ |
 
 **B1 — a credential, and the one place that checks it.** The password never enters
@@ -347,17 +347,40 @@ The client's digest is explicitly **not** the KDF a server ships — the column,
 function and the document all say so, and the server's job is `POST /api/sessions`
 with argon2id and a digest it never sends.
 
-**B2 — sign-in as a screen, and the guard that makes it mandatory.** An
-unauthenticated client must not be able to *read* a workspace by typing a URL: every
-route gains `requireAuth` (beside the existing `requireModule`), and the guard sends
-a stranger to `/signin` — carrying the intended URL so a deep link survives the
-sign-in. The screen states the credential pair, not the roles, and lists the seeded
-demo accounts with their passwords: this is a prototype whose permissions are the
-demo, so removing the ability to enter as a warehouse user would remove the ability
-to demonstrate A1. The switcher becomes a **Sign out** (the chip names the person
-and the workspace), because "become someone else" is exactly what authentication
-replaces. What B2 does *not* change is any `can()` call site: the principal changes
-where it comes from, not what a role may do.
+**B2 — sign-in as a screen, and a session that is required.** Two halves, and the
+first is the fixture's: a fresh seed now **ships signed out**. It is set up *as* the
+seeded manager — every seeded row keeps the author it always had, because the fixture
+posting runs before the session is emptied — and then the app hands the browser an
+empty session, so what a visitor meets is the form. `hydrate()` keeps a restored
+session either way, which is what makes "signed out" survive a reload.
+
+The second half is the guard. `requireAuth` is registered **once**, on a pathless
+route parent that every screen is a child of, rather than repeated per route: a guard
+a new route can forget is a guard that eventually gets forgotten, and the claim is
+that no screen is reachable without a credential. It asks `session.signedIn()` and
+sends a stranger to `/signin` with `?next=` naming where they were going, so a deep
+link survives the sign-in (the form honours a path on this app and nothing else, so a
+crafted value cannot become an open redirect). `requireModule` stays where it was —
+a licence and an identity are different questions.
+
+The shell's switcher is **gone**, and that is the increment's point: "become someone
+else" is precisely what authentication replaces. The chip keeps the person's name and
+title, and its panel is now a **Sign out**; `setSessionUser()` and `setSessionTenant()`
+have left the store, so nothing in the client can assert who it is — the harnesses that
+used them now sign in with a fixture credential, which is the same change a client
+made. `signOut()` also navigates explicitly rather than trusting the guard: a guard
+runs on *navigation*, so a signed-out shell sitting on an already-active route would
+otherwise keep rendering it.
+
+The sign-in screen (`features/sign-in/`) decides nothing: it posts the pair, prints
+whatever `SignInResult` comes back (one sentence per `SignInFailure`), and clears the
+password field on every attempt — refusal or not. Below it sits the fixture's
+pick-list (`DataService.demoAccounts()`), the six seeded people with the passwords
+this build publishes: this prototype's permissions *are* the demonstration, so a
+credential requirement must not lock the demo out of itself. One click fills the form
+and tries it, which is also what makes the list honest — `check15` signs in as every
+published pair and asserts each one lands as that person with the role its row names.
+A real deployment renders no such list and stores no such password.
 
 **B3 — a session that ends.** A credential only matters if the session it creates
 can lapse: `session.expiresAt` is stamped at sign-in and rolled by activity, and a
@@ -616,7 +639,7 @@ compares a role name to decide what to show.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 154 runtime checks against the real store, no browser
+npm run check:store    # 161 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -796,6 +819,21 @@ hand-roll `localStorage` and assert on the store's own output:
   state is persisted both ways (a reload stays signed out; a reload of a signed-in
   session is still that person).
 
+- `check15.mjs` — **B2, 7 checks:** the session is *required*, and the demo stays
+  enterable. The store can no longer assert an identity — `setSessionUser()` and
+  `setSessionTenant()` are gone and `signIn()` / `signOut()` are the only ends of a
+  session; the fixture's pick-list names every seeded person (nobody invented) and
+  carries no salt or digest, only the password this build publishes; **every published
+  pair really signs in as that person, with the role its row names** (the test a stale
+  hand-written list cannot pass); and the pick-list's labels are true — the viewer
+  signs in and holds read, not count or people. Then the wiring no component would
+  prove without a browser, read as source text the way check9 reads the model: every
+  screen route is a child of the parent carrying `requireAuth` and `/signin` is the
+  one route outside it (bracket-matched, so a route added later is *checked* rather
+  than assumed), the guard asks `session.signedIn()` and carries `?next=` so a deep
+  link survives, and the shell offers Sign out — with no `switchUser`, no
+  `session.users()` and no "Switch user" left in it.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -807,6 +845,10 @@ the cheapest way to prove an invariant still holds.
   exception, which only `tenants`, `users` and `user_credentials` are).
 - A new seed shape must bump `VERSION`, and the shell must keep telling the user
   their data was replaced.
+- A new screen is a child of the guarded route parent, never a sibling of it
+  (B2): `check15` reads the route map and fails if a `component:` route sits outside
+  the parent that carries `requireAuth`. The same harness fails if the store grows a
+  way to set the acting person without a credential.
 - Display strings are resolved at read time (`userName`, `locationPath`,
   `partyName`), never stored — an order names its customer by FK and nothing else,
   so a rename on the Parties grid reaches every contract without touching a single

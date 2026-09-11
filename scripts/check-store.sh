@@ -31,6 +31,9 @@ cp scripts/runtime-checks/*.mjs "$OUT/"
 # check9 compares the data-model document with the model source, and TypeScript
 # types do not survive tsc — so the two sources it reads are copied as text.
 cp src/app/core/models.ts src/app/core/data.service.ts docs/DATA-MODEL.md "$OUT/"
+# check15 reads the route map, the auth guard and the shell as text (importing them
+# would pull Angular components into Node), so they travel with the sources above.
+cp src/app/app.routes.ts src/app/core/auth.guard.ts src/app/app.component.ts src/app/app.component.html "$OUT/"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs

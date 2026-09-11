@@ -8,13 +8,15 @@ globalThis.localStorage = {
   clear: () => mem.clear(),
 };
 
+import { signInAs } from './sign-in.mjs';
+
 const { DataService } = await import('./data.service.js');
 
 let n = 0;
-const check = (label, fn) => {
+const check = async (label, fn) => {
   n++;
   try {
-    fn();
+    await fn();
     console.log(`  ok  ${label}`);
   } catch (e) {
     console.log(`FAIL  ${label}\n      ${e.message}`);
@@ -37,6 +39,10 @@ const check = (label, fn) => {
 mem.clear();
 const d = new DataService();
 
+/* B2: the fixture ships signed out, so a check that asserts who authored a write
+   signs in first (the switcher it used to call is gone). */
+await signInAs(d, 'USR-003');
+
 const TENANT = 'TNT-NORTHLINE';
 
 /** Every configuration row in the store, labelled for the failure messages. */
@@ -53,7 +59,7 @@ function configRows() {
   return out;
 }
 
-check('every seeded configuration row carries tenant + author stamps', () => {
+await check('every seeded configuration row carries tenant + author stamps', async () => {
   const rows = configRows();
   assert.ok(rows.length > 20, `a real sample (${rows.length} rows)`);
   for (const [label, r] of rows) {
@@ -65,7 +71,7 @@ check('every seeded configuration row carries tenant + author stamps', () => {
   }
 });
 
-check('a workspace row is authored by a user the store knows', () => {
+await check('a workspace row is authored by a user the store knows', async () => {
   for (const [label, r] of configRows()) {
     assert.match(r.createdBy, /^USR-\d+$/, `createdBy on ${label}`);
     assert.notEqual(d.userName(r.createdBy), r.createdBy, `createdBy resolves on ${label}`);
@@ -73,8 +79,8 @@ check('a workspace row is authored by a user the store knows', () => {
 });
 
 
-check('a new category is attributed to the acting user', () => {
-  d.setSessionUser('USR-004');
+await check('a new category is attributed to the acting user', async () => {
+  await signInAs(d, 'USR-004');
   d.addCategory('part', 'Bench Consumables');
   const rec = d.categoryRecordsFor('part').find((c) => c.name === 'Bench Consumables');
   assert.ok(rec, 'the category was added');
@@ -84,27 +90,27 @@ check('a new category is attributed to the acting user', () => {
   assert.ok(rec.createdAt);
 });
 
-check('an edit re-stamps the settings row without touching its create stamps', () => {
+await check('an edit re-stamps the settings row without touching its create stamps', async () => {
   const before = d.listTaxSchedules().find((t) => t.code === 'GA');
   const created = { at: before.createdAt, by: before.createdBy };
-  d.setSessionUser('USR-005');
+  await signInAs(d, 'USR-005');
   d.updateTaxSchedule('GA', { rate: 0.0725 });
   const after = d.listTaxSchedules().find((t) => t.code === 'GA');
   assert.equal(after.rate, 0.0725, 'the field it may set');
   assert.equal(after.createdBy, created.by, 'author is history');
   assert.equal(after.createdAt, created.at);
   assert.equal(after.updatedBy, 'USR-005', 'last writer wins');
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
-check('a rename keeps the row it renamed, not a new one', () => {
-  d.setSessionUser('USR-004');
+await check('a rename keeps the row it renamed, not a new one', async () => {
+  await signInAs(d, 'USR-004');
   d.addLocationType('Staging Lane');
   const created = d.locationTypeRecords().find((t) => t.name === 'Staging Lane');
   const born = { at: created.createdAt, by: created.createdBy };
   // A settings row is keyed by its natural key, so the rename moves the key while
   // the row object stays: the stamps must follow the row, not the key.
-  d.setSessionUser('USR-005');
+  await signInAs(d, 'USR-005');
   d.renameLocationType('Staging Lane', 'Staging Row');
   const after = d.locationTypeRecords().find((t) => t.name === 'Staging Row');
   assert.ok(after, 'the type is under its new name');
@@ -112,13 +118,13 @@ check('a rename keeps the row it renamed, not a new one', () => {
   assert.equal(after.createdBy, born.by, 'the original author survives the rename');
   assert.equal(after.updatedBy, 'USR-005', 'and the rename has an author of its own');
   assert.notEqual(after.updatedAt, after.createdAt);
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
-check('a renamed category keeps its history too', () => {
+await check('a renamed category keeps its history too', async () => {
   const born = d.categoryRecordsFor('part').find((c) => c.name === 'Bench Consumables');
   const at = born.createdAt;
-  d.setSessionUser('USR-004');
+  await signInAs(d, 'USR-004');
   d.renameCategory('part', 'Bench Consumables', 'Bench Stock');
   const after = d.categoryRecordsFor('part').find((c) => c.name === 'Bench Stock');
   assert.ok(after, 'the category is under its new name');
@@ -128,20 +134,20 @@ check('a renamed category keeps its history too', () => {
 });
 
 
-check('a singleton settings row (pricing) is stamped and re-stamped', () => {
+await check('a singleton settings row (pricing) is stamped and re-stamped', async () => {
   const created = { at: d.pricing.createdAt, by: d.pricing.createdBy };
   assert.equal(d.pricing.tenantId, TENANT);
   assert.ok(created.at && created.by, 'the seeded row is backfilled');
-  d.setSessionUser('USR-005');
+  await signInAs(d, 'USR-005');
   d.updatePricing({ dailyMinHours: 5 });
   assert.equal(d.pricing.dailyMinHours, 5);
   assert.equal(d.pricing.createdBy, created.by, 'create stamps untouched');
   assert.equal(d.pricing.createdAt, created.at);
   assert.equal(d.pricing.updatedBy, 'USR-005');
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
-check('a configuration write does not smear its neighbours', () => {
+await check('a configuration write does not smear its neighbours', async () => {
   const yard = { at: d.yard.updatedAt, by: d.yard.updatedBy };
   const overhead = d.listOverheads()[0];
   const untouched = { at: overhead.updatedAt, by: overhead.updatedBy };
@@ -153,7 +159,7 @@ check('a configuration write does not smear its neighbours', () => {
   assert.equal(after.updatedBy, untouched.by);
 });
 
-check('the whole settings surface is stamped after an unrelated write', () => {
+await check('the whole settings surface is stamped after an unrelated write', async () => {
   // The hole A8 named was "a table the writer does not cover", so the sweep is the
   // point: a settings table added later has to be reachable through a mutator and
   // listed in `auditedRows()` for this to pass.
@@ -171,13 +177,13 @@ check('the whole settings surface is stamped after an unrelated write', () => {
   }
 });
 
-check('the user the stamps name is the acting user', () => {
-  d.setSessionUser('USR-002');
+await check('the user the stamps name is the acting user', async () => {
+  await signInAs(d, 'USR-002');
   d.addCategory('bulk', 'Session Probe');
   const rec = d.categoryRecordsFor('bulk').find((c) => c.name === 'Session Probe');
   assert.equal(rec.createdBy, 'USR-002');
   assert.equal(d.userName(rec.createdBy), 'Priya Raman');
-  d.setSessionUser('USR-003');
+  await signInAs(d, 'USR-003');
 });
 
 console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck10: ${n} checks`);

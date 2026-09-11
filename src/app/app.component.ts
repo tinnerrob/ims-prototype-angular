@@ -5,7 +5,7 @@ import { filter } from 'rxjs';
 
 import { DataService } from './core/data.service';
 import { ModulesService } from './core/modules.service';
-import { User, TENANT_PLAN_LABEL, roleLabel } from './core/models';
+import { TENANT_PLAN_LABEL } from './core/models';
 import { PageSearchService } from './core/page-search.service';
 import { SessionService } from './core/session.service';
 import { TelemetryService } from './core/telemetry.service';
@@ -38,7 +38,7 @@ export class AppComponent implements OnInit, OnDestroy {
   /** Active view (drives the topbar title, subtitle and page search). */
   view: ViewDef | undefined;
 
-  /** Open state of the sidebar user switcher (the demo's stand-in for sign-in). */
+  /** Open state of the sidebar account panel (name + **Sign out**, B2). */
   userMenuOpen = false;
 
   readonly today = new Date().toLocaleDateString('en-US', {
@@ -117,7 +117,7 @@ export class AppComponent implements OnInit, OnDestroy {
     document.querySelector('.sidebar')?.classList.toggle('open');
   }
 
-  /* ---------------------- session (who we're acting as) ------------------ */
+  /* ------------------------ session (who we're signed in as) ------------- */
 
   toggleUserMenu(): void {
     this.userMenuOpen = !this.userMenuOpen;
@@ -127,13 +127,13 @@ export class AppComponent implements OnInit, OnDestroy {
     this.userMenuOpen = false;
   }
 
-  /** Escape closes the switcher, wherever focus sits. */
+  /** Escape closes the account panel, wherever focus sits. */
   @HostListener('document:keydown.escape')
   onEscape(): void {
     this.closeUserMenu();
   }
 
-  /** A click outside the chip and its panel closes the switcher. */
+  /** A click outside the chip and its panel closes the account panel. */
   @HostListener('document:click', ['$event'])
   onDocumentClick(event: MouseEvent): void {
     if (!this.userMenuOpen) return;
@@ -142,18 +142,18 @@ export class AppComponent implements OnInit, OnDestroy {
     this.closeUserMenu();
   }
 
-  /** Act as another seeded user — the roles exist to be demonstrable. */
-  switchUser(userId: string): void {
-    this.session.switchUser(userId);
+  /**
+   * End the session (B2) and land on the sign-in form. The navigation is explicit
+   * rather than left to the guard: a guard only runs on navigation, so a signed-out
+   * shell sitting on an already-active route would otherwise keep rendering it.
+   */
+  signOut(): void {
     this.closeUserMenu();
+    this.session.signOut();
+    void this.router.navigateByUrl('/signin');
   }
 
-  /** Role label for a row in the switcher. */
-  roleName(user: User): string {
-    return roleLabel(user.role);
-  }
-
-  /** Plan the workspace is on (switcher header). */
+  /** Plan the workspace is on (account panel header). */
   planLabel(): string {
     const t = this.session.tenant();
     return t ? TENANT_PLAN_LABEL[t.plan] : '';
