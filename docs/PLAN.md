@@ -473,8 +473,8 @@ Tenant administration is **E**'s.
 |---|---|---|
 | C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `2ffca74` |
 | C1b | The screens depend on the contract: every component, service and helper takes `IMS_API` (typed `ApiAdapter`) instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ✅ `3439270` |
-| C2a | One shape for a refusal (`CommandResult<T, R>` in `models.ts`, generalising B1's `SignInResult`), and the eight commands whose refusal a screen can already observe answer with it instead of `null`/`false` | ⏳ |
-| C2b | The screens print it: each refusing call site says why where the action was, the way the sign-in form already prints `SignInFailure` | ⏳ |
+| C2a | One shape for a refusal (`CommandResult<T, R>` in `models.ts`, generalising B1's `SignInResult`), and the ten commands whose refusal a screen can observe answer with it instead of `null`/`false` | ✅ `949a26c` |
+| C2b | The screens print it: each refusing call site says why where the action was, the way the sign-in form already prints `SignInFailure` | ✅ `a8ced67` |
 | C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
 | C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
 
@@ -631,10 +631,17 @@ decide who is writing or which workspace a row is in.
 
 **C1 is complete** (C1a `2ffca74`, C1b `3439270`): the contract exists, the store is its
 first implementation, every screen goes through `IMS_API`, and two harnesses plus two
-compile-time assertions hold the line. **C2 is next** — a command's refusal becoming one
-typed result instead of `null`/`false` — and it is the increment that makes "a refusal
-reaches the screen as a reason it prints" true; the paging and load-state halves (C3,
-C4) come after it.
+compile-time assertions hold the line.
+
+**C2 is complete** (C2a `949a26c`, C2b `a8ced67`): a command refuses with a reason, and
+the screen that asked prints it. The acceptance criterion the phase was written around —
+"a refusal reaches the screen as a reason it prints" — is now true at every call site of
+every command that can refuse, and held by two guards rather than by discipline: the
+compile-time assertion that no command answers a sentinel, and `check20`, which drives all
+33 refusals, asserts each reason by name *and* that nothing was written, and then walks the
+sources for a call site that drops the answer (a regression the compiler cannot see, like
+C1b's). **C3 is next** (the request context becomes the seam's argument) and C4 closes the
+phase with load states.
 
 ## Phase D — persistence and offline: what a client keeps when nobody answers
 
