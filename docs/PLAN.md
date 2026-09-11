@@ -471,7 +471,7 @@ Tenant administration is **E**'s.
 
 | # | Increment | Status |
 |---|---|---|
-| C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `C1a-sha` |
+| C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `2ffca74` |
 | C1b | The screens depend on the contract: features inject `IMS_API` instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ⏳ |
 | C2 | Commands answer in one shape: a typed result (value or `reason`) replacing the `null`/`false` sentinels, so a screen renders a refusal instead of guessing what `null` meant | ⏳ |
 | C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
