@@ -834,6 +834,34 @@ export interface User {
   active: boolean;
 }
 
+/**
+ * A person's credential — **a table of its own** (B1), not fields on `User`.
+ *
+ * The shape is the API's: a per-person `salt` and the digest of `salt + ':' +
+ * password`. It is separate because a `users` row is read by every list, every join
+ * and every audit block, and a digest must not travel with the row a screen prints.
+ * `signIn()` is the only reader; nothing else in the client may touch these two
+ * columns, and no result handed to a screen carries either.
+ */
+export interface Credential {
+  userId: string;
+  salt: string;
+  hash: string;
+}
+
+/**
+ * Why a sign-in was refused (B1) — one member per *answerable* refusal. An unknown
+ * address and a wrong password are the same `'invalid'`, so the form cannot be used
+ * to discover who works here; `'inactive'` is told only to somebody who has already
+ * proved the credential (they already knew the account exists). The union is named
+ * because the seam (C) serialises it and the API adds members (`'locked'`,
+ * `'expired'`) rather than each screen inventing its own wording.
+ */
+export type SignInFailure = 'invalid' | 'inactive';
+
+/** What `signIn()` answers: the person, or the one reason a screen may print. */
+export type SignInResult = { ok: true; user: User } | { ok: false; reason: SignInFailure };
+
 /** True when the user's role holds the capability. Null/undefined → no rights. */
 export function can(user: Pick<User, 'role'> | null | undefined, perm: Permission): boolean {
   return !!user && roleDef(user.role).permissions.includes(perm);

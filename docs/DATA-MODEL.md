@@ -122,7 +122,41 @@ history must not break.
 `userId`) is client state in the store; on the API it is the authenticated
 principal, and it replaces every `sessionUserId()` / `sessionTenantId()` call
 site. A user may hold more than one tenant later; today one round-trips through
-the demo fixture.
+the demo fixture. B1 gave that principal an *origin*: `user_credentials` proves it
+and `signIn()` / `signOut()` start and end it, so the client can no longer assert
+who it is (the switcher that did is gone).
+
+### `user_credentials` — `Credential`
+
+```sql
+user_credentials(
+  user_id   text      PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  salt      text      NOT NULL,
+  hash      text      NOT NULL
+)
+```
+
+**Keys/rules.** Its own table, not columns on `users` (B1): a `users` row is read
+by every list, join and audit block in the app, so a digest must not travel with the
+row a screen prints. One row per person (`PRIMARY KEY (user_id)`, and it goes when
+the person does). `hash` is the digest of `salt + ':' + password` — the *salt* is
+per-person, so two people who chose the same password do not share a digest. Same
+`email` uniqueness as `users`: the sign-in lookup is by address, case-insensitively.
+
+The algorithm is the one thing this table does **not** decide. `DataService` derives
+its digest with `credentialDigest()` so the fixture can be entered; a server replaces
+that with a slow KDF (argon2id or bcrypt, with a work factor) and stops receiving the
+password at all — `POST /api/sessions` takes it once, compares, and answers with a
+session. Nothing in the client reads `salt` or `hash` except `signIn()`: no screen,
+no list, no audit block and no result carries either.
+
+Refusals are data too (B1): `signIn()` answers a `SignInResult` — the person, or one
+`SignInFailure` a screen may print. An unknown address and a wrong password answer
+the same `'invalid'`, so the form cannot be used to discover who works here;
+`'inactive'` is told only to somebody who has already proved the credential (they
+already knew the account existed). An unsigned session is not "the first user":
+`activeUser` is `undefined`, `can()` answers no rights, and signing out survives a
+reload.
 
 ## Configuration
 
@@ -1015,10 +1049,13 @@ end will not be the only writer.
 | a deleted item takes its shelves with it | `removeItem()` drops its levels | `ON DELETE CASCADE` on `stock_levels` |
 | a movement is appended, never rewritten | no edit path exists | no `UPDATE`/`DELETE` grant |
 | a location hierarchy has no cycles | `isLocationAncestor()` guard | trigger or recursive check |
+| a credential is never the password | only a salt and a digest are stored; `signIn()` compares digests | store a KDF digest (argon2id/bcrypt), never a reversible column, never a log line |
+| an unknown address and a wrong password are one refusal | `{ ok: false, reason: 'invalid' }` for both | the same `401` (and the same timing) for both, so the endpoint cannot enumerate accounts |
+| a credential belongs to a person | `user_credentials` is looked up by `user_id` | `PRIMARY KEY (user_id)` + `ON DELETE CASCADE` from `users` |
 
 The store's own schema bump is the last rule worth copying: the persisted
 snapshot carries `_v`, and a version the client does not know is discarded and
-reseeded rather than half-read (`DataService.VERSION`, currently `11`). A server
+reseeded rather than half-read (`DataService.VERSION`, currently `12`). A server
 does that job with migrations, and the client's banner — "your saved data was
 replaced" — is the honest version of a silent upgrade.
 
@@ -1113,6 +1150,7 @@ be one the store audits.
 | `tenants` | `Tenant` | `tenants` | `/api/tenants` |
 | `tenant_modules` | `Tenant.disabledModules` | — | `/api/tenant/modules` |
 | `users` | `User` | `users` | `/api/users` |
+| `user_credentials` | `Credential` | `credentials` | `/api/users/:id/credential` |
 | `locations` | `Location` | `locations` | `/api/locations` |
 | `location_types` | `LocationType` | `locationTypes` | `/api/settings/location-types` |
 | `categories` | `CategoryOption` | `categories:<type>` | `/api/settings/categories` |
@@ -1151,8 +1189,8 @@ A store key with a path in it (`orders[].lineItems`, `workOrders[].parts`) is a 
 the writer, and `tenant_id` reaches it through the parent's key. `—` is a table the
 store does not keep as rows at all (the snapshot, and the tenant's licence flags).
 
-**Declared exceptions**: `tenants`, `users` — the two mapped tables a write does
-not stamp, and why:
+**Declared exceptions**: `tenants`, `users`, `user_credentials` — the mapped tables a
+write does not stamp, and why:
 
 - `tenants` — the workspace is its own boundary. `tenants.id` is the one id a
   `tenant_id` column cannot scope, and the row is created by the platform (a sign-up
@@ -1161,6 +1199,11 @@ not stamp, and why:
   `created_by` would be a stranger's id from another tenant or a self-reference on
   insert. `users.tenant_id` is stored, so the row is scoped even though it is not
   stamped.
+- `user_credentials` — a credential is written by the person whose password it is
+  (a sign-up, then a change of password), so its author *is* its subject: stamping it
+  would say only "this person set this at this time", which is what
+  `password_updated_at` says on the server. It is scoped through
+  `users.tenant_id`.
 
 Anything else a screen writes is in `auditedRows()`. That is what the reverse check
 in `check9.mjs` holds: add a settings table and forget the writer, and the harness
@@ -1205,4 +1248,13 @@ each is an increment waiting for its turn:
 - **Multi-tenant membership.** `users.tenant_id` is a single FK: a person belongs
   to one workspace. Contractors who work across two workspaces need a membership
   table, and the session is where that shows up first.
+- **A session that expires, and one that can be revoked.** B1 gives the session an
+  origin (a credential proves it) but not an end: nothing lapses an idle tab on its
+  own, and there is no revocation list, so a session that has been handed out cannot
+  be cancelled before it is given up (B3 adds the idle window; revocation is the
+  API's — a `sessions` row, or a token version on the user).
+- **SSO, 2FA, invitations and password reset.** None is modelled. `signIn()` is one
+  address and one password; an invitation that mints a credential for somebody else,
+  a reset that replaces one, a second factor and a federated identity are all
+  deliberately outside B and E — named here so the absence is a decision.
 

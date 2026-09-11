@@ -5,6 +5,7 @@ import {
   CatalogType,
   CATALOG_TYPE_KEYS,
   CategoryOption,
+  Credential,
   Dispatch,
   DispatchStatus,
   INDUSTRY_MODULES,
@@ -37,6 +38,7 @@ import {
   Receipt,
   ReceiptLine,
   RentalSub,
+  SignInResult,
   StockLevel,
   TaxSchedule,
   Tenant,
@@ -277,6 +279,24 @@ const DEMO_USER_ID = 'USR-003';
 /** Who the fixtures are attributed to (the workspace owner, in a real install). */
 const DEMO_OWNER_ID = 'USR-001';
 
+/**
+ * The demo workspace's published passwords, by person (B1) — the one place a
+ * *password* is written down, deliberately: a prototype whose permissions are the
+ * demonstration has to be enterable, and the sign-in screen prints this list.
+ * Nothing else reads it. A `users` row carries no credential at all and the sign-in
+ * path only ever sees a digest (`seedCredentials()`), so no screen, list, audit
+ * block or result can leak one. A real workspace has no file like this: the server
+ * hashes what it is sent and forgets the password.
+ */
+export const DEMO_PASSWORDS: Record<string, string> = {
+  'USR-001': 'marcus-northline',
+  'USR-002': 'priya-northline',
+  'USR-003': 'dana-northline',
+  'USR-004': 'ray-northline',
+  'USR-005': 'tunde-northline',
+  'USR-006': 'sandra-northline',
+};
+
 /** The audit columns, ignored when comparing a row with the last saved copy. */
 const AUDIT_KEYS = ['tenantId', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
 
@@ -320,6 +340,23 @@ function contentSignature(row: object): string {
 }
 
 /**
+ * The digest a stored credential holds: `sha256(salt + ':' + password)`, hex.
+ *
+ * The *shape* is the API's — a per-person salt plus a digest, never the password —
+ * and this function exists so the fixture can be entered from the sign-in screen.
+ * It is deliberately **not** the algorithm a server ships: a real credential store
+ * uses a slow KDF (argon2id/bcrypt) with a work factor, and the client never derives
+ * a digest at all (it posts the password once and receives a session). `check14`
+ * re-derives every seeded digest with this same call, so the literals in
+ * `seedCredentials()` cannot drift from the rule they claim to follow.
+ */
+async function credentialDigest(salt: string, password: string): Promise<string> {
+  const bytes = new TextEncoder().encode(`${salt}:${password}`);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
  * IMS — DataService (the JSON store / API seam).
  *
  * Port of the prototype's `IMS` seed (js/data.js) + `IMS.store`: one typed
@@ -331,7 +368,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 11;
+  private readonly VERSION = 12;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -376,6 +413,12 @@ export class DataService {
     tenants: Tenant[];
     /** People who may sign in, scoped to a tenant. */
     users: User[];
+    /**
+     * Credentials (B1) — one row per person, and its own table on purpose: a
+     * `users` row is read by every list, join and audit block, so the digest must
+     * not travel with it. `signIn()` is the only reader (see `credentialDigest()`).
+     */
+    credentials: Credential[];
     /** Who the current session is acting as. */
     session: {
       tenantId: string;
@@ -421,6 +464,7 @@ export class DataService {
     },
     tenants: this.seedTenants(),
     users: this.seedUsers(),
+    credentials: this.seedCredentials(),
     session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID },
     yard: { name: 'Main Yard — Buckhead Hub', lat: 33.749, lng: -84.388 },
     parties: this.seedParties(),
@@ -506,7 +550,12 @@ export class DataService {
         if (Array.isArray(snap.invoices)) this.db.invoices = snap.invoices;
         if (Array.isArray(snap.tenants) && snap.tenants.length) this.db.tenants = snap.tenants;
         if (Array.isArray(snap.users) && snap.users.length) this.db.users = snap.users;
-        if (snap.session?.userId) this.db.session = snap.session;
+        if (Array.isArray(snap.credentials)) this.db.credentials = snap.credentials;
+        // A session restores even when it names *nobody* (B1): signing out is a
+        // state that has to survive a reload, or a refresh would sign the person
+        // back in behind their back. An older snapshot without a `userId` string
+        // keeps the seed's session instead.
+        if (snap.session && typeof snap.session.userId === 'string') this.db.session = snap.session;
       } else if (snap) {
         // Older schema: the seed replaces the snapshot. Flagged so the shell can
         // say so — a version bump must never look like data that vanished.
@@ -557,6 +606,7 @@ export class DataService {
           settings: this.db.settings,
           tenants: this.db.tenants,
           users: this.db.users,
+          credentials: this.db.credentials,
           session: this.db.session,
           yard: this.db.yard,
           parties: this.db.parties,
@@ -3268,9 +3318,16 @@ export class DataService {
     return this.db.users.find((u) => u.id === id);
   }
 
-  /** The person the session is acting as. */
+  /**
+   * The person the session is acting as — **or nobody**.
+   *
+   * It used to fall back to `listUsers()[0]`, which meant an empty session acted as
+   * whoever happened to be listed first (B1). A session names a person or it is
+   * empty; `can(undefined, …)` already answers "no rights", so nothing downstream
+   * has to change to respect that.
+   */
   get activeUser(): User | undefined {
-    return this.getUser(this.db.session.userId) ?? this.listUsers()[0];
+    return this.getUser(this.db.session.userId);
   }
 
   sessionUserId(): string {
@@ -3281,9 +3338,53 @@ export class DataService {
     return this.db.session.tenantId;
   }
 
+  /* ------------------------------- sign-in (B1) --------------------------- */
+
   /**
-   * Switch who the session is acting as — the shell's user switcher, which
-   * stands in for sign-in until the API owns it. Follows the user's tenant.
+   * Prove a credential and start a session — the client's stand-in for
+   * `POST /api/sessions`.
+   *
+   * The *answer* is the shape the API returns (the person, or one refusal a screen
+   * may print), and the digest comparison behind it is the only part the server
+   * replaces. An unknown address and a wrong password answer the same `'invalid'`,
+   * so the form cannot be used to discover who works here; `'inactive'` is told only
+   * to somebody who has already proved the credential, because they already knew the
+   * account exists. Nothing here returns, logs or keeps what was typed.
+   */
+  async signIn(email: string, password: string): Promise<SignInResult> {
+    const wanted = email.trim().toLowerCase();
+    const user = this.db.users.find((u) => u.email.toLowerCase() === wanted);
+    const credential = user ? this.db.credentials.find((c) => c.userId === user.id) : undefined;
+    if (!user || !credential) return { ok: false, reason: 'invalid' };
+    if (!(await this.credentialMatches(credential, password))) return { ok: false, reason: 'invalid' };
+    if (!user.active) return { ok: false, reason: 'inactive' };
+    // The session follows the person: the workspace it acts as is theirs.
+    this.db.session = { ...this.db.session, userId: user.id, tenantId: user.tenantId };
+    this.save();
+    return { ok: true, user };
+  }
+
+  /**
+   * End the session. Persisted, so a reload cannot sign the person back in — the
+   * session row it leaves behind names nobody, which `activeUser` reports as
+   * `undefined` and `can()` answers "no rights" for. The workspace it acted as is
+   * kept, so the sign-in screen can still name it.
+   */
+  signOut(): void {
+    this.db.session = { ...this.db.session, userId: '' };
+    this.save();
+  }
+
+  /** Whether `password` is the one behind a stored credential (reads no plaintext). */
+  private async credentialMatches(credential: Credential, password: string): Promise<boolean> {
+    return (await credentialDigest(credential.salt, password)) === credential.hash;
+  }
+
+  /**
+   * Switch who the session is acting as — the shell's user switcher, which stands
+   * in for sign-in *in the UI* until B2 replaces it with sign-in / sign-out (this
+   * increment adds the credential and the proof path; the switcher still has to go
+   * through them). Follows the user's tenant.
    */
   setSessionUser(userId: string): void {
     const u = this.getUser(userId);
@@ -4473,6 +4574,29 @@ export class DataService {
       { id: 'USR-004', tenantId: DEMO_TENANT_ID, name: 'Ray Chen', email: 'ray@northline.example', role: 'warehouse', title: 'Warehouse Lead', initials: 'RC', active: true },
       { id: 'USR-005', tenantId: DEMO_TENANT_ID, name: 'Tunde Okafor', email: 'tunde@northline.example', role: 'field', title: 'Field Technician', initials: 'TO', active: true },
       { id: 'USR-006', tenantId: DEMO_TENANT_ID, name: 'Sandra Patel', email: 'sandra@northline.example', role: 'viewer', title: 'Accountant', initials: 'SP', active: true },
+    ];
+  }
+
+  /**
+   * The seeded credentials (B1) — one per person: a *salt* plus the digest of
+   * `salt + ':' + DEMO_PASSWORDS[id]`.
+   *
+   * The digests are written out rather than derived here because the seed cannot
+   * await (hashing is `crypto.subtle`, which is asynchronous) — and a credential
+   * table holding a digest rather than a hash *function* is the honest shape
+   * anyway. `check14` re-derives every one of these from `DEMO_PASSWORDS` with the
+   * shipped `credentialDigest()`, so a literal that no longer matches the rule fails
+   * the harness instead of quietly locking the demo out. One row per person is the
+   * API's `PRIMARY KEY (user_id)` and nothing else may read it.
+   */
+  private seedCredentials(): Credential[] {
+    return [
+      { userId: 'USR-001', salt: 'b10de29648393f45', hash: '883dc336e8fd39e8adc7a3abd38f001d220874ba253c7a3a4aa264e34eedc676' },
+      { userId: 'USR-002', salt: 'fd85ae2020856dc5', hash: '3c93266d13b32dc54b90d46833d64c61a57d49eb684bb3463e328aaf087af0af' },
+      { userId: 'USR-003', salt: 'a8d2890be39ce123', hash: '61db65224611e76a44c6d436c9d3889e3318e1fde7147bbb2dc5b6907df74dcc' },
+      { userId: 'USR-004', salt: '04db804d7a752aa2', hash: '1ab1b0bb7dd8ff4d1e9484f638d7e7446719fa6236c8817b664f7873db2a186c' },
+      { userId: 'USR-005', salt: 'ce25fb7440fc2341', hash: '2ed2826fdc5b35da69966130201b5fe852fd9be1206887e89fbe21ef3b830889' },
+      { userId: 'USR-006', salt: '4ffbbd6a3ac1662b', hash: 'c6fdbfa5245d88d77ba360078437cb357812d2c80f44266f7031177acb4070f6' },
     ];
   }
 }

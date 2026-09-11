@@ -18,12 +18,13 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (140 checks across tenancy,
+services to JS and drives the real store from Node (154 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
-month windows the purchasing lists filter by, the order↔party join, and the
-counterparty rate cards — see `docs/PLAN.md` → "Verification recipe").
+month windows the purchasing lists filter by, the order↔party join, the
+counterparty rate cards, and credentials / sign-in — see `docs/PLAN.md` →
+"Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -38,7 +39,12 @@ Core (always-on) + all six industry modules, all on one typed, versioned,
 persisted data store. Module views are gated by `ModulesService` + a route guard
 against the active tenant's licence flags; **Admin → Feature Modules** toggles
 them. The workspace and the people in it (roles → permissions) are modelled in the
-store, and the sidebar chip switches the acting user.
+store, and the sidebar chip switches the acting user — which is still the demo's
+stand-in for sign-in. B1 has landed under it: each person has a **credential**
+(`user_credentials` — a salt and a digest, never a password), `signIn()` proves one
+and `signOut()` ends the session, and an empty session now acts as *nobody*
+(`activeUser` used to fall back to the first person in the tenant). No screen uses
+that path yet: the sign-in form, the route guard and the switcher's removal are B2.
 
 Stock only moves through documents and movements: a purchase arrives by receiving
 against a purchase order (`receiveAgainst`), a reorder raises a **draft** PO rather
@@ -680,9 +686,12 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    the real backend. The four phases beyond Phase A are now recorded in
    `docs/PLAN.md` — **B authentication · C this seam · D persistence/offline ·
    E tenant administration** — with their scope and acceptance criteria; **B is the
-   active phase** and is scoped as B1–B3 there. What is still true of the code: a
-   `users` row carries no credential, no route requires a session, and the shell's
-   user switcher is still the demo stand-in for sign-in (its own comment says so).
+   active phase** and is scoped as B1–B3 there. **B1 is done** (the credential table
+   and the `signIn()` / `signOut()` path, plus `activeUser` no longer falling back to
+   the first person); **B2 (the sign-in screen, the `requireAuth` guard, the shell's
+   Sign out and the demo switcher's removal) and B3 (an idle session expiry) are
+   still open** — so today a `users` row carries no credential the UI ever asks for
+   and the switcher is still how the acting person changes.
 6. Scheduler **drag-to-position** (drop a pool item at a specific calendar position
    to set its window) is not yet implemented — currently drops book the full order
    window (a multi-unit resource asks for its count first; the count is editable

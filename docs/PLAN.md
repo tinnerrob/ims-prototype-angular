@@ -594,7 +594,7 @@ compares a role name to decide what to show.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 140 runtime checks against the real store, no browser
+npm run check:store    # 154 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -756,6 +756,24 @@ hand-roll `localStorage` and assert on the store's own output:
   line inside a 24-day order bills the daily rate, and the invoice agrees), which is the
   second day-source bug the same audit found.
 
+- `check14.mjs` — **B1, 14 checks:** a credential is a table, not a field — the store
+  keeps one row per person beside `users`, its digest is the **documented rule**
+  recomputed with an independent implementation (`sha256(salt + ':' + password)`, so a
+  literal that drifts fails loudly), the salt is per person (no two rows share a salt
+  or a digest), and a `users` row carries none of it (no salt, digest or password
+  travels with the row every list and audit block prints). Then the sign-in path:
+  a seeded credential signs that person in and their role and tenant travel with them;
+  the address matches case-insensitively and trimmed; a wrong password is refused
+  `'invalid'` without moving an existing session; an unknown address answers
+  **exactly** the same, so the form cannot enumerate accounts; a deactivated person is
+  told `'inactive'` — but only after the credential proves (with a wrong password they
+  learn nothing); and no answer, nor the persisted session, carries the credential.
+  Finally the session's honesty (the bug this increment fixes): signing out leaves
+  `activeUser` **undefined** rather than falling back to the first user, the
+  `SessionService` signal follows, an empty session holds no capabilities — and the
+  state is persisted both ways (a reload stays signed out; a reload of a signed-in
+  session is still that person).
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -764,7 +782,7 @@ the cheapest way to prove an invariant still holds.
 - A new table must be added to `DataService.auditedRows()` or it is written
   without tenant/author stamps — and `check9` fails if the document's map names a
   store key the writer never covers (unless the doc declares the table an
-  exception, which only `tenants` and `users` are).
+  exception, which only `tenants`, `users` and `user_credentials` are).
 - A new seed shape must bump `VERSION`, and the shell must keep telling the user
   their data was replaced.
 - Display strings are resolved at read time (`userName`, `locationPath`,
