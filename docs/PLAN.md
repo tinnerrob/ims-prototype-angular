@@ -296,7 +296,7 @@ the audit trail (A2) attributes to whoever the client *claims*, a workspace's da
 is readable by anyone who can reach the client, and the API seam (C) has no
 principal to carry in a request context.
 
-**In scope.** A credential on `users` and the one place that checks it; sign-in and
+**In scope.** A credential (a table of its own, `user_credentials`) and the one place that checks it; sign-in and
 sign-out; a session with an end; a guard that makes every route require one; the
 demo's entry path, so the fixture stays enterable while the mechanism becomes real.
 
@@ -311,7 +311,7 @@ any phase yet, and this section says so rather than implying them.
 |---|---|---|
 | B1 | A credential in a table of its own (`user_credentials` — a per-person salt and a digest, never a password) and the store's one sign-in path: `signIn(email, password)` proves it, `signOut()` drops the session, and an empty session acts as nobody | ✅ `90ff25d` |
 | B2 | Sign-in as a screen: the fixture **ships signed out**, every screen is a child of a route parent carrying `requireAuth`, the shell chip names who is signed in and offers **Sign out** (the switcher is gone), and the seeded demo accounts are listed so the workspace is still enterable | ✅ `68cafe0` |
-| B3 | The session has an *end*: an idle expiry the store stamps and rolls on activity, so an unattended tab stops acting as someone without a reload | ⏳ |
+| B3 | The session has an *end*: an idle expiry the store stamps and rolls on activity, enforced where identity is read and cleared where the guard notices it, so an unattended tab stops acting as someone without a reload | ✅ `97bb2c5` |
 
 **B1 — a credential, and the one place that checks it.** The password never enters
 the model, and it does not enter the `users` row either: the credential is **a table
@@ -438,6 +438,11 @@ carries either. Signing in as a seeded person makes every screen, ledger write a
 can no longer assert who it is without a credential. Signing out — or a lapsed
 session — leaves every route unreachable, and the demo's accounts are enterable from
 a fresh browser profile with nothing but what the sign-in screen prints.
+
+**Phase B is complete**: B1 `90ff25d`, B2 `68cafe0`, B3 `97bb2c5`, each with its own
+harness and its own note here. Its known remainder is stated rather than implied —
+revocation belongs to the API (Phase C's seam is where a session becomes a token the
+server can cancel), and it is named in `docs/DATA-MODEL.md` → "not in the model yet".
 
 ## Phase C — the API seam: one contract, two implementations
 

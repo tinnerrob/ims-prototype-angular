@@ -705,16 +705,15 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    (`HttpClient`) behind the same method surface (the `apiAdapter` seam), then wire
    the real backend. The four phases beyond Phase A are now recorded in
    `docs/PLAN.md` — **B authentication · C this seam · D persistence/offline ·
-   E tenant administration** — with their scope and acceptance criteria; **B is the
-   active phase** and is scoped as B1–B3 there. **B1, B2 and B3 are done** — the
+   E tenant administration** — with their scope and acceptance criteria. **B is
+   complete** (B1/B2/B3, each with its own note and harness in `docs/PLAN.md`): the
    credential table, the `signIn()` / `signOut()` path, `activeUser` no longer falling
    back to the first person, the fixture shipping signed out, the `requireAuth` route
    parent, the sign-in screen (with the demo pick-list), the shell's Sign out, and the
-   session's **idle expiry** (stamped at sign-in, rolled by `touchSession()` on each
-   navigation, cleared where it is noticed, with `?expired=1` telling the form why it is
-   on screen). Still open on this seam, and named in DATA-MODEL's "not in the model
-   yet": **revocation** — nothing cuts a session short before it is given up, and no
-   other client is told one ended (the API's job: a `sessions` row or a token version).
+   session's **idle expiry**. **C — the API seam — is the active phase.** Still open on
+   the *auth* seam, and named in DATA-MODEL's "not in the model yet": **revocation** —
+   nothing cuts a session short before it is given up, and no other client is told one
+   ended (the API's job: a `sessions` row or a token version).
 6. Scheduler **drag-to-position** (drop a pool item at a specific calendar position
    to set its window) is not yet implemented — currently drops book the full order
    window (a multi-unit resource asks for its count first; the count is editable
