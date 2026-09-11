@@ -28,6 +28,9 @@ perl -pi -e "s|from '(\./[A-Za-z._-]+)'|from '\$1.js'|g" "$OUT"/*.js
 # installed packages rather than installing anything for this.
 ln -s "$ROOT/node_modules" "$OUT/node_modules"
 cp scripts/runtime-checks/*.mjs "$OUT/"
+# check9 compares the data-model document with the model source, and TypeScript
+# types do not survive tsc — so the two sources it reads are copied as text.
+cp src/app/core/models.ts src/app/core/data.service.ts docs/DATA-MODEL.md "$OUT/"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs

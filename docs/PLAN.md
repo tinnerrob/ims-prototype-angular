@@ -38,7 +38,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A5.1 | Close the holes A5 exposed: the `transfer` / `adjust` write paths (Move, Count), a reorder that raises a document instead of a count, sub-rental vendors as supplier FKs | ✅ `1a8bf96` |
 | A6 | One SKU, many places: `stock_levels(item_id, location_id, qty)` as the truth for counted stock, with `qtyOnHand` as its sum and a move / count that act on a place | ✅ |
 | A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ |
-| A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ⏳ |
+| A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ |
 
 ### Acceptance criteria per increment
 
@@ -130,7 +130,21 @@ tab, instead of just flipping a switch.
 
 **A8 — data model.** The front end has been the spec all along; this increment
 writes the spec down as tables/columns/FKs/types, so the API is built against a
-document rather than inferred from TypeScript.
+document rather than inferred from TypeScript. `docs/DATA-MODEL.md` is 30-odd
+tables (identity, configuration, the catalog, `stock_levels`, the ledger, the
+buying side, the module tables) with keys, nullable/required flags, collisions
+resolved and enums written out, plus three sections a schema designer needs and
+the types cannot say: what is **derived at read time and must never be a column**
+(the totals, a PO's received quantity, an order's amount), **what the server must
+enforce** (the refusals the store makes today, as constraints), and **what is
+deliberately not modelled yet** (reservations, level-tracked kits, count
+sessions, documents). The document is guarded like the code: `check9.mjs` reads
+`models.ts`, `data.service.ts` and the doc as text and fails the harness if a
+model has no table, a table invents a name, a column is not a field, a `NOT NULL`
+contradicts the type's optionality, an enum drifts, a foreign key dangles, the
+five derived stock columns are not the ones the store derives, or the per-type
+status table stops matching `ITEM_STATUSES`. A column the model does not have is
+a bug in the doc, not a wish — so a new field is proposed in TypeScript first.
 
 
 ## Open decisions (need the owner's call)
@@ -140,12 +154,13 @@ document rather than inferred from TypeScript.
    the one this doc described: `stock_levels(item_id, location_id, qty)` with
    `qtyOnHand` as its sum, one row per pair *while it holds something*, and the
    row's `locationId` kept as the place holding the most (a derived home, written
-   by the same call that sums the levels). What the increment did **not** decide,
-   and A8's schema should state rather than imply: whether a *kit* or an
-   *attachment* (an owned count, not a shelf quantity) should also be held in
-   levels — it has one place and `qty` for now — and how a stock *transfer between
-   tenants' sites* would read (the same table with both sites' locations, which is
-   why the FK is a location and not a tenant).
+   by the same call that sums the levels). The increment did not decide whether a
+   *kit* or an *attachment* (an owned count, not a shelf quantity) should also be
+   held in levels; **A8's schema states it rather than implying it** — they keep
+   one place and a `qty`, and the doc says so and says why. The other half is
+   still open: how a stock *transfer between tenants' sites* would read (the same
+   table with both sites' locations, which is why the FK is a location and not a
+   tenant).
 2. **What a vertical does *not* yet carry (A7's leftovers).** The registry holds the
    catalog's shape, not everything industry-shaped in the app. Still decided
    elsewhere, and each wants an owner's call before it moves:
@@ -171,7 +186,7 @@ document rather than inferred from TypeScript.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 93 runtime checks against the real store, no browser
+npm run check:store    # 103 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -253,6 +268,17 @@ hand-roll `localStorage` and assert on the store's own output:
   lumberyard's "New Bulk Material", no rental rate column); and the verticals
   being distinct entries with more than one tab shape.
 
+- `check9.mjs` — **A8, 10 checks:** `docs/DATA-MODEL.md` against `models.ts` —
+  every model named in the doc and every table heading naming a real model; every
+  documented column a field of that table's type (with only the audit columns, a
+  declared rename and a declared parent/map key allowed to differ); **`NOT NULL`
+  agreeing with the type's optionality**, so a nullable field is never documented
+  as required; every table `auditedRows()` writes appearing in the map, with a
+  section; every enum matching its union member for member, and every column type
+  being a documented enum or a scalar; every `REFERENCES` naming a real table; the
+  five derived stock columns the doc marks derived being exactly
+  `DERIVED_STOCK_KEYS`; and the per-type status table matching `ITEM_STATUSES`.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -307,3 +333,14 @@ the cheapest way to prove an invariant still holds.
 - A vertical shapes the *catalog*, not permissions: what a workspace may use is the
   module licence (`Tenant.disabledModules`), and the two must not be conflated —
   hiding a tab is not denying a right.
+- **The schema is a document, not an inference.** `docs/DATA-MODEL.md` is the
+  spec the API is built from, and it is kept in step with the code by `check9`:
+  add a model and it needs a table, add a field and the table needs the column,
+  write a `NOT NULL` the type does not promise and the harness fails. A column the
+  model does not have is a bug in the doc — so a new field is proposed in
+  `models.ts` (and used) first, then written down.
+- Configuration rows are the exception the doc names out loud:
+  `location_types`, `categories`, `tax_schedules`, `overheads`, `pricing` and
+  `yard` are still written *without* tenant stamps, because they are not in
+  `auditedRows()`. The API adds `tenant_id` + the audit columns to them; until
+  then the doc marks them as the hole they are.
