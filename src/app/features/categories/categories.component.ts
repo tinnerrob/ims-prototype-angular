@@ -16,14 +16,14 @@ interface CategoryTab {
   icon: string;
 }
 
-/** Tab strip from the prototype's `CAT_TYPES` (js/pages/categories.js). */
-const CAT_TYPES: CategoryTab[] = [
-  { key: 'serialized', label: 'Assets (Serialized)', icon: 'bi-truck-front' },
-  { key: 'bulk', label: 'Assets (Bulk)', icon: 'bi-boxes' },
-  { key: 'consumable', label: 'Consumables', icon: 'bi-capsule' },
-  { key: 'labor', label: 'Labor / Employees', icon: 'bi-person-badge' },
-  { key: 'part', label: 'Stock Inventory', icon: 'bi-wrench-adjustable' },
-];
+/**
+ * The types this page manages categories for (the prototype's `CAT_TYPES`): the
+ * five a workspace actually groups its stock by — a kit or an attachment is
+ * described by what it is, not by a category. The *names* and icons come from the
+ * tenant's vertical registry (one source for "Assets (Serialized)" or "Bulk
+ * Stock"), so this page cannot drift from the Assets tab strip it feeds.
+ */
+const CATEGORY_TYPES: CatalogType[] = ['serialized', 'bulk', 'consumable', 'part', 'labor'];
 
 /**
  * Categories (core) — port of the prototype's `renderCategories`
@@ -38,8 +38,6 @@ const CAT_TYPES: CategoryTab[] = [
   styleUrl: './categories.component.scss',
 })
 export class CategoriesComponent {
-  readonly tabs = CAT_TYPES;
-
   type: CatalogType = 'serialized';
 
   /** Add / rename modal state. */
@@ -55,14 +53,29 @@ export class CategoriesComponent {
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: CategoryOption | null = null;
 
-  constructor(readonly data: DataService) {}
+  constructor(readonly data: DataService) {
+    // Open on a tab this vertical actually has: a warehouse has no serialized tab.
+    this.type = this.tabs()[0].key;
+  }
+
+  /**
+   * The tab strip: this page's five types, named and iconed by the tenant's
+   * vertical (see `core/vertical-metadata.ts`), so a vertical that doesn't carry a
+   * type at all (a warehouse has no machines) doesn't leave an empty tab here.
+   */
+  tabs(): CategoryTab[] {
+    const meta = this.data.verticalMeta();
+    return meta.tabs
+      .filter((t) => CATEGORY_TYPES.includes(t.key))
+      .map((t) => ({ key: t.key, label: t.label, icon: t.icon }));
+  }
 
   records(): CategoryOption[] {
     return this.data.categoryRecordsFor(this.type);
   }
 
   label(): string {
-    return this.tabs.find((t) => t.key === this.type)?.label ?? this.type;
+    return this.tabs().find((t) => t.key === this.type)?.label ?? this.type;
   }
 
   count(): number {
@@ -137,7 +150,7 @@ export class CategoriesComponent {
     this.viewer = {
       title: c.name,
       subtitle: this.label(),
-      icon: this.tabs.find((t) => t.key === this.type)?.icon ?? 'bi-tags',
+      icon: this.tabs().find((t) => t.key === this.type)?.icon ?? 'bi-tags',
       badge: c.active !== false ? 'Active' : 'Inactive',
       badgeClass: c.active !== false ? 'st-active' : 'st-out',
       sections: [

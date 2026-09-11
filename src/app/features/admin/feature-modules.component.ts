@@ -1,7 +1,8 @@
 import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
-import { INDUSTRY_MODULES, ModuleKey, TENANT_PLAN_LABEL, VERTICALS } from '../../core/models';
+import { CatalogType, INDUSTRY_MODULES, ModuleKey, TENANT_PLAN_LABEL, VERTICALS } from '../../core/models';
+import { VerticalMetadata } from '../../core/vertical-metadata';
 import { ModulesService } from '../../core/modules.service';
 import { SessionService } from '../../core/session.service';
 
@@ -41,6 +42,16 @@ export class FeatureModulesComponent {
   /** Workspace the licence flags belong to (they are tenant data, not a pref). */
   tenantName(): string {
     return this.session.tenant()?.name ?? '';
+  }
+
+  /** The active tenant's vertical metadata — what the switch above re-shapes. */
+  meta(): VerticalMetadata {
+    return this.data.verticalMeta();
+  }
+
+  /** Where a tab sits in the list (the panel marks the page's opening tab). */
+  tabIndex(type: CatalogType): number {
+    return this.meta().tabs.findIndex((t) => t.key === type);
   }
 
   planLabel(): string {

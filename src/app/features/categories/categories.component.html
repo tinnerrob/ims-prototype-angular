@@ -7,7 +7,7 @@
        under the bar separates both from the table. -->
   <div class="card-header">
     <div class="subtabs">
-      @for (t of tabs; track t.key) {
+      @for (t of tabs(); track t.key) {
         <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
           <i class="bi {{ t.icon }}"></i>{{ t.label }}
           <span class="count-pill">{{ data.categoryRecordsFor(t.key).length }}</span>

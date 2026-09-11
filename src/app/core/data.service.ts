@@ -54,6 +54,7 @@ import {
   isUnitStock,
   needsReorder,
 } from './models';
+import { VerticalMetadata, VerticalTabMeta, verticalMetaFor, tabMetaFor } from './vertical-metadata';
 
 /** Money helper — round to 2dp (prototype `round2`). */
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -2853,11 +2854,29 @@ export class DataService {
 
   /**
    * Active industry vertical. This is tenant configuration (it drives the
-   * catalog tabs and, from here on, the per-vertical field sets) — not a
-   * browser preference, so it lives with the workspace.
+   * catalog tabs and the per-vertical field sets) — not a browser preference, so
+   * it lives with the workspace.
    */
   get vertical(): string {
     return this.activeTenant?.vertical ?? 'HeavyEquipment';
+  }
+
+  /**
+   * What the active tenant's vertical makes the catalog *look like*: tabs in
+   * order, per-tab label / icon / "add" wording, the grid's columns and a new
+   * record's defaults (see `core/vertical-metadata.ts`).
+   *
+   * Read straight from the tenant on every call, so switching the vertical
+   * re-shapes the page with no reload — and no component carries a vertical map
+   * of its own, which is the point of the registry: a new vertical is data.
+   */
+  verticalMeta(): VerticalMetadata {
+    return verticalMetaFor(this.vertical);
+  }
+
+  /** The tab metadata for one type in the active vertical (undefined if hidden). */
+  tabMeta(type: CatalogType): VerticalTabMeta | undefined {
+    return tabMetaFor(this.verticalMeta(), type);
   }
 
   setVertical(v: string): void {

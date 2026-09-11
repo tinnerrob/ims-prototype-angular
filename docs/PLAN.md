@@ -37,7 +37,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A5 | Purchasing as core: supplier → PO → receipt → stock (absent entirely today) | ✅ `fc643e1` |
 | A5.1 | Close the holes A5 exposed: the `transfer` / `adjust` write paths (Move, Count), a reorder that raises a document instead of a count, sub-rental vendors as supplier FKs | ✅ `1a8bf96` |
 | A6 | One SKU, many places: `stock_levels(item_id, location_id, qty)` as the truth for counted stock, with `qtyOnHand` as its sum and a move / count that act on a place | ✅ |
-| A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data the tenant carries, not conditionals in components | ⏳ |
+| A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ |
 | A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ⏳ |
 
 ### Acceptance criteria per increment
@@ -112,9 +112,21 @@ deliberately leaves out: no bulk / cycle-count *screen* (one place at a time
 through the row's Count action), and a placement edited straight on a counted row
 is silently refused rather than logged, because stock moves through movements.
 
-**A7 — vertical metadata.** A vertical currently re-shapes the app through
-conditionals scattered across components. It should be a registry (tabs, field
-sets, labels, defaults) so a new vertical is data, not code.
+**A7 — vertical metadata.** A vertical used to re-shape the catalog through
+conditionals inside the page: a `VERTICAL_TABS` map, a `COLUMNS` map and a handful
+of label strings in `assets.component.ts`, plus a second copy of those labels on
+the Categories page. It is now a registry — `core/vertical-metadata.ts`, one entry
+per `VerticalKey`, read through `DataService.verticalMeta()` — carrying the tab set
+*in its own order*, each tab's label / icon / "add" wording, its grid columns and
+what a new record of that type starts as. Two limits keep it a registry rather
+than a second app: a column may only name a field the model already has (the page
+*selects* and *orders* facts, never invents them — a harness check fails the build
+if it tries), and nothing in it decides what is *allowed* (the module licence is
+`Tenant.disabledModules`; a tab list is what a catalog *is*). The store reads the
+tenant's vertical on every call, so Admin → Feature Modules re-shapes the Assets
+tab strip, its columns, its wording and its opening tab with no reload and no
+component-level map in step — and that panel now *shows* the consequence, tab by
+tab, instead of just flipping a switch.
 
 **A8 — data model.** The front end has been the spec all along; this increment
 writes the spec down as tables/columns/FKs/types, so the API is built against a
@@ -134,13 +146,23 @@ document rather than inferred from TypeScript.
    levels — it has one place and `qty` for now — and how a stock *transfer between
    tenants' sites* would read (the same table with both sites' locations, which is
    why the FK is a location and not a tenant).
-2. **`bin` vs location.** Resolved in A3 by *deleting* `bin` and putting the bin
+2. **What a vertical does *not* yet carry (A7's leftovers).** The registry holds the
+   catalog's shape, not everything industry-shaped in the app. Still decided
+   elsewhere, and each wants an owner's call before it moves:
+   **per-vertical category seeds** (a clinic's supplies are grouped nothing like a
+   yard's), **per-vertical search wording and view titles** (the shell's `VIEWS`
+   titles are static — "Assets" is every vertical's page name even where the
+   registry calls the rows "Supplies"), and **per-vertical view gating** (a
+   warehouse has no scheduling). All three are deliberately outside the registry so
+   far: two are permissions or shell concerns, and the third needs a seed-shape
+   decision first.
+3. **`bin` vs location.** Resolved in A3 by *deleting* `bin` and putting the bin
    into the hierarchy (Aisle → Rack → Bin), because the seeded location types
    already included `Bin` — i.e. two models of one fact. If the real yards keep a
    printed shelf label that is not a hierarchy node, say so: A3's commit is the
    thing to revert, and the alternative is `bin` becoming the label *within* a
    location (a composite key the hierarchy alone can't express).
-3. **Phases B–E are not recorded in this repo.** They were discussed as "beyond
+4. **Phases B–E are not recorded in this repo.** They were discussed as "beyond
    the foundation" (the API seam, persistence/offline, auth, tenant admin), but
    no scope was written down, and this doc will not invent one. State the phase
    titles and they get written up before any work starts.
@@ -149,7 +171,7 @@ document rather than inferred from TypeScript.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 84 runtime checks against the real store, no browser
+npm run check:store    # 93 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -217,6 +239,20 @@ hand-roll `localStorage` and assert on the store's own output:
   levels with it, the shelves surviving a reload, and the table read directly as
   a report.
 
+- `check8.mjs` — **A7, 9 checks:** every vertical has an entry (each with a label,
+  a noun, tabs and a default tab it actually carries) and an unknown key falling
+  back to the default catalog; every tab naming a real `CatalogType` once, with a
+  label, an icon, an "add" wording, columns and a default status/count the type's
+  editor offers; **every column naming a field the model actually has** (the guard
+  that caught a warehouse bulk line reading a `qtyOnHand` a bulk row doesn't
+  store); the store reading the *tenant's* vertical and following a switch live;
+  flipping the vertical changing tabs, order, labels and the opening tab (yard →
+  clinic → warehouse); the columns following the vertical rather than the type
+  (the same part, priced in one industry and not the other); a new record starting
+  as the vertical's default rather than a constant; the terminology being data (a
+  lumberyard's "New Bulk Material", no rental rate column); and the verticals
+  being distinct entries with more than one tab shape.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -262,3 +298,12 @@ the cheapest way to prove an invariant still holds.
 - Opening balances are levels without movements: stock a workspace already owns
   arrived by no operation the app can name, so `createItem` writes one level row
   and logs nothing — exactly how the fixture places its own stock.
+- **A vertical is metadata, not a conditional.** Which tabs a catalog exposes, in
+  what order, what each is called, what its "add" button says, which columns its
+  grid prints and what a new record starts as live in `core/vertical-metadata.ts`
+  and are read from the tenant (`DataService.verticalMeta()`). A page may ask the
+  store for them; it may not keep a vertical map of its own, and a column may only
+  name a field the model already has (check8 fails if it doesn't).
+- A vertical shapes the *catalog*, not permissions: what a workspace may use is the
+  module licence (`Tenant.disabledModules`), and the two must not be conflated —
+  hiding a tab is not denying a right.

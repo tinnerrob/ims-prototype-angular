@@ -16,11 +16,36 @@
       </div>
       <div class="col-md-6">
         <span class="text-muted2 text-12">
-          Selects which catalog types appear on <strong>Assets</strong> (e.g. Healthcare
-          shows a different catalog tab set).
+          Selects which catalog types appear on <strong>Assets</strong> — the tab set, their
+          labels and the columns each grid prints all come from the vertical's metadata
+          (<code>core/vertical-metadata.ts</code>), so this switch re-shapes the catalog.
         </span>
       </div>
     </div>
+
+    <!-- What the choice above *means*, read from the registry the Assets page reads:
+         the tabs this vertical exposes, in its order, each with its own "add" wording
+         and the number of columns its grid prints. It is here so an admin can see the
+         consequence of the switch without leaving the page. -->
+    <div class="divider"></div>
+    <div class="strong mb-2">
+      {{ meta().label }} catalog — "{{ meta().noun }}"
+    </div>
+    @for (t of meta().tabs; track t.key; let i = $index) {
+      <div class="list-line">
+        <span class="l">
+          <span class="strong"><i class="bi {{ t.icon }} me-1"></i>{{ t.label }}</span>
+          <div class="text-muted2 small">
+            adds "{{ t.addLabel }}" · starts {{ t.defaults.status }} ×{{ t.defaults.qty }}
+            · {{ t.columns.length }} column(s)
+            @if (i === tabIndex(meta().defaultTab)) {
+              · <span class="strong">the tab the page opens on</span>
+            }
+          </div>
+        </span>
+        <span class="r text-muted2 text-12">{{ t.key }}</span>
+      </div>
+    }
   </div>
 </div>
 

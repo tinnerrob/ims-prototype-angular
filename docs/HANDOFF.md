@@ -14,10 +14,10 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (84 checks across tenancy,
-attribution, the item↔location spine, per-place stock levels, the custody ledger,
-purchasing, and the transfer / adjust / reorder paths — see `docs/PLAN.md` →
-"Verification recipe").
+services to JS and drives the real store from Node (93 checks across tenancy,
+attribution, the item↔location spine, per-place stock levels, the vertical
+registry, the custody ledger, purchasing, and the transfer / adjust / reorder
+paths — see `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -37,16 +37,18 @@ store, and the sidebar chip switches the acting user.
 Stock only moves through documents and movements: a purchase arrives by receiving
 against a purchase order (`receiveAgainst`), a reorder raises a **draft** PO rather
 than editing a count, and a change of place or a physical count logs a
-`transfer` / `adjust` movement from the Items page.
+`transfer` / `adjust` movement from the Assets page. What the catalog *looks like*
+(tabs, labels, columns, new-record defaults) is the tenant's vertical, read from
+`core/vertical-metadata.ts` — not a conditional in a page.
 
 | Area | Path | Notes |
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
-| **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules |
+| **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules (the vertical switch + what it exposes) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
-| Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
+| Categories | `features/categories` | type tabs (named by the tenant's vertical registry), add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
-| Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
+| Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location, with tabs/labels/columns/defaults read from the tenant's vertical registry; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
 | Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
@@ -331,6 +333,24 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   behind `itemsAtLocation()`, the grid's Location cell (`Bay A-03 +1 more`), the
   record viewer's breakdown and `locationStockQty()`. A unit (serialized, kit,
   attachment) keeps its single FK: one machine is one thing in one place.
+- **A vertical is metadata on the tenant, not a conditional in a page.** Which tabs
+  the Assets catalog exposes (and in what order), what each is called, what its
+  "add" button says, which columns its grid prints and what a new record starts as
+  all live in `src/app/core/vertical-metadata.ts` — one entry per `VerticalKey`,
+  read through `DataService.verticalMeta()`. Admin → Feature Modules switches the
+  tenant's vertical and lists what it exposes (tab by tab), so the effect is
+  visible where it is chosen; the Assets page re-shapes itself with no reload (its
+  constructor `effect()` follows the store revision and moves to the vertical's
+  `defaultTab` if the open tab isn't one of its own), and the Categories page takes
+  its tab names from the same registry. Two rules keep it honest: a column may only
+  name a field the model has (check8 fails the build otherwise — it caught a
+  warehouse bulk line reading a `qtyOnHand` a bulk row doesn't store), and a tab
+  list is *not* a permission (that is the module licence, `Tenant.disabledModules`).
+- Opening balances are levels without movements, and a counted row's quantity is
+  **not** patchable: `updateItem()` strips `qty` / `qtyOnHand` / `qtyAvailable` /
+  `totalOwned` / `locationId` for a counted type, so the editor can set what a row
+  *is* but never what it holds (a unit row still re-places by edit — its FK is its
+  placement).
 - **Bumping `VERSION` replaces saved data**, so the shell must keep saying so
   (`DataService.reseeded` → the banner in `app.component.html`).
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
@@ -604,6 +624,12 @@ The store models the SaaS boundary the API will implement, so these are load-bea
     in Bay A-03") and a count sheet for a whole location at once — and kits /
     attachments are still one place + `qty` rather than levels (they are an owned
     count, not a shelved quantity; see `docs/PLAN.md`'s open decision 1).
+11. **The vertical registry holds the catalog's shape, not everything
+    industry-shaped.** Left where they are, deliberately (see `docs/PLAN.md`'s open
+    decision 2): per-vertical *category seeds*, per-vertical *search wording and
+    view titles* (the shell's `VIEWS` titles are static, so every vertical's page is
+    called "Assets" even where the registry names the rows "Supplies"), and
+    per-vertical *view gating* (a warehouse has no Scheduling).
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

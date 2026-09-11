@@ -1,9 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, effect } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
 import { CatalogType, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
+import { ColumnMeta, VerticalTabMeta } from '../../core/vertical-metadata';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -11,71 +12,6 @@ import { assetTip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
 
-interface InvTab {
-  key: CatalogType;
-  label: string;
-  icon: string;
-  addLabel: string;
-}
-
-/** Tab strip (prototype `INV_TABS`). */
-const INV_TABS: InvTab[] = [
-  { key: 'serialized', label: 'Assets (Serialized)', icon: 'bi-truck-front', addLabel: 'New Equipment' },
-  { key: 'bulk', label: 'Assets (Bulk)', icon: 'bi-boxes', addLabel: 'New Bulk Resource' },
-  { key: 'consumable', label: 'Consumables', icon: 'bi-capsule', addLabel: 'New Consumable' },
-  { key: 'part', label: 'Stock Inventory', icon: 'bi-wrench-adjustable', addLabel: 'New Part' },
-  { key: 'labor', label: 'Labor / Employees', icon: 'bi-person-badge', addLabel: 'New Labor Item' },
-  { key: 'kit', label: 'Kits', icon: 'bi-boxes', addLabel: 'New Kit' },
-  { key: 'attachment', label: 'Attachments', icon: 'bi-puzzle', addLabel: 'New Attachment' },
-];
-
-/** Which tabs a vertical exposes (prototype `VERTICAL_INV_TABS`). */
-const VERTICAL_TABS: Record<string, CatalogType[]> = {
-  HeavyEquipment: ['serialized', 'bulk', 'consumable', 'part', 'labor', 'attachment', 'kit'],
-  Rental: ['serialized', 'bulk', 'consumable', 'part', 'labor', 'kit'],
-  Healthcare: ['bulk', 'consumable', 'part', 'labor'],
-  Lumberyard: ['bulk', 'consumable', 'part', 'labor'],
-  Warehouse: ['bulk', 'consumable', 'part', 'labor'],
-};
-
-/** [key, header, align] — per-type column set (prototype grid descriptors). */
-type Col = [string, string, ('num' | 'text-end')?];
-
-const COLUMNS: Record<string, Col[]> = {
-  serialized: [
-    ['id', 'Item ID'], ['serial', 'Serial / VIN'], ['name', 'Name / Model'], ['category', 'Category'],
-    ['meterHours', 'Meter Hrs', 'num'], ['fuelType', 'Fuel'], ['purchaseValue', 'Purchase Value', 'num'],
-    ['rateDaily', 'Daily', 'num'], ['locationId', 'Location'], ['status', 'Status'],
-  ],
-  bulk: [
-    ['id', 'SKU'], ['name', 'Name'], ['category', 'Category'], ['totalOwned', 'Total Owned', 'num'],
-    ['qtyAvailable', 'Available', 'num'], ['qtyOut', 'Out', 'num'], ['locationId', 'Location'],
-    ['rateDaily', 'Daily', 'num'], ['baseMonthly', 'Monthly', 'num'],
-  ],
-  consumable: [
-    ['id', 'SKU'], ['name', 'Name'], ['category', 'Category'], ['qtyOnHand', 'On Hand', 'num'],
-    ['reorderPoint', 'Reorder Pt', 'num'], ['costPrice', 'Cost', 'num'], ['retailPrice', 'Retail', 'num'],
-    ['locationId', 'Location'], ['status', 'Status'],
-  ],
-  part: [
-    ['id', 'Part ID'], ['name', 'Description'], ['category', 'Category'], ['locationId', 'Location'],
-    ['qtyOnHand', 'On Hand', 'num'], ['reorderPoint', 'Reorder Pt', 'num'], ['costPrice', 'Cost', 'num'],
-    ['status', 'Status'],
-  ],
-  labor: [
-    ['id', 'Emp ID'], ['name', 'Name'], ['role', 'Role'], ['category', 'Category'],
-    ['hourlyCost', 'Cost / hr', 'num'], ['hourlyBillable', 'Billable / hr', 'num'],
-    ['spread', 'Spread / hr', 'num'], ['status', 'Status'],
-  ],
-  kit: [
-    ['id', 'Kit ID'], ['name', 'Name'], ['category', 'Category'], ['qty', 'Qty', 'num'],
-    ['rateDaily', 'Rate', 'num'], ['locationId', 'Location'], ['status', 'Status'],
-  ],
-  attachment: [
-    ['id', 'Acc ID'], ['name', 'Name'], ['category', 'Category'], ['qty', 'Qty', 'num'],
-    ['rateDaily', 'Daily', 'num'], ['locationId', 'Location'], ['status', 'Status'],
-  ],
-};
 
 const MONEY_KEYS = ['purchaseValue', 'rateDaily', 'baseMonthly', 'costPrice', 'retailPrice', 'hourlyCost', 'hourlyBillable'];
 
@@ -169,6 +105,22 @@ export class AssetsComponent {
     readonly data: DataService,
     readonly search: PageSearchService,
   ) {
+    // The page opens on the vertical's own first tab (Healthcare lands on
+    // Supplies, a warehouse on stock), not on a hard-coded type.
+    this.type = this.data.verticalMeta().defaultTab;
+    // The store's revision moves on every write, so the tenant switching vertical
+    // (Admin → Feature Modules) lands here: when the open tab isn't one this
+    // vertical has, the page follows the tenant onto its default tab — no reload,
+    // no vertical map, nothing to keep in step by hand.
+    effect(() => {
+      this.data.revision();
+      const meta = this.data.verticalMeta();
+      if (meta.tabs.some((t) => t.key === this.type)) return;
+      // Only a *hidden* tab moves the page: every other write leaves the reader
+      // where they are, viewer and all.
+      this.type = meta.defaultTab;
+      this.closeViewer();
+    });
     // The topbar search box is this page's search: report how many of the active
     // tab's records survive it (the shell shows "shown of total" next to the box).
     this.search.report(() => ({
@@ -177,14 +129,23 @@ export class AssetsComponent {
     }));
   }
 
-  /** Tabs for the active vertical (prototype `invTabKeys()`). */
-  tabs(): InvTab[] {
-    const allowed = VERTICAL_TABS[this.data.vertical] ?? VERTICAL_TABS['HeavyEquipment'];
-    return INV_TABS.filter((t) => allowed.includes(t.key));
+  /**
+   * The tabs this vertical exposes, in its own order, straight from the tenant's
+   * registry (`core/vertical-metadata.ts` → `DataService.verticalMeta()`). The
+   * page keeps no vertical map of its own: a new industry, a new tab order or a
+   * re-worded tab is data on the tenant, not a conditional here.
+   */
+  tabs(): VerticalTabMeta[] {
+    return this.data.verticalMeta().tabs;
   }
 
-  activeTab(): InvTab | undefined {
-    return this.tabs().find((t) => t.key === this.type);
+  activeTab(): VerticalTabMeta | undefined {
+    return this.data.tabMeta(this.type);
+  }
+
+  /** What this vertical calls a catalog row ("Assets", "Supplies"). */
+  noun(): string {
+    return this.data.verticalMeta().noun;
   }
 
   /**
@@ -272,8 +233,8 @@ export class AssetsComponent {
     return this.tabRows(this.type);
   }
 
-  columns(): Col[] {
-    return COLUMNS[this.type] ?? COLUMNS['attachment'];
+  columns(): ColumnMeta[] {
+    return this.activeTab()?.columns ?? [];
   }
 
   /** Switching tabs keeps the page search — it spans every tab (see `tabRows`). */
@@ -605,8 +566,22 @@ export class AssetsComponent {
     if (item) this.openForm(item);
   }
 
+  /**
+   * The blank editor: the data-free skeleton plus the *vertical's* defaults for
+   * this tab (its status and opening count — a clinic's supply starts `In Stock`
+   * with nothing on the shelf, an excavator starts `Available` and one of it) and
+   * the first category the type offers. A new-record default is metadata for the
+   * same reason a column is: it is what this industry's records *are*.
+   */
   private emptyForm() {
-    return { ...BLANK_ITEM_FORM, category: this.data.categoriesFor(this.type)[0] ?? '' };
+    const tab = this.activeTab();
+    return {
+      ...BLANK_ITEM_FORM,
+      status: tab?.defaults.status ?? BLANK_ITEM_FORM.status,
+      qty: tab?.defaults.qty ?? BLANK_ITEM_FORM.qty,
+      qtyOnHand: tab?.defaults.qty ?? BLANK_ITEM_FORM.qtyOnHand,
+      category: this.data.categoriesFor(this.type)[0] ?? '',
+    };
   }
 
   /* ------------------------------ tooltips ------------------------------ */

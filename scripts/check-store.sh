@@ -17,6 +17,7 @@ trap 'rm -rf "$OUT"' EXIT
 
 cd "$ROOT"
 npx tsc src/app/core/data.service.ts src/app/core/session.service.ts src/app/core/modules.service.ts \
+  src/app/core/vertical-metadata.ts \
   --outDir "$OUT" --module es2022 --target es2022 --moduleResolution bundler \
   --experimentalDecorators --skipLibCheck --strict false
 
@@ -29,4 +30,4 @@ ln -s "$ROOT/node_modules" "$OUT/node_modules"
 cp scripts/runtime-checks/*.mjs "$OUT/"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs

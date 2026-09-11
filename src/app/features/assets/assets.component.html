@@ -96,7 +96,7 @@
           } @empty {
             <tr>
               <td [attr.colspan]="columns().length + 1" class="text-center text-muted2 py-4">
-                No records — add one with "{{ activeTab()?.addLabel }}".
+                No {{ noun().toLowerCase() }} yet — add one with "{{ activeTab()?.addLabel }}".
               </td>
             </tr>
           }
