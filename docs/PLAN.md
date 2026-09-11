@@ -282,6 +282,273 @@ waiver is 3% of the base (the prototype's `invoiceCompute`), not the 5% the port
 carried unremarked since its first commit.
 
 
+## Phase B — authentication: the session stops being a stand-in
+
+Phase A made the app *act as* someone: `SessionService` derives the person from the
+store, every control asks a capability (`can('stock.adjust')`), and the ledger
+attributes its writes to a user id. What it never did is *prove* the person is who
+the row says. `db.session.userId` is a value the client sets (`setSessionUser()`),
+`users` has no credential, and there is no moment where a password is asked for,
+checked or refused — the shell's switcher is a demo affordance and its own comment
+says so ("the stand-in for authentication until the API owns it"). B gives the
+session an *origin*, because nothing later in this plan can be honest without one:
+the audit trail (A2) attributes to whoever the client *claims*, a workspace's data
+is readable by anyone who can reach the client, and the API seam (C) has no
+principal to carry in a request context.
+
+**In scope.** A credential on `users` and the one place that checks it; sign-in and
+sign-out; a session with an end; a guard that makes every route require one; the
+demo's entry path, so the fixture stays enterable while the mechanism becomes real.
+
+**Deliberately not B.** Creating people, roles, invitations, resets and
+deactivation are **E**'s — a workspace's admin writes them. A token's transport, its
+refresh and the server's key derivation are **C**'s; B stores a salted digest so the
+*shape* is exercised, and states plainly that the client's digest is not the KDF the
+server will ship. SSO, 2FA, magic links and email verification are not modelled by
+any phase yet, and this section says so rather than implying them.
+
+| # | Increment | Status |
+|---|---|---|
+| B1 | A credential on `users` (`passwordHash` + `passwordSalt` — never the password, never read back) and the store's one sign-in path: `signIn(email, password)` proves it, `signOut()` drops the session, and a wrong password and an inactive person both refuse | ⏳ |
+| B2 | Sign-in as a screen: every route carries `requireAuth`, an unauthenticated visitor lands on the form, the shell chip names who is signed in and offers **Sign out**, and the seeded demo accounts are listed so the workspace is still enterable | ⏳ |
+| B3 | The session has an *end*: an idle expiry the store stamps and rolls on activity, so an unattended tab stops acting as someone without a reload | ⏳ |
+
+**B1 — a credential, and the one place that checks it.** The password never enters
+the model: `users` gains `passwordSalt` and `passwordHash`, and the store's
+`signIn()` is the only method that reads them. A wrong password, an unknown email
+and an inactive person all return the *same* refusal, so the form cannot be used to
+enumerate accounts — and the refusal is data (`{ ok: false, reason }`) rather than
+`null`, because a screen has to say something and the seam C opens needs a result it
+can serialise. Verification is one call, `verifyCredential(user, password)`, so
+there is exactly one function for the server's `POST /api/sessions` to replace. The
+digest is salted and computed with `crypto.subtle` **because the fixture has to be
+enterable**; the column pair is the shape the API stores, the algorithm is not, and
+the doc comment says so where the code is.
+
+**B2 — sign-in as a screen, and the guard that makes it mandatory.** An
+unauthenticated client must not be able to *read* a workspace by typing a URL: every
+route gains `requireAuth` (beside the existing `requireModule`), and the guard sends
+a stranger to `/signin` — carrying the intended URL so a deep link survives the
+sign-in. The screen states the credential pair, not the roles, and lists the seeded
+demo accounts with their passwords: this is a prototype whose permissions are the
+demo, so removing the ability to enter as a warehouse user would remove the ability
+to demonstrate A1. The switcher becomes a **Sign out** (the chip names the person
+and the workspace), because "become someone else" is exactly what authentication
+replaces. What B2 does *not* change is any `can()` call site: the principal changes
+where it comes from, not what a role may do.
+
+**B3 — a session that ends.** A credential only matters if the session it creates
+can lapse: `session.expiresAt` is stamped at sign-in and rolled by activity, and a
+lapsed session is refused by the same guard (and cleared, so the person sees a
+sign-in form rather than a half-working screen). The idle window is a setting
+(`settings.sessionMinutes`), which is the shape the API needs anyway — how long a
+token lives is a workspace's term, not a constant. B deliberately stops there:
+demonstrating expiration in one tab is possible, but proving two tabs agree is D's
+(one store, two clients).
+
+**Acceptance criteria (B).** A password is never stored, printed, logged or read
+back — the credential columns hold a salt and a digest, and no screen or result
+carries either. Signing in as a seeded person makes every screen, ledger write and
+`can()` answer what A1 already proved, so the *only* difference is that the client
+can no longer assert who it is without a credential. Signing out — or a lapsed
+session — leaves every route unreachable, and the demo's accounts are enterable from
+a fresh browser profile with nothing but what the sign-in screen prints.
+
+## Phase C — the API seam: one contract, two implementations
+
+`DataService` is not a client of anything: it *is* the database. It holds the
+snapshot in memory, persists it to `localStorage`, mints its own ids and answers
+every screen synchronously — which is why the port reads the way it does (one
+writer, `save()`) and why it cannot talk to a server as it stands. The document has
+called the shape it needs "the `apiAdapter` seam" since the port began, and one
+prose note in `data.service.ts` is the only trace of it: a future `HttpClient`
+adapter. C makes the store an *implementation* of a contract the API will also
+implement — the same method surface, the same refusals — so the client cannot tell
+which side it is on.
+
+**In scope.** Naming the contract (which methods are queries, which are commands,
+and what a command answers when it refuses); making a refusal a result a screen can
+act on instead of two sentinels (`null` and `false`); the request context becoming an
+argument the seam carries (B's principal, the tenant) rather than a `db.session`
+read; a load/error state where a screen currently assumes the rows are already
+there; and paging for the tables already long enough to need it (movements,
+telemetry, receipts).
+
+**Deliberately not C.** The server — its routes, schemas, migrations and auth
+middleware — belongs to the project this repo specifies; C is the half the client
+can prove. Conflict resolution between a local edit and the server's truth is **D**'s.
+Tenant administration is **E**'s.
+
+| # | Increment | Status |
+|---|---|---|
+| C1 | The contract as an interface (the `apiAdapter`): every method the screens call, split query vs command, with `DataService` as the first implementation behind it | ⏳ |
+| C2 | Commands answer in one shape: a typed result (value or `reason`) replacing the `null`/`false` sentinels, so a screen renders a refusal instead of guessing what `null` meant | ⏳ |
+| C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
+| C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
+
+**C1 — the contract, before the transport.** The interface is written from the call
+sites that exist rather than imagined from an API design: every public `DataService`
+method, grouped into queries (pure reads: `listItems`, `partyName`, `invoiceTotals`)
+and commands (things `save()` persists: `createItem`, `moveStock`, `runNextCycle`).
+Naming it forces the two questions this repo has been answering increment by
+increment — is this fact stored or derived, and is this method a read or a write —
+to be answered once, in one file, instead of being inferred from a method body.
+
+**C2 — one shape for "no".** Today a refusal is `null` (no such row, refused edit) or
+`false` (refused removal) and a screen decides what to say — which is how a guard and
+its button can print different reasons for one rule (`partyRemovalBlockers()` is the
+pattern that fixed that by hand). A command result carrying a reason makes the seam's
+refusal speakable, serialisable and testable, and it is the shape an HTTP adapter
+returns anyway.
+
+**C3 — the context, not the session.** A server derives the tenant and the user from
+the request; the client currently derives them from `db.session`, which is also *in*
+the persisted blob. C moves the read behind the seam so the two implementations
+differ by where the value comes from, and the store keeps its single writer for the
+audit stamps it writes.
+
+**C4 — a read that may not be there yet.** `check9`'s reverse rule (a mapped table
+with no writer) has a mirror on the screen side: a list that renders an empty state
+while a fetch is in flight is claiming the table is empty. A load state makes that
+distinguishable, and it is the one change the components cannot avoid when the data
+stops being local — so it is scoped here deliberately, with the screens it touches
+named by the increment.
+
+**Acceptance criteria (C).** The screens depend on the interface, not on the class:
+swapping the implementation (store now, HTTP later) compiles without touching a
+feature, and the runtime checks can drive the store *through the seam* — which is the
+proof, since a seam only one implementation ever crosses is a rename. A refusal
+reaches the screen as a reason it prints. Nothing in the client reads `db.session` to
+decide who is writing or which workspace a row is in.
+
+## Phase D — persistence and offline: what a client keeps when nobody answers
+
+The store's persistence is one blob: `localStorage[KEY]` holding `_v` plus every
+table, written by `save()` on every mutation, read at boot, with a version bump
+triggering a reseed (A1's banner). That is enough for a demo and honest about its
+limits — but it is also the only client-side copy of the truth this app has ever had,
+so D works out what such a copy is *for*: a cache with a version, a queue of writes
+nobody has acknowledged, and two tabs that are one client, not two workspaces.
+
+**In scope.** The snapshot's role (a cache, never the record); the version rule
+becoming a *migration* where rows can be kept instead of a wipe; an outbox of
+commands with per-record order and an operation id, so a replayed command is
+idempotent (the API's `Idempotency-Key`); what "pending" says on screen; quota and
+failure handling (a write that cannot be persisted must not be silently lost);
+cross-tab agreement (one client, one store); and the app's behaviour with no network
+at all — today it works because there is no network, after C it must *degrade*
+rather than break.
+
+**Deliberately not D.** Arbitrating a conflict between two *people* is the server's
+(a client can only say what it sent and what it has not heard back); CRDTs and
+eventual-merge machinery are refused by name; and file/blob storage is not in the
+model at all (nothing stores a binary — see DATA-MODEL's "not in the model yet").
+
+| # | Increment | Status |
+|---|---|---|
+| D1 | `localStorage` named as the cache it is: a boot that can render without it, an explicit "not persisted" outcome where a write fails (quota, disabled storage), and the reseed reduced to a migration that keeps rows it can | ⏳ |
+| D2 | An outbox: a command is queued with an operation id and per-record order, replayed when the seam can answer, and never applied twice | ⏳ |
+| D3 | Pending state on screen: a person can see that a write is not yet acknowledged, and what it touched | ⏳ |
+| D4 | One client, many tabs: a second tab reflects a write made in the first instead of holding its own copy of the workspace | ⏳ |
+
+**D1 — the client's copy is a cache.** The store currently reseeds on a version
+mismatch, which is the right *policy* for a fixture (a shape change invalidates the
+snapshot) and the wrong one for a workspace's own data. Splitting the two — a shape
+change that must reseed versus a schema change that can migrate — is what makes D2
+possible at all, because a queue is precisely the data that must survive a reload.
+
+**D2 — a write that has not landed.** A command's operation id is what makes a
+retry safe: the phone in a basement sends the same `moveStock` twice and the shelf
+moves once. Per-record ordering (two edits to the same row replay in order; two rows
+do not wait for each other) is the local half of the rule, and the id is the shape
+the API needs (`Idempotency-Key`, or a client-minted id on the row itself).
+
+**D3 — saying "pending" out loud.** Optimistic screens are already this port's habit
+(the scheduler's pane flags an overbooking and lets it through). D3 extends the same
+honesty to persistence: a row that is written locally and not acknowledged says so,
+and a failure keeps the row rather than discarding the person's work.
+
+**D4 — two tabs, one client.** Today a second tab loads its own copy and last-write
+wins on the blob, which is silently the multi-user problem with one user. Either the
+tabs share one store through events, or one is designated the writer; either way the
+increment states which, because the alternative (two tabs, two truths) is exactly the
+failure mode the API exists to prevent.
+
+**Acceptance criteria (D).** Pulling the plug mid-write loses nothing a person typed:
+the command is still queued, still visible, and lands once when the seam answers.
+A reload with a queue in flight does not double-post. A second tab shows the first
+tab's write. A store that cannot be written says so rather than appearing to save —
+and every one of these is asserted by a harness, since a browser is not available.
+
+## Phase E — tenant administration: the workspace manages itself
+
+The workspace's own rows are the last ones with no screen. Administration holds
+Locations, Categories and the module switches; the people who may sign in are seeded
+constants, `ROLES` is a code constant (with a `desc` per role), and a licence is an
+array on the tenant (`disabledModules`). E is where this project has to answer the
+questions the earlier phases deliberately left standing:
+
+- **Is a role a row, or a constant?** Today `ROLES` in `models.ts` *is* the
+  definition and a `user.role` carries a key — six bundles, one per job. A workspace
+  that wants its own bundle needs `role_permissions(role_id, permission)`; a
+  workspace content with the six needs nothing. The increment states which it builds
+  and why, rather than appearing to support both.
+- **Who granted a licence, when does it expire, what does it cost?** DATA-MODEL
+  already says the flags should be rows for exactly this reason — the licence grows
+  columns a `boolean` on a tenant cannot hold.
+- **Are `tenants` and `users` stamped after all?** They are the two declared
+  exceptions to `auditedRows()` (a workspace is created by the platform, a person by
+  a sign-up). An *admin* action is somebody's write, so E either stamps them — and the
+  exception shrinks to the platform's own path — or puts that audit line elsewhere
+  and says where.
+
+**In scope.** Workspace settings (name, plan, vertical, licence flags) with the audit
+of who changed them; people (invite, role, deactivate — never delete, because the
+audit columns and `movements.by_user_id` point at them); the role question above; and
+the invitation path that makes B's sign-in reachable for a person a workspace
+actually creates, not only for a seeded row.
+
+**Deliberately not E.** Creating a *tenant* at sign-up is a platform path and the two
+consoles are not the same screen (state the split; build the tenant admin). Billing,
+subscription lifecycle and plan enforcement are not modelled. Per-vertical view
+gating and titles stay where open decision 2 leaves them.
+
+| # | Increment | Status |
+|---|---|---|
+| E1 | The workspace screen: name, plan, vertical and licence flags as rows a person edits, each write attributed | ⏳ |
+| E2 | People: invite/list/edit/role/deactivate for the signed-in tenant, with the refusal a role cannot be granted by someone who lacks it | ⏳ |
+| E3 | The role question answered: roles as rows with permissions, or code bundles plus explicit per-user grants — stated, built and checked | ⏳ |
+| E4 | The exception resolved: `users` (and the licence rows) carry who made them, or the doc records where an admin write is audited instead | ⏳ |
+
+**E1 — the workspace as a row a person edits.** A tenant's plan and vertical are
+already read by the app (the plan by nothing yet, the vertical by A7's registry), so
+the screen is what makes them *writable* — and the licence flags become rows with an
+actor and a date, which is the change DATA-MODEL predicted.
+
+**E2 — people.** A user row is created by an invitation, and the invitation is where
+B's sign-in stops being a demo: the invitee holds a credential, a role and an
+`active` flag, and a person who leaves is deactivated rather than deleted. The
+permission question is asked here too: may a manager invite, or only an owner? —
+`users.manage` already exists as a capability, so the answer is data, not a condition
+in the component.
+
+**E3 — the role question.** Whichever way it is answered, the answer has to keep A1's
+thesis intact: a screen asks a capability, never a role name. Rows for roles change
+*where* the bundle is stored; they must not change *what* the screens ask.
+
+**E4 — the exception.** The declared exceptions in DATA-MODEL's map are honest today
+because nothing in a workspace creates a tenant or a person. E does, so the doc's
+exception list is either narrowed (an admin's create *is* stamped) or replaced by a
+named audit path, and the reverse check in `check9` is updated to hold whichever
+answer ships.
+
+**Acceptance criteria (E).** An administrator can create a person in their own
+workspace, give them a role, and that person can sign in (B) and see exactly what the
+role allows (A1) — with a stranger unable to do any of it. Turning a module licence
+off hides its nav entry and blocks its routes for that workspace (the mechanism A1
+already proved), and the write that did it names the person who did it. No screen
+compares a role name to decide what to show.
+
 ## Open decisions (need the owner's call)
 
 1. **"One SKU, one place" — settled: a SKU lives in as many places as it holds
@@ -312,10 +579,16 @@ carried unremarked since its first commit.
    printed shelf label that is not a hierarchy node, say so: A3's commit is the
    thing to revert, and the alternative is `bin` becoming the label *within* a
    location (a composite key the hierarchy alone can't express).
-4. **Phases B–E are not recorded in this repo.** They were discussed as "beyond
-   the foundation" (the API seam, persistence/offline, auth, tenant admin), but
-   no scope was written down, and this doc will not invent one. State the phase
-   titles and they get written up before any work starts.
+4. **Phases B–E — settled: they are recorded above.** The owner stated the titles
+   and their order (authentication, the API seam, persistence/offline, tenant
+   administration), so each now has a section with its scope, what it deliberately
+   excludes and its acceptance criteria, and Phase B has its increments (B1–B3)
+   written out. The order is not arbitrary: B gives the request a principal, C gives
+   the principal a transport, D makes the client honest about the server's authority
+   and E administers the things B–D establish. Each phase's increments are still
+   scoped in full before that phase's own work starts — the way A11.2 was — and each
+   phase adds its own harness (`check14` onward) while leaving every earlier check
+   green.
 
 ## Verification recipe
 

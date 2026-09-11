@@ -675,8 +675,14 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    to set order `t0`/`t1` would help Day view.
 4. **Tooltips** (resource/date hover) and a **double-click "Schedule Time"** popup,
    as in the JS prototype, are not ported.
-5. **Backend:** point `DataService` at a real API (`HttpClient`) behind the same
-   method surface (the `apiAdapter` seam), then wire the real backend.
+5. **Backend / the API seam (Phase C).** Point `DataService` at a real API
+   (`HttpClient`) behind the same method surface (the `apiAdapter` seam), then wire
+   the real backend. The four phases beyond Phase A are now recorded in
+   `docs/PLAN.md` — **B authentication · C this seam · D persistence/offline ·
+   E tenant administration** — with their scope and acceptance criteria; **B is the
+   active phase** and is scoped as B1–B3 there. What is still true of the code: a
+   `users` row carries no credential, no route requires a session, and the shell's
+   user switcher is still the demo stand-in for sign-in (its own comment says so).
 6. Scheduler **drag-to-position** (drop a pool item at a specific calendar position
    to set its window) is not yet implemented — currently drops book the full order
    window (a multi-unit resource asks for its count first; the count is editable
