@@ -24,8 +24,10 @@ grown past that, not that the build broke.
 ## What is built (functionally complete port)
 
 Core (always-on) + all six industry modules, all on one typed, versioned,
-persisted data store. Module views are gated by `ModulesService` + a route guard;
-**Admin → Feature Modules** toggles them.
+persisted data store. Module views are gated by `ModulesService` + a route guard
+against the active tenant's licence flags; **Admin → Feature Modules** toggles
+them. The workspace and the people in it (roles → permissions) are modelled in the
+store, and the sidebar chip switches the acting user.
 
 | Area | Path | Notes |
 |---|---|---|
@@ -229,25 +231,48 @@ detail right**, with orders as the top rows.
 
 ## Architecture
 
-- `src/app/core/models.ts` — typed models (Party, Order/OrderLine, Item registry,
-  Movement, Location, Inspection, WorkOrder, Timesheet, RentalSub, Vehicle/Dispatch,
-  Invoice, module + status enums/labels).
+- `src/app/core/models.ts` — typed models (Tenant/User/Role, Party, Order/OrderLine,
+  Item registry, Movement, Location, Inspection, WorkOrder, Timesheet, RentalSub,
+  Vehicle/Dispatch, Invoice, module + status enums/labels, `AuditFields`).
 - `src/app/core/data.service.ts` — one typed in-memory store + versioned
   localStorage persistence (`ims-web.store`); typed accessors + the pricing calcs:
   `lineTotal(li, order)` (port of the prototype's `computeLineTotal()` — the
   per-booking gross Order Details prints and the queues show) and `orderAmount()`
   (its sum). This is the **`apiAdapter` seam** — swap for an
   `HttpClient` later without touching features.
-- `src/app/core/modules.service.ts` + `module.guard.ts` — module gating.
+- `src/app/core/session.service.ts` — who the app is acting as (workspace +
+  person) as signals over the store, and `can('stock.adjust')`-style permission
+  checks. The sidebar chip opens the demo user switcher.
+- `src/app/core/modules.service.ts` + `module.guard.ts` — module gating, read from
+  the **tenant's** licence flags (`Tenant.disabledModules`), not a browser pref.
 - `src/app/features/*` — one folder per view (component.ts/html/scss).
 - `src/app/shared/record-view/*` — shared read-only record viewer (opened by a table
-  row click) + the `isInteractiveTarget()` row-click guard.
+  row click) + the `isInteractiveTarget()` row-click guard + `auditSections()`.
 - `src/app/shared/modal-dismiss/*` — `ModalDismissDirective` (`imsModalDismiss`),
   the single close policy for every hand-rolled modal root: click-outside **or** the
   corner ✕, plus the "discard changes?" guard.
 - `src/app/shared/confirm/*` — `ConfirmService` + `ims-confirm-dialog` (mounted once in
   the app shell, raised above the editor modals) and the `snapshotForm()` /
   `formChanged()` compare-on-close helpers.
+
+### Identity, tenancy & attribution (invariants to preserve)
+
+The store models the SaaS boundary the API will implement, so these are load-bearing:
+
+- **Everything belongs to a tenant.** `tenantId` is on every table row; reads are
+  meant to be scoped by it at the source (`DataService` accessors), and the
+  `vertical` is tenant configuration rather than a display preference.
+- **Every write is attributed.** `save()` is the store's single writer and stamps
+  `createdAt/createdBy` on rows it has not seen and `updatedAt/updatedBy` on rows
+  whose content moved, comparing against a shadow of the last persisted copy
+  (`attributeWrites`, primed by `attributeSeed` in the constructor). New mutators
+  therefore need no stamping discipline — but they must go through `save()`, and a
+  new table must be added to `auditedRows()` to be covered.
+- **Attribution is a foreign key, not a name.** `Movement.byUserId` (and every
+  `createdBy/updatedBy`) holds a user id; display names come from
+  `DataService.userName(id)`.
+- **Bumping `VERSION` replaces saved data**, so the shell must keep saying so
+  (`DataService.reseeded` → the banner in `app.component.html`).
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
 - `src/app/core/page-search.service.ts` — the page-scoped topbar search (below).
 - `src/app/app.routes.ts` — route map (module routes are guarded).
