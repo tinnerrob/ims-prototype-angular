@@ -33,7 +33,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A1 | Identity & tenancy: `Tenant`/`User`/`Role`/`Permission` + `can()`, session as signals, modules become tenant licence flags, `vertical` moves to the tenant, reseed banner | ✅ `0e547ae` |
 | A2 | Audit trail: `AuditFields` on every table, `Movement.byUserId` FK, attribution in `save()`, seeded rows backfilled, audit block in record views | ✅ `592bc37` |
 | A3 | Item ↔ location spine: seed `locationId`, picker in both item editors, Location column + search, `itemsAtLocation()`, `bin` duplicate resolved, location removal guarded by contents | ✅ `d13bafa` |
-| A4 | Movements write real locations: `Movement.location` string → `locationId` FK, hand-off picks a location, custody log shows the path | ⏳ next |
+| A4 | Movements write real locations: `Movement.location` string → `locationId` FK, hand-off picks a location, custody log shows the path | ✅ `6fd10ad` |
 | A5 | Purchasing as core: supplier → PO → receipt → stock (absent entirely today) | ⏳ **needs a decision (see below)** |
 | A6 | Vertical metadata registry: the per-vertical field/tab/label sets become data the tenant carries, not conditionals in components | ⏳ |
 | A7 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ⏳ |
@@ -61,7 +61,11 @@ its whole subtree; a location holding stock can't be deleted out from under it.
 
 **A4 — movements.** A movement records where it happened as an FK, so the ledger
 can be read back per location ("what left Yard A this month?") and the immutable
-log stops carrying a display string.
+log stops carrying a display string. A4 also settled the FK's other end: the
+place is *resolved* rather than asked for (an issue leaves from where the unit
+sits), only a **return** re-homes a unit — the other kinds log a place and leave
+the shelf alone — and a place the ledger mentions can no longer be deleted,
+because an append-only log can't be re-pointed at another location.
 
 **A5 — purchasing.** A receipt is how stock *arrives*; without it, `qtyOnHand`
 is a number someone typed. This is the largest missing core flow — see the
@@ -98,7 +102,7 @@ document rather than inferred from TypeScript.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 28 runtime checks against the real store, no browser
+npm run check:store    # 39 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -117,6 +121,12 @@ hand-roll `localStorage` and assert on the store's own output:
   row placed (and labour deliberately not), the `bin` string gone, the same
   warehouse rule for shop units, `itemsAtLocation()` direct vs. subtree, the
   block-on-contents removal guard, and an edit re-pointing the FK.
+- `check4.mjs` — **A4, 11 checks:** the seeded ledger carries FKs and no display
+  string, each seeded movement left from where its own unit sits, the path reads
+  back, `movementsAtLocation()` at a node vs. its subtree, the store-resolved
+  issue place, a return that re-homes the unit, the earlier issue keeping its old
+  place, a caller-chosen place on a non-return, both removal blockers (stock and
+  history) and that an unreferenced node still removes.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
@@ -129,3 +139,10 @@ the cheapest way to prove an invariant still holds.
   their data was replaced.
 - Display strings are resolved at read time (`userName`, `locationPath`), never
   stored.
+- A movement's place is *derived*, not asked for: the store resolves it from the
+  unit (`logMovement`), so a hand-off can't be logged somewhere the machine never
+  was. Only a `return` re-homes a unit — the shelf follows the ledger, and the
+  ledger never follows the unit.
+- A stored FK must stay resolvable, so a place can only be removed while nothing
+  points at it (stock *and* log rows) — `locationRemovalBlockers()` is the single
+  list both the guard and the grid's disabled button read.

@@ -14,9 +14,9 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (28 checks across tenancy,
-attribution and the item↔location spine — see `docs/PLAN.md` → "Verification
-recipe").
+services to JS and drives the real store from Node (39 checks across tenancy,
+attribution, the item↔location spine and the custody ledger — see `docs/PLAN.md`
+→ "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~652 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -37,12 +37,12 @@ store, and the sidebar chip switches the acting user.
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
 | **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules |
-| Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu) |
+| Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's stock **and** its logged movements block removal |
 | Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
-| Items & Stock | `features/items` | typed catalog: list/CRUD per type |
+| Items & Stock | `features/items` | typed catalog: list/CRUD per type, scoped by location |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
-| Hand-Off & Custody | `features/handoff` | movements: issue/return + log |
+| Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
 | **Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |
 | Field Service & Maintenance | `features/maintenance` | work orders on items |
 | Labor & Timesheets | `features/timesheet` | task-chip → employee drag to clock in |
@@ -286,6 +286,16 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   while stock is stored *at* it (`removeLocation()` returns `false`) — that is
   what keeps a stored FK always resolvable, so no screen has to invent a
   fallback for a dangling place.
+- **A movement's place is the same FK.** `Movement.locationId` points at the same
+  hierarchy, so "what left Yard A this month?" is `movementsAtLocation(id)` — a
+  subtree query — instead of a substring search on a stored label. The store
+  resolves the place once, in `logMovement`: an *issue* leaves from where the unit
+  sits, a *return* comes back to the place the editor chose, and that place then
+  becomes the unit's `locationId` (a return re-homes it; an `adjust`/`transfer`
+  records a place without moving the shelf). History is append-only, so a movement
+  never re-points — which is why a location the ledger mentions is refused for
+  removal too (`locationRemovalBlockers()`, read by both the guard and the grid's
+  disabled button).
 - **Bumping `VERSION` replaces saved data**, so the shell must keep saying so
   (`DataService.reseeded` → the banner in `app.component.html`).
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
@@ -542,11 +552,11 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    prints (`lineTotal()`). Order Details / queues / dashboards are already on the
    prototype figure.
 
-9. **Movements still name their place in free text** — `Movement.location` holds a
-   string ('Main Yard — Buckhead Hub'), so the ledger can't be read back per
-   location the way stock can. Items got their FK in A3; movements are **A4** in
-   `docs/PLAN.md` (move the field to `locationId`, pick it on the Hand-Off page,
-   resolve the path at read time like `locationPath()` does).
+9. **Only `issue` and `return` are ever written.** `MovementKind` also types
+   `receive` / `transfer` / `adjust`, but no screen produces them — the ledger's
+   place FK (A4) is the seam the missing ones plug into: a receipt (A5) is a
+   `receive` at a location, and a yard-to-yard move is a `transfer`. Until then
+   `qtyOnHand` still changes only through an edit or a work-order posting.
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo
