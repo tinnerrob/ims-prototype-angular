@@ -139,17 +139,24 @@ export class AssetsComponent {
 
   /**
    * Move editor — the ledger-writing placement change (a `transfer` movement).
-   * The item editor's Location field still re-homes a row, but quietly; this is
-   * the action that says where it came from, for stock that walks between bins.
+   * The item editor's Location field still re-homes a *unit* row, but quietly;
+   * this is the action that says where the stock came from and how much of it
+   * went, so a part split across two bins can be moved a bin at a time.
    */
   moveOpen = false;
   moveId = '';
+  /** The place the stock leaves (one of the row's own places). */
+  moveFrom = '';
+  /** How much leaves it — up to everything that place holds. */
+  moveQtyInput = 0;
   moveTo = '';
   moveNote = '';
 
-  /** Count editor — a physical count correction (an `adjust` movement). */
+  /** Count editor — a physical count *of one place* (an `adjust` movement). */
   countOpen = false;
   countId = '';
+  /** The place that was counted. */
+  countLocation = '';
   countQtyInput = 0;
   countNote = '';
 
@@ -202,8 +209,9 @@ export class AssetsComponent {
             i.model,
             i.role,
             // The whole path, so "Aisle 1" finds the bays' stock as well — and the
-            // raw id, so a location can be pasted in from the Locations grid.
-            this.data.locationPath(i.locationId),
+            // raw id, so a location can be pasted in from the Locations grid. Every
+            // *place* the row holds stock in, since a split row lives in several.
+            ...this.data.placements(i).flatMap((p) => [this.data.locationPath(p.locationId), p.locationId]),
             i.locationId,
             i.fuelType,
           ),
@@ -213,13 +221,16 @@ export class AssetsComponent {
   /**
    * Does the row fall inside the location scope? A location choice covers its
    * whole subtree (filtering by a warehouse shows its aisles' bins), which is
-   * the question a stock count per place has to answer.
+   * the question a stock count per place has to answer — and it is asked of the
+   * row's *places*, so a part stocked in two bins shows up under either.
    */
   private inLocationScope(item: Item): boolean {
     const f = this.locationFilter;
+    const places = this.data.placements(item);
     if (!f) return true;
-    if (f === NO_LOCATION) return !item.locationId;
-    return !!item.locationId && this.data.locationSubtreeIds(f).has(item.locationId);
+    if (f === NO_LOCATION) return places.length === 0;
+    const inScope = this.data.locationSubtreeIds(f);
+    return places.some((p) => inScope.has(p.locationId));
   }
 
   /** Location choices for the scope select (indented, hierarchy order). */
@@ -232,12 +243,23 @@ export class AssetsComponent {
     return this.data.locationPath(this.form.locationId);
   }
 
+  /**
+   * True when the editor may *not* set the stock fields: a counted row that
+   * already exists. Its quantities are its level rows' sum and its place is
+   * their busiest holding (see `StockLevel`), so the editor shows them read-only
+   * and Move / Count are the actions that change them — a form field that could
+   * move stock would be a number nobody could account for later.
+   */
+  stockLocked(): boolean {
+    return isCountedStock(this.type) && !!this.editingId;
+  }
+
   /** The scope select's "not placed" value (a template can't read the const). */
   readonly noLocation = NO_LOCATION;
 
   /** How many of the active tab's records are unplaced (the scope select hint). */
   unplacedCount(): number {
-    return this.data.listItems(this.type).filter((i) => !i.locationId).length;
+    return this.data.listItems(this.type).filter((i) => this.data.placements(i).length === 0).length;
   }
 
   /** Tab-strip pill: matching records of that type (all of them when idle). */
@@ -263,7 +285,11 @@ export class AssetsComponent {
   /** Cell text for a column (template stays branch-free). */
   cell(item: Item, key: string): string {
     const raw = (item as unknown as Record<string, unknown>)[key];
-    if (key === 'locationId') return this.data.locationLabel(item.locationId);
+    // The Location column reads the row's *place(s)*: the busiest one normally,
+    // and "+N more" the moment the same stock sits somewhere else too — the grid
+    // cannot show two places in one cell, so it says how many there are and the
+    // tooltip and the record view spell each one out.
+    if (key === 'locationId') return this.data.placeLabel(item);
     if (key === 'spread') {
       return this.data.money((item.hourlyBillable ?? 0) - (item.hourlyCost ?? 0));
     }
@@ -337,9 +363,11 @@ export class AssetsComponent {
       status: f.status,
       qty: Number(f.qty) || 0,
       rateDaily: Number(f.rateDaily) || 0,
-      // Placement is written for every type that has a place (labour has none):
-      // an empty choice clears the FK rather than storing an empty-string
-      // location, so "unplaced" is one fact, not two.
+      // Placement is written for every type that has a place (labour has none): an
+      // empty choice clears the FK rather than storing an empty-string location,
+      // so "unplaced" is one fact, not two. For counted stock this is the
+      // *opening* place on a new row (and nothing at all on an existing one —
+      // see `stockLocked`), because a placed quantity there is a level row.
       locationId: f.locationId || undefined,
     };
     if (this.type === 'serialized') {
@@ -369,13 +397,16 @@ export class AssetsComponent {
     this.data.removeItem(this.type, item.id);
   }
 
-  /* ------------------------- place & count (ledger) --------------------- */
-
   /**
-   * The two corrections a stock row gets by hand, each of which *writes* the
-   * ledger through the store (`moveStock` / `adjustStock`) instead of quietly
-   * editing a field: an item's place and its count both have a history, and the
-   * row's own record view reads that history back (see `ledgerFields`).
+   * Place & count (ledger) — the two corrections a stock row gets by hand, each
+   * of which *writes* the store instead of quietly editing a field:
+   *
+   * - `moveStock()` moves a quantity from one place to another (part of a row,
+   *   or the whole of it), logging a `transfer` at the destination.
+   * - `adjustStock()` counts *one place*, logging the signed difference there.
+   *
+   * Both are per place because a counted row's stock is: `placesOf()` is what the
+   * two modals offer, and the row's own record view reads the movements back.
    */
 
   /** Labor is a person, so it has no place to move and no count to correct. */
@@ -388,8 +419,19 @@ export class AssetsComponent {
     return isCountedStock(this.type);
   }
 
+  /** A row's stock as (place, qty) — one row per place for counted stock. */
+  placesOf(item: Item | undefined): { locationId: string; qty: number; label: string }[] {
+    if (!item) return [];
+    return this.data.placements(item).map((p) => ({ ...p, label: this.data.locationPath(p.locationId) }));
+  }
+
   openMove(item: Item): void {
     this.moveId = item.id;
+    // Default to the row's biggest holding, and to *all* of what is there: a move
+    // is usually "this whole bin goes over there", with a split as the exception.
+    const first = this.placesOf(item)[0];
+    this.moveFrom = first?.locationId ?? '';
+    this.moveQtyInput = first?.qty ?? 0;
     this.moveTo = '';
     this.moveNote = '';
     this.moveOpen = true;
@@ -402,25 +444,38 @@ export class AssetsComponent {
   closeMove(): void {
     this.moveOpen = false;
     this.moveId = '';
+    this.moveFrom = '';
   }
 
-  /** A move needs a destination that is real and differs from the current one. */
+  /** How much of the row sits at the chosen source place. */
+  moveHeld(): number {
+    const item = this.moveRow();
+    return item ? this.data.stockAt(item, this.moveFrom) : 0;
+  }
+
+  /** A move needs a real destination, a real source, and a quantity that is there. */
   moveReady(): boolean {
     const item = this.moveRow();
-    return !!item && !!this.moveTo && this.moveTo !== item.locationId && !!this.data.getLocation(this.moveTo);
+    if (!item || !this.moveFrom || !this.moveTo || this.moveFrom === this.moveTo) return false;
+    if (!this.data.getLocation(this.moveFrom) || !this.data.getLocation(this.moveTo)) return false;
+    const n = Number(this.moveQtyInput);
+    return Number.isFinite(n) && n > 0 && n <= this.moveHeld();
   }
 
   saveMove(): void {
     if (!this.moveReady()) return;
-    this.data.moveStock(this.type, this.moveId, this.moveTo, this.moveNote.trim());
+    this.data.moveStock(this.type, this.moveId, this.moveFrom, this.moveTo, Number(this.moveQtyInput), this.moveNote.trim());
     this.closeMove();
   }
 
   openCount(item: Item): void {
     this.countId = item.id;
-    // Prefill with what the row holds now: a count is usually a small correction,
-    // and an empty box would read as "counted zero".
-    this.countQtyInput = this.cellQty(item);
+    // A count is per place and usually a small correction, so it starts at the
+    // row's busiest place with *that place's* count — not the row's total, which
+    // would read as "the whole row is here".
+    const home = this.placesOf(item)[0];
+    this.countLocation = home?.locationId ?? '';
+    this.countQtyInput = home?.qty ?? 0;
     this.countNote = '';
     this.countOpen = true;
   }
@@ -434,37 +489,40 @@ export class AssetsComponent {
     this.countId = '';
   }
 
-  countDelta(): number {
+  /** What the chosen place currently holds — the number the count compares to. */
+  countOnRecord(): number {
     const item = this.countRow();
-    return item ? (Number(this.countQtyInput) || 0) - this.cellQty(item) : 0;
+    return item ? this.data.stockAt(item, this.countLocation) : 0;
+  }
+
+  countDelta(): number {
+    return (Number(this.countQtyInput) || 0) - this.countOnRecord();
   }
 
   /** A count of what is already recorded has nothing to log. */
   countReady(): boolean {
-    return !!this.countRow() && Number(this.countQtyInput) >= 0 && this.countDelta() !== 0;
+    return !!this.countRow() && !!this.data.getLocation(this.countLocation) && Number(this.countQtyInput) >= 0 && this.countDelta() !== 0;
   }
 
   saveCount(): void {
     if (!this.countReady()) return;
-    this.data.adjustStock(this.type, this.countId, Number(this.countQtyInput), this.countNote.trim());
+    this.data.adjustStock(this.type, this.countId, this.countLocation, Number(this.countQtyInput), this.countNote.trim());
     this.closeCount();
   }
 
-  /** The number a count compares against — the row's live quantity. */
-  cellQty(item: Item): number {
-    return item.type === 'bulk' ? item.qtyAvailable ?? item.totalOwned ?? item.qty : item.qtyOnHand ?? item.qty;
+  /** Every location, for a count's place picker (stock can be found anywhere). */
+  locationChoices(): { id: string; label: string }[] {
+    return this.data.locationOptions();
   }
 
-  /** Quantity the open move would relocate (the whole row's count). */
+  /** The row the editor has open (the stock it shows read-only is this row's). */
+  editingItem(): Item | undefined {
+    return this.editingId ? this.data.getItem(this.type, this.editingId) : undefined;
+  }
+
+  /** The quantity the open move would relocate (what is at the chosen source). */
   moveQty(): number {
-    const item = this.moveRow();
-    return item ? this.cellQty(item) : 0;
-  }
-
-  /** What the open count compares against, for the modal's read-only field. */
-  countOnRecord(): number {
-    const item = this.countRow();
-    return item ? this.cellQty(item) : 0;
+    return this.moveHeld();
   }
 
   /** True when the editor holds edits that Save has not written yet. */
@@ -499,9 +557,10 @@ export class AssetsComponent {
           title: this.activeTab()?.label ?? 'Record',
           fields: this.columns().map((c) => ({
             label: c[1],
-            // The viewer has the room the grid doesn't: show the full path
-            // ("Warehouse 1 › Aisle 1 › Bay A-03") so the place is unambiguous.
-            value: c[0] === 'locationId' ? this.data.locationPath(item.locationId) : this.cell(item, c[0]),
+            // The viewer has the room the grid doesn't: show where the stock
+            // actually is, place by place ("… › Bay A-03: 24 · … › Bay A-07: 6"),
+            // so a row split across two bins reads as two facts rather than one.
+            value: c[0] === 'locationId' ? this.data.placeBreakdown(item) : this.cell(item, c[0]),
             mono: c[0] === 'id',
           })),
         },
@@ -554,9 +613,16 @@ export class AssetsComponent {
 
   /** Inventory row: the asset's specs, its stock, its place and its reorder state. */
   tipItem(item: Item): Tip {
+    const places = this.data.placements(item);
     return assetTip(this.data, item, [
       { label: 'On hand', value: String(item.qty) },
-      item.locationId ? { label: 'Location', value: this.data.locationPath(item.locationId) } : null,
+      // A row in more than one place says so, and lists each with its count —
+      // the tooltip is the only place a grid cell can be honest about two bins.
+      places.length > 1
+        ? { label: 'Stock places', value: this.data.placeBreakdown(item) }
+        : item.locationId
+          ? { label: 'Location', value: this.data.locationPath(item.locationId) }
+          : null,
       item.baseWeekly ? { label: 'Weekly', value: this.data.money(item.baseWeekly) } : null,
       item.purchaseValue ? { label: 'Value', value: this.data.money(item.purchaseValue) } : null,
       this.reorder(item) ? 'Below the reorder point' : null,

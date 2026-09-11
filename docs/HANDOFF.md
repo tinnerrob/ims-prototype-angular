@@ -14,9 +14,10 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (67 checks across tenancy,
-attribution, the item↔location spine, the custody ledger, purchasing, and the
-transfer / adjust / reorder paths — see `docs/PLAN.md` → "Verification recipe").
+services to JS and drives the real store from Node (84 checks across tenancy,
+attribution, the item↔location spine, per-place stock levels, the custody ledger,
+purchasing, and the transfer / adjust / reorder paths — see `docs/PLAN.md` →
+"Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -42,10 +43,10 @@ than editing a count, and a change of place or a physical count logs a
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
 | **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules |
-| Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's stock **and** its logged movements block removal |
+| Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
 | Categories | `features/categories` | type tabs, add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
-| Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location; row actions **Move** (logs a `transfer`) and **Count** (logs a signed `adjust`), and the record viewer's **Ledger** section reads both back |
+| Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
 | Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
@@ -315,6 +316,21 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   `orderId`). A posted receipt is append-only — no edit, no delete — and a PO
   with receipts can't be deleted; the seed posts its fixture through the same
   call, with a pinned clock and actor.
+- **A counted row's stock is per place.** `stock_levels` (one row per item +
+  location, only while it holds something) is the *truth* for bulk / consumable /
+  part rows: `qtyOnHand` (and a bulk row's `qtyAvailable` / `totalOwned`) is their
+  sum and `Item.locationId` is their busiest holding, both recomputed by
+  `syncStockTotals()` after every level write — a mutator can't set them (a patch
+  carrying them is stripped), so the shelves and the totals can't drift.
+  `moveStock(type, id, from, to, qty, note)` takes a quantity out of one place and
+  puts it in another (an emptied place loses its row, a place that already holds
+  the row is topped up), `adjustStock(type, id, place, counted, note)` counts one
+  place and logs the difference there, and `receiveAgainst()` lands stock as a
+  level (delivering into a bin the SKU isn't in *adds a place*). `placements(item)`
+  is the one read — level rows for counted stock, the single FK for a unit —
+  behind `itemsAtLocation()`, the grid's Location cell (`Bay A-03 +1 more`), the
+  record viewer's breakdown and `locationStockQty()`. A unit (serialized, kit,
+  attachment) keeps its single FK: one machine is one thing in one place.
 - **Bumping `VERSION` replaces saved data**, so the shell must keep saying so
   (`DataService.reseeded` → the banner in `app.component.html`).
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
@@ -572,19 +588,22 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    prototype figure.
 
 9. **Only `issue`, `return`, `receive`, `transfer` and `adjust` are ever
-   written, and the last two only by the Items page.** `transfer` and `adjust`
+   written, and the last two only by the Assets page.** `transfer` and `adjust`
    gained their write paths in A5.1 (`moveStock()` / `adjustStock()` — the *Move*
    and *Count* row actions, each logging a movement the record viewer reads back),
    but there is still no bulk/cycle-count *screen* (a count sheet for a whole
-   location at once), and a placement corrected by editing the item's Location
-   field directly logs nothing — deliberately, as that is a data fix rather than a
-   stock movement.
-10. **One SKU lives in one place.** `Item.locationId` is a single FK, so a receipt
-    re-places the row it tops up and a count corrects *the* row: a part can't be
-    stocked in two bins at once with two quantities, and *Move* relocates the whole
-    row. Per-location quantities need a `stock_levels(item_id, location_id, qty)`
-    table (with `qtyOnHand` as its sum) — flagged as an open decision in
-    `docs/PLAN.md`, not to be decided by accident.
+   location at once), and a placement edited on a **counted** row's Location field
+   is refused outright rather than logged (a unit row's edit still re-places it) —
+   deliberately, as stock moves through movements.
+10. **A counted row's quantity is in a table, but nothing *shows* the table.** A6
+    gave stock levels (`stock_levels(item_id, location_id, qty)`, `qtyOnHand` as
+    their sum): a part can now sit in two bins with a count in each, the Assets
+    grid's Location cell says "+N more" and its record view lists every place with
+    its count, and the Locations grid gained a **Qty** column. What is still
+    missing is a *screen* for the table itself — a place's stock list ("everything
+    in Bay A-03") and a count sheet for a whole location at once — and kits /
+    attachments are still one place + `qty` rather than levels (they are an owned
+    count, not a shelved quantity; see `docs/PLAN.md`'s open decision 1).
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

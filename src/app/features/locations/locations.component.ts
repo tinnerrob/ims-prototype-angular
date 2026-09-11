@@ -155,6 +155,16 @@ export class LocationsComponent {
     return this.data.locationSubtreeItemCount(id);
   }
 
+  /** How much stock sits at this node — units, not rows (see the store). */
+  stockQty(id: string): number {
+    return this.data.locationStockQty(id);
+  }
+
+  /** Units at this node or anywhere beneath it. */
+  subtreeStockQty(id: string): number {
+    return this.data.locationStockQty(id, true);
+  }
+
   /**
    * Movements logged *at* this node — the second thing that blocks removal, and
    * the reason a yard can't be deleted out of an append-only ledger.
@@ -345,12 +355,16 @@ export class LocationsComponent {
           ],
         },
         {
-          // What the hierarchy is *for*: a place holds stock. Both readings are
-          // shown because a site holds none itself while its bays hold plenty.
+          // What the hierarchy is *for*: a place holds stock. Three readings,
+          // because a site holds none itself while its bays hold plenty, and
+          // because a place holds *quantities* — a bin of hundred bolts is one
+          // item and a hundred units.
           title: 'Contents',
           fields: [
             { label: 'Items Here', value: String(this.itemCount(loc.id)) },
             { label: 'Items In Subtree', value: String(this.subtreeItemCount(loc.id)) },
+            { label: 'Stock Qty Here', value: this.data.int(this.stockQty(loc.id)) },
+            { label: 'Stock Qty In Subtree', value: this.data.int(this.subtreeStockQty(loc.id)) },
           ],
         },
         {
@@ -418,6 +432,8 @@ export class LocationsComponent {
       { label: 'Children', value: String(this.childCount(loc.id)) },
       { label: 'Items here', value: String(this.itemCount(loc.id)) },
       { label: 'Items in subtree', value: String(this.subtreeItemCount(loc.id)) },
+      { label: 'Stock qty here', value: this.data.int(this.stockQty(loc.id)) },
+      { label: 'Stock qty in subtree', value: this.data.int(this.subtreeStockQty(loc.id)) },
       { label: 'Movements here', value: String(this.movementCount(loc.id)) },
       { label: 'Movements in subtree', value: String(this.subtreeMovementCount(loc.id)) },
       loc.address ? { label: 'Address', value: loc.address } : null,

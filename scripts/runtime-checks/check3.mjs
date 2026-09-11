@@ -114,13 +114,26 @@ check('the removal guard blocks a node that holds stock', () => {
   );
 });
 
-check('an edit re-points the FK, and the read-time path follows it', () => {
+check('an edit re-places a *unit* row, and the read-time path follows it', () => {
   const before = d.locationSubtreeItemCount('LOC-08');
-  d.updateItem('part', 'PRT-002', { locationId: 'LOC-08' });
-  assert.equal(d.getItem('part', 'PRT-002').locationId, 'LOC-08');
+  // A kit is a unit-held row: one place, one count, so its FK *is* its placement
+  // and an edit moves it. (Counted stock is the opposite — see the next check.)
+  d.updateItem('kit', 'KT-003', { locationId: 'LOC-08' });
+  assert.equal(d.getItem('kit', 'KT-003').locationId, 'LOC-08');
   assert.equal(d.locationPath('LOC-08'), 'Atlanta Main Campus › Warehouse 1 › Aisle 1 › Bay A1-02');
   assert.equal(d.locationSubtreeItemCount('LOC-08'), before + 1);
-  assert.equal(d.getItem('part', 'PRT-002').updatedBy, 'USR-003', 'still attributed');
+  assert.equal(d.getItem('kit', 'KT-003').updatedBy, 'USR-003', 'still attributed');
+});
+
+check('a counted row ignores an edit that would move its stock', () => {
+  // Counted stock's quantities are its stock levels' rows, and its `locationId`
+  // is their busiest holding (see check7): a patch carrying either is stripped,
+  // so a field edit cannot move stock that only a `transfer` may move.
+  const part = d.getItem('part', 'PRT-002');
+  assert.equal(part.locationId, 'LOC-15', 'seeded in Bay A-07');
+  d.updateItem('part', 'PRT-002', { locationId: 'LOC-08', qtyOnHand: 99 });
+  assert.equal(d.getItem('part', 'PRT-002').locationId, 'LOC-15', 'the place did not move');
+  assert.equal(d.getItem('part', 'PRT-002').qtyOnHand, 18, 'and the count did not change');
 });
 
 console.log(`\n${n} checks, ${process.exitCode ? 'FAILURES' : 'all green'}`);

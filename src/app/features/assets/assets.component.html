@@ -145,8 +145,14 @@
               </select>
             </div>
             <div class="col-md-6 field-group">
-              <label class="form-label">Quantity</label>
-              <input class="form-control" type="number" [(ngModel)]="form.qty" />
+              <!-- Counted stock's total is its places' sum (see `stockLocked`), so
+                   the editor shows it rather than offering to set it. -->
+              <label class="form-label">{{ stockLocked() ? 'On Hand (all places)' : 'Quantity' }}</label>
+              @if (stockLocked()) {
+                <input class="form-control" [value]="editingItem()?.qty ?? 0" disabled />
+              } @else {
+                <input class="form-control" type="number" [(ngModel)]="form.qty" />
+              }
             </div>
           </div>
 
@@ -190,10 +196,12 @@
             <div class="divider"></div>
             <div class="strong mb-2">Stock Levels</div>
             <div class="row g-2">
-              <div class="col-md-3 field-group">
-                <label class="form-label">On Hand</label>
-                <input class="form-control" type="number" [(ngModel)]="form.qtyOnHand" />
-              </div>
+              @if (!stockLocked()) {
+                <div class="col-md-3 field-group">
+                  <label class="form-label">On Hand</label>
+                  <input class="form-control" type="number" [(ngModel)]="form.qtyOnHand" />
+                </div>
+              }
               <div class="col-md-3 field-group">
                 <label class="form-label">Reorder Point</label>
                 <input class="form-control" type="number" [(ngModel)]="form.reorderPoint" />
@@ -236,15 +244,17 @@
             </div>
           }
 
-          @if (type !== 'labor') {
+          @if (type !== 'labor' && !stockLocked()) {
             <div class="divider"></div>
             <!-- Placement is one field for every type that *has* a place: a
                  machine, a pallet, a kit on a shelf. Labour rows are people, so
-                 they get no picker — and no made-up default. -->
+                 they get no picker — and no made-up default. For counted stock
+                 the editor's place is the *opening* one: once the row exists its
+                 shelves are written by Move and Count, so this field is gone. -->
             <div class="strong mb-2">Placement</div>
             <div class="row g-2">
               <div class="col-md-6 field-group">
-                <label class="form-label">Location</label>
+                <label class="form-label">{{ countable() && !editingId ? 'Opening place' : 'Location' }}</label>
                 <select class="form-select" [(ngModel)]="form.locationId">
                   <option value="">— Not placed —</option>
                   @for (o of locationOptions(); track o.id) {
@@ -256,6 +266,22 @@
                 <label class="form-label">Place</label>
                 <div class="text-12 text-muted2 pt-2">{{ placePath() }}</div>
               </div>
+            </div>
+          }
+
+          @if (stockLocked()) {
+            <div class="divider"></div>
+            <!-- A placed quantity is a level row, so this is a *read*: the row's
+                 places with their counts. Move and Count are the two actions that
+                 write them, and each logs a movement. -->
+            <div class="strong mb-2">Stock Places</div>
+            <div class="field-group">
+              <label class="form-label">Where this stock sits</label>
+              <div class="text-12 text-muted2">{{ data.placeBreakdown(editingItem()) }}</div>
+            </div>
+            <div class="form-hint">
+              Stock is placed, not typed: use <strong>Move</strong> to shift a quantity between
+              places and <strong>Count</strong> to correct what one place holds. Both log a movement.
             </div>
           }
         </div>
@@ -281,16 +307,37 @@
         </div>
         <div class="modal-body">
           <p class="text-12 text-muted2">
-            {{ moveRow()?.name }} currently sits at
-            <span class="strong">{{ data.locationPath(moveRow()?.locationId) }}</span>.
+            <!-- Where the stock is right now, place by place: the source of a move
+                 is one of these, and moving part of a row leaves the rest here. -->
+            {{ moveRow()?.name }} currently holds
+            <span class="strong">{{ moveQty() }}</span> unit(s) at
+            <span class="strong">{{ data.locationPath(moveFrom) }}</span>.
             Moving it logs a transfer at the destination, so the shelf and the ledger agree.
           </p>
+          @if (countable()) {
+            <div class="row g-2">
+              <div class="col-6 field-group">
+                <label class="form-label">Move from *</label>
+                <select class="form-select" [(ngModel)]="moveFrom">
+                  <option value="">— choose a place —</option>
+                  @for (p of placesOf(moveRow()); track p.locationId) {
+                    <option [value]="p.locationId">{{ p.label }} ({{ p.qty }})</option>
+                  }
+                </select>
+              </div>
+              <div class="col-6 field-group">
+                <label class="form-label">Quantity *</label>
+                <input class="form-control" type="number" min="1" [max]="moveHeld()" [(ngModel)]="moveQtyInput" />
+                <div class="form-hint">{{ moveHeld() }} at that place — move up to all of it.</div>
+              </div>
+            </div>
+          }
           <div class="field-group">
             <label class="form-label">Move to *</label>
             <select class="form-select" [(ngModel)]="moveTo">
               <option value="">— choose a location —</option>
               @for (o of locationOptions(); track o.id) {
-                <option [value]="o.id" [disabled]="o.id === moveRow()?.locationId">{{ o.label }}</option>
+                <option [value]="o.id" [disabled]="o.id === moveFrom">{{ o.label }}</option>
               }
             </select>
           </div>
@@ -322,12 +369,24 @@
         <div class="modal-body">
           <p class="text-12 text-muted2">
             What the shelf actually holds at
-            <span class="strong">{{ data.locationPath(countRow()?.locationId) }}</span>.
-            The difference is logged as one adjustment movement — a count that matches writes nothing.
+            <span class="strong">{{ data.locationPath(countLocation) }}</span>.
+            <!-- The count is *per place*: a row stocked in two bins is counted in
+                 each, and the difference is logged at the place it was found. -->
+            A count corrects the place it was taken at; the difference is logged
+            there as one adjustment movement — a count that matches writes nothing.
           </p>
+          <div class="field-group">
+            <label class="form-label">Counted at *</label>
+            <select class="form-select" [(ngModel)]="countLocation">
+              <option value="">— choose a location —</option>
+              @for (o of locationChoices(); track o.id) {
+                <option [value]="o.id">{{ o.label }}</option>
+              }
+            </select>
+          </div>
           <div class="row g-2">
             <div class="col-6 field-group">
-              <label class="form-label">On record</label>
+              <label class="form-label">On record there</label>
               <input class="form-control" [value]="countOnRecord()" disabled />
             </div>
             <div class="col-6 field-group">

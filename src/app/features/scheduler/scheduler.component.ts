@@ -886,8 +886,18 @@ export class SchedulerComponent implements OnDestroy {
       [item.costPrice, 'Cost price', true],
       [item.retailPrice, 'Retail price', true],
       // The place is an FK now, so show the path it resolves to (the same
-      // read-time resolution the Assets grid uses) rather than a stored string.
-      [item.locationId ? this.data.locationPath(item.locationId) : '', 'Location'],
+      // read-time resolution the Assets grid uses) rather than a stored string —
+      // and for stock held in more than one place, list each with its count: a
+      // counted row's quantities are per place (`stock_levels`), so "where is it"
+      // has more than one true answer.
+      [
+        this.data.placements(item).length > 1
+          ? this.data.placeBreakdown(item)
+          : item.locationId
+            ? this.data.locationPath(item.locationId)
+            : '',
+        'Location',
+      ],
       [item.role, 'Role'],
       [item.hourlyCost, 'Cost / hr', true],
       [item.hourlyBillable, 'Billable / hr', true],

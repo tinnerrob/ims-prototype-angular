@@ -42,6 +42,7 @@
               <th>Parent</th>
               <th class="num">Children</th>
               <th class="num">Items</th>
+              <th class="num" title="Units of stock held at this node">Qty</th>
               <th class="num">Movements</th>
               <th>Address</th>
               <th>Phone</th>
@@ -68,6 +69,12 @@
                      the stock, and both numbers are true. -->
                 <td class="num" [title]="subtreeItemCount(r.loc.id) + ' item(s) in this location and below'">
                   {{ itemCount(r.loc.id) }}
+                </td>
+                <!-- The same reading in *units*: a bin holding a hundred bolts is
+                     one item and a hundred units, and a stock count per place
+                     needs the second number. The subtree total rides the tooltip. -->
+                <td class="num" [title]="data.int(subtreeStockQty(r.loc.id)) + ' unit(s) in this location and below'">
+                  {{ data.int(stockQty(r.loc.id)) }}
                 </td>
                 <!-- The ledger, read per node: movements logged *at* this place,
                      with the subtree total in the tooltip (a yard's movements are

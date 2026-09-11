@@ -213,6 +213,13 @@ export interface Item extends AuditFields {
    * location row here (`LocationType` already includes `Bin`), and keeping both
    * would be two models of one fact. Absent = not stock (labor) or not yet
    * placed — never a made-up default.
+   *
+   * For **counted stock** (`isCountedStock`) this is the row's *home* place, not
+   * its whole placement: the quantities live in `stock_levels`, one row per
+   * place, and this field is derived from them — the place holding the most —
+   * by the same write that refreshes `qtyOnHand` (see `DataService.placements`
+   * and `syncStockTotals`). It is what a grid column, a tip and a receipt's
+   * default destination read; a *move* is what actually re-places stock.
    */
   locationId?: string;
 
@@ -386,6 +393,49 @@ export interface Receipt extends AuditFields {
 /** Serialized units arrive as whole rows (one machine, one row). */
 export function isUnitStock(type: CatalogType): boolean {
   return type === 'serialized';
+}
+
+/**
+ * Stock held *at a place* — one row per (item, location) pair, with the
+ * quantity of that item sitting there.
+ *
+ * This is the answer to "one SKU, one place", which a single
+ * `Item.locationId` could not give: a part can be stocked in two bins with two
+ * counts, and the bins are *rows* rather than a string beside the item. It is
+ * the shape a real backend needs, spelled out where the schema designer looks:
+ *
+ *   stock_levels(
+ *     tenant_id  uuid NOT NULL,
+ *     item_id    uuid NOT NULL REFERENCES items(id),
+ *     location_id uuid NOT NULL REFERENCES locations(id),
+ *     qty        numeric NOT NULL CHECK (qty > 0),
+ *     PRIMARY KEY (item_id, location_id)
+ *   )
+ *
+ * Two rules make it the *truth* rather than a second copy of one:
+ *
+ * 1. **A row exists only while it holds something** (`qty > 0`). An emptied
+ *    place loses its row, so "where is this stock?" is `SELECT … WHERE
+ *    item_id = …` with no zero rows to filter, and the composite key above can
+ *    be the primary key.
+ * 2. **`qtyOnHand` (and a bulk row's `qtyAvailable` / `totalOwned`) is this
+ *    table's sum.** Nothing writes those fields directly: the store recomputes
+ *    them — and the row's *home* place (`Item.locationId`, the place holding the
+ *    most) — every time a level row moves (see `DataService.syncStockTotals`).
+ *
+ * Only counted stock (see `isCountedStock`) is held in levels. A unit is a
+ * thing rather than a quantity: a machine, a kit or a labor row sits in exactly
+ * one place, so its `Item.locationId` *is* its placement and needs no table.
+ */
+export interface StockLevel extends AuditFields {
+  /** Composite key, written out: `<item id>@<location id>` (e.g. `PRT-001@LOC-14`). */
+  id: string;
+  type: CatalogType;
+  /** FK -> `items.id` (the row whose stock this is). */
+  refId: string;
+  /** FK -> `settings.locations` (the place holding it). */
+  locationId: string;
+  qty: number;
 }
 
 /**

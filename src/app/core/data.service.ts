@@ -35,6 +35,7 @@ import {
   Receipt,
   ReceiptLine,
   RentalSub,
+  StockLevel,
   TaxSchedule,
   Tenant,
   Timesheet,
@@ -198,6 +199,26 @@ const WAREHOUSE_1 = 'LOC-05'; // Warehouse 1 (kits, the shop's own stock)
 const SHOP_STATUS = 'In Shop';
 
 /**
+ * A counted row's derived quantities (see `StockLevel`): the fields that are
+ * `stock_levels`' sum and its busiest holding. They are written by
+ * `syncStockTotals()` and nowhere else, so a patch carrying them is stripped
+ * rather than trusted.
+ */
+const DERIVED_STOCK_KEYS: readonly string[] = ['qty', 'qtyOnHand', 'qtyAvailable', 'totalOwned', 'locationId'];
+
+/**
+ * Stock the fixture already keeps in *two* places: `[type, item id, the second
+ * place, the quantity there]`. The rest of a counted row's holding is where its
+ * seed says it sits (see `seedStockLevels`), so this is the one line that shows
+ * the model the whole increment is about — the same part, in two bins, with a
+ * count in each — on the Assets grid and in the location counts.
+ */
+const SEED_SPLIT_STOCK: readonly [CatalogType, string, string, number][] = [
+  // Hydraulic Filter 40um: 24 in its bay, 6 on the bench-side bin in the same aisle.
+  ['part', 'PRT-001', 'LOC-15', 6],
+];
+
+/**
  * A row's content without its audit columns — the signature `attribute()` diffs
  * against the last persisted copy to decide whether a row was edited.
  */
@@ -217,7 +238,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 9;
+  private readonly VERSION = 10;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -261,6 +282,13 @@ export class DataService {
     parties: Party[];
     orders: Order[];
     items: Record<string, Item[]>;
+    /**
+     * Stock held per place — one row per (row, location) while it holds
+     * something (see `StockLevel`). The truth for a counted row's quantities;
+     * `Item.qty*` and its `locationId` are this table's sum and its biggest
+     * holding, refreshed by `syncStockTotals()`.
+     */
+    stockLevels: StockLevel[];
     movements: Movement[];
     /** What was ordered from suppliers (no copy of what arrived — see models). */
     purchaseOrders: PurchaseOrder[];
@@ -289,6 +317,9 @@ export class DataService {
     parties: this.seedParties(),
     orders: this.seedOrders(),
     items: this.seedItems(),
+    /** Filled by `seedStockLevels()` in the constructor: a level row needs the
+     *  item it belongs to, and every seeded quantity has to be placed. */
+    stockLevels: [],
     /** Filled by `seedMovements()` in the constructor — a movement's place is
      *  derived from the unit's own seeded placement, which exists only once
      *  `items` above has been initialised. */
@@ -314,6 +345,10 @@ export class DataService {
     // still has to read (and would make an old-schema snapshot look current).
     this.hydrate();
     const seeded = !this.restored;
+    // Stock that came with the workspace is placed: one level row per seeded
+    // quantity. It runs *after* `hydrate()` so a restored snapshot keeps its own
+    // levels (posting them twice would double the shelves).
+    if (seeded) this.seedStockLevels();
     // Receipts are *posted*, not hand-written: the fixture runs the same
     // operation the Purchasing page runs, so the seed cannot describe stock the
     // ledger doesn't have (or a PO whose lines disagree with what arrived). A
@@ -347,6 +382,7 @@ export class DataService {
         if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
         if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
         if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
+        if (Array.isArray(snap.stockLevels)) this.db.stockLevels = snap.stockLevels;
         if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
         if (Array.isArray(snap.purchaseOrders)) this.db.purchaseOrders = snap.purchaseOrders;
         if (Array.isArray(snap.receipts)) this.db.receipts = snap.receipts;
@@ -415,6 +451,7 @@ export class DataService {
           parties: this.db.parties,
           orders: this.db.orders,
           items: this.db.items,
+          stockLevels: this.db.stockLevels,
           movements: this.db.movements,
           purchaseOrders: this.db.purchaseOrders,
           receipts: this.db.receipts,
@@ -467,6 +504,7 @@ export class DataService {
       }
     };
     for (const [type, rows] of Object.entries(this.db.items)) add(`items:${type}`, rows);
+    add('stockLevels', this.db.stockLevels);
     add('parties', this.db.parties);
     add('orders', this.db.orders);
     add('movements', this.db.movements);
@@ -912,14 +950,40 @@ export class DataService {
 
   createItem(type: CatalogType, data: Omit<Item, 'type' | 'id'>): Item {
     const rec = this.addItemRow(type, data);
+    // A *new* counted row arrives with an opening balance, and an opening
+    // balance is a placed quantity: the form's place + count become its first
+    // level row (see `openStock`). Nothing else about the row's totals is stored.
+    if (isCountedStock(type)) this.openStock(rec);
     this.save();
     return rec;
   }
 
+  /**
+   * The stock a brand-new counted row starts with: the editor's opening count at
+   * the editor's place, as one level row (and no movement — an opening balance is
+   * not something anyone *did*; the fixture's own stock is placed the same way).
+   * A row created without a place, or with a zero count, simply holds nothing yet.
+   */
+  private openStock(item: Item): void {
+    const qty = Math.floor(Number(item.qtyOnHand ?? item.qtyAvailable ?? item.qty ?? 0));
+    const place = item.locationId;
+    if (qty > 0 && place && this.getLocation(place)) this.writeLevel(item.type, item.id, place, qty);
+    this.syncStockTotals(item);
+  }
+
+  /**
+   * Patch a row. Counted stock's quantities and place are **not** patchable: they
+   * are the level table's sum and its busiest holding (see `StockLevel`), and a
+   * field edit that changed them would leave stock no document and no movement
+   * accounts for. `moveStock` / `adjustStock` are the write paths for a place and
+   * a count, and `receiveAgainst` is the only way stock arrives.
+   */
   updateItem(type: CatalogType, id: string, patch: Partial<Item>): void {
     const it = this.getItem(type, id);
     if (it) {
-      Object.assign(it, patch, { type });
+      const next: Record<string, unknown> = { ...patch };
+      if (isCountedStock(type)) for (const k of DERIVED_STOCK_KEYS) delete next[k];
+      Object.assign(it, next, { type });
       this.save();
     }
   }
@@ -930,6 +994,9 @@ export class DataService {
     const i = list.findIndex((x) => x.id === id);
     if (i >= 0) {
       list.splice(i, 1);
+      // A level row points at the item it belongs to, so it goes with it — the
+      // FK's `ON DELETE CASCADE`, and nothing is left holding orphaned shelves.
+      this.db.stockLevels = this.db.stockLevels.filter((l) => !(l.type === type && l.refId === id));
       this.save();
     }
   }
@@ -1328,13 +1395,18 @@ export class DataService {
   }
 
   /**
-   * Items whose place is this location. Stock is not *at* a site — it is at a
+   * Rows holding stock in this location. Stock is not *at* a site — it is at a
    * bay under it — so `subtree` is what a location-scoped view asks for, while
    * the removal guard asks the narrower question below.
+   *
+   * The question is answered from `placements()`, not from a field: a counted
+   * row can be in several places at once, so "what is here?" reads its level
+   * rows (a row with stock in this bin *and* another is here in both) while a
+   * unit keeps its single `locationId`.
    */
   itemsAtLocation(locationId: string, subtree = false): Item[] {
     const ids = subtree ? this.locationSubtreeIds(locationId) : new Set<string>([locationId]);
-    return this.allItems().filter((i) => !!i.locationId && ids.has(i.locationId));
+    return this.allItems().filter((i) => this.placements(i).some((p) => ids.has(p.locationId)));
   }
 
   /** Items stored *at* this node — the number that blocks its removal. */
@@ -1345,6 +1417,130 @@ export class DataService {
   /** Items at this node or anywhere under it (Locations grid and tooltips). */
   locationSubtreeItemCount(id: string): number {
     return this.itemsAtLocation(id, true).length;
+  }
+
+  /**
+   * How much stock sits at this node — the *quantity*, where the readers above
+   * count rows. A bin holding a hundred bolts is one item and a hundred units,
+   * and a locations grid has room for both facts.
+   */
+  locationStockQty(id: string, subtree = false): number {
+    const ids = subtree ? this.locationSubtreeIds(id) : new Set<string>([id]);
+    return this.itemsAtLocation(id, subtree).reduce(
+      (sum, i) => sum + this.placements(i).reduce((n, p) => n + (ids.has(p.locationId) ? p.qty : 0), 0),
+      0,
+    );
+  }
+
+  /* ---------------------------- stock levels ---------------------------- */
+  /*
+   * The quantities of a counted row, per place (see `StockLevel`). One writer —
+   * `writeLevel()` — and one deriver — `syncStockTotals()` — so the level table
+   * and the row's totals can never drift: every path that moves counted stock
+   * (a receipt landing it, a move, a count, a new row's opening balance) pays
+   * the same two calls, and a caller that forgot would leave a row whose
+   * `qtyOnHand` its shelves don't add up to.
+   */
+
+  /** The composite key of a level row (`<item>@<place>`). */
+  private levelId(refId: string, locationId: string): string {
+    return `${refId}@${locationId}`;
+  }
+
+  /**
+   * Every level row, optionally narrowed to one row or one place. This is the
+   * table read as a table — the query a stock report runs ("what is in this bay?",
+   * "where is this part?") without going through an item first.
+   */
+  listStockLevels(refId?: string, locationId?: string): StockLevel[] {
+    return this.db.stockLevels.filter(
+      (l) => (refId === undefined || l.refId === refId) && (locationId === undefined || l.locationId === locationId),
+    );
+  }
+
+  /**
+   * Where a row's stock is, as (place, quantity) pairs — the level rows for
+   * counted stock, or the row's one `locationId` for everything else. This is
+   * the read every "what is where?" question goes through, so a grid, a
+   * receipt's default destination and a location scope all agree.
+   */
+  placements(item: Item): { locationId: string; qty: number }[] {
+    if (isCountedStock(item.type)) {
+      return this.db.stockLevels
+        .filter((l) => l.type === item.type && l.refId === item.id)
+        .sort((a, b) => b.qty - a.qty || (a.locationId < b.locationId ? -1 : 1))
+        .map((l) => ({ locationId: l.locationId, qty: l.qty }));
+    }
+    if (item.type === 'labor' || !item.locationId) return [];
+    return [{ locationId: item.locationId, qty: this.countedQty(item) }];
+  }
+
+  /** How much of a row sits at one place (0 when it holds none of it there). */
+  stockAt(item: Item, locationId: string): number {
+    return this.placements(item).find((p) => p.locationId === locationId)?.qty ?? 0;
+  }
+
+  /** Everything a row holds, wherever it is (its level rows' sum). */
+  stockTotal(item: Item): number {
+    return this.placements(item).reduce((sum, p) => sum + p.qty, 0);
+  }
+
+  /**
+   * The place a row's stock mostly sits — its *home*, and what `Item.locationId`
+   * means for counted stock. Biggest holding first, ties broken by location id,
+   * so the read is deterministic rather than "whichever row came first".
+   */
+  homePlace(item: Item): string | undefined {
+    return this.placements(item)[0]?.locationId;
+  }
+
+  /** A grid cell's version of the placement: the busiest place, plus a count. */
+  placeLabel(item: Item | undefined): string {
+    const places = item ? this.placements(item) : [];
+    if (!places.length) return this.locationLabel(undefined);
+    const head = this.locationLabel(places[0].locationId);
+    return places.length > 1 ? `${head} +${places.length - 1} more` : head;
+  }
+
+  /** The full placement, place by place — the viewer's and tips' wording. */
+  placeBreakdown(item: Item | undefined): string {
+    const places = item ? this.placements(item) : [];
+    if (!places.length) return this.locationPath(undefined);
+    return places.map((p) => `${this.locationPath(p.locationId)}: ${p.qty}`).join(' · ');
+  }
+
+  /** Write a level row: `qty <= 0` *removes* it (a level exists only while it holds stock). */
+  private writeLevel(type: CatalogType, refId: string, locationId: string, qty: number): void {
+    const n = Math.floor(Number(qty));
+    const i = this.db.stockLevels.findIndex((l) => l.type === type && l.refId === refId && l.locationId === locationId);
+    if (!Number.isFinite(n) || n <= 0) {
+      if (i >= 0) this.db.stockLevels.splice(i, 1);
+      return;
+    }
+    if (i >= 0) this.db.stockLevels[i].qty = n;
+    else this.db.stockLevels.push({ id: this.levelId(refId, locationId), type, refId, locationId, qty: n });
+  }
+
+  /**
+   * Recompute what a counted row *is* from its level rows, and point its
+   * `locationId` at the busiest of them. Called after every level write and
+   * never by hand: `qtyOnHand` is this table's sum, and the moment it isn't, the
+   * app has two numbers for one shelf.
+   */
+  private syncStockTotals(item: Item): void {
+    if (!isCountedStock(item.type)) return;
+    const total = this.db.stockLevels
+      .filter((l) => l.type === item.type && l.refId === item.id)
+      .reduce((sum, l) => sum + l.qty, 0);
+    if (item.type === 'bulk') {
+      item.qtyAvailable = total;
+      item.totalOwned = total + (item.qtyOut ?? 0);
+      item.qty = total;
+    } else {
+      item.qtyOnHand = total;
+      item.qty = total;
+    }
+    item.locationId = this.homePlace(item);
   }
 
   /* ------------------------ placement (movements) ------------------------ */
@@ -1519,101 +1715,131 @@ export class DataService {
   }
 
   /**
-   * Move everything a row holds to another location: the shelf and the ledger
-   * move together.
+   * Move stock from one place to another: the shelf and the ledger move
+   * together, and *what* moves is a quantity at a place rather than always the
+   * whole row (a part can be stocked in two bins — see `StockLevel`).
    *
-   * A placement change by hand (the item editor's Location field) leaves no
-   * trace — the item's `locationId` simply differs and nothing says how it got
-   * there — so this is the action that *logs* a `transfer`. What it refuses is as
-   * deliberate as what it does:
+   * A placement change by hand leaves no trace, so this is the action that
+   * *logs* a `transfer`. What it refuses is as deliberate as what it does:
    *
    * - **Labor is a person**, not stock (`isPurchasable`), so it has no place to
    *   move from.
    * - **A unit that is out on rent** is not on a shelf; its place changes when it
    *   comes back (the `return` movement re-homes it), so a transfer now would
    *   record a shelf it isn't on.
-   * - **The destination must be a real location** and must differ from where the
-   *   row already sits — a no-op is refused rather than logged as a movement.
+   * - **The source must actually hold that much.** You can move what is there
+   *   (a quantity up to the whole holding), never invent it: an unknown place, a
+   *   place holding none of this row, a zero/negative quantity and a quantity
+   *   larger than the place holds are all refused, writing nothing.
+   * - **The destination must be a real, *different* place** — a no-op is refused
+   *   rather than logged as a movement.
+   *
+   * A unit-held row (serialized, kit, attachment) sits in one place with one
+   * count, so its `qty` must be exactly the whole row: moving a kit's stock
+   * *partly* would leave half a kit somewhere, which the model can't express.
    */
-  moveStock(type: CatalogType, id: string, toLocationId: string, note = ''): Movement | null {
+  moveStock(
+    type: CatalogType,
+    id: string,
+    fromLocationId: string,
+    toLocationId: string,
+    qty: number,
+    note = '',
+  ): Movement | null {
     const item = this.getItem(type, id);
     if (!item || !isPurchasable(type)) return null;
-    if (!toLocationId || !this.getLocation(toLocationId)) return null;
-    if (item.locationId === toLocationId) return null;
+    if (!this.getLocation(fromLocationId) || !this.getLocation(toLocationId)) return null;
+    if (fromLocationId === toLocationId) return null;
     if (type === 'serialized' && this.isOut(id)) return null;
+    const n = Math.floor(Number(qty));
+    if (!Number.isFinite(n) || n <= 0) return null;
 
-    const from = item.locationId;
-    item.locationId = toLocationId;
+    const held = this.stockAt(item, fromLocationId);
+    if (held <= 0 || n > held) return null;
+
+    if (isCountedStock(type)) {
+      // The two level writes, then the totals they imply: the source keeps what
+      // it didn't send, the destination gains it, and an emptied place loses its
+      // row (see `writeLevel`).
+      this.writeLevel(type, id, fromLocationId, held - n);
+      this.writeLevel(type, id, toLocationId, this.stockAt(item, toLocationId) + n);
+      this.syncStockTotals(item);
+    } else {
+      // One place, one count: only the whole row can move, and the FK *is* the
+      // placement — there is no level row to move.
+      if (n !== held) return null;
+      item.locationId = toLocationId;
+    }
+
     // A transfer is logged at the destination: the movement says where the stock
-    // is *now*, and the row's own `locationId` above agrees with it. Where it came
-    // from is a readable note (the previous place may be deleted later; the
-    // movement it moved through survives either way).
+    // is *now*, and the shelf above agrees with it. Where it came from is a
+    // readable note (the previous place may be deleted later; the movement it
+    // moved through survives either way).
     const rec = this.appendMovement({
       type,
       refId: id,
       kind: 'transfer',
-      qty: this.countedQty(item),
+      qty: n,
       locationId: toLocationId,
-      note: note || (from ? `Moved from ${this.locationPath(from)}` : 'Placed'),
+      note: note || `Moved from ${this.locationPath(fromLocationId)}`,
     });
     this.save();
     return rec;
   }
 
   /**
-   * Correct a count: set a stock row to what a physical count found and log the
+   * Correct a count: set what a physical count found *at one place* and log the
    * difference as one signed `adjust` movement (a count that matches writes
    * nothing, because there is nothing to record).
    *
-   * The delta is what the ledger keeps — `+/- n` at the place the stock sits —
-   * so "where did these eight go?" is answerable months later instead of being an
+   * The count is per place, like the stock itself: counting Bay A says nothing
+   * about Bay B, so this takes the location it was counted at, writes that
+   * level (`writeLevel` drops the row when the count is 0) and logs the delta
+   * there. Counting a place that holds none of the row yet is how stock found
+   * where it wasn't recorded gets in — logged, with an author and an instant,
+   * like every other correction.
+   *
+   * The delta is what the ledger keeps — `+/- n` at the place it happened — so
+   * "where did these eight go?" is answerable months later instead of being an
    * edit that overwrote the old number. Status follows the count through
    * `refreshStockStatus()`, so a row can fall to `Low` (or climb out of it) the
    * moment someone counts the shelf rather than only when a receipt arrives.
    */
-  adjustStock(type: CatalogType, id: string, countedQty: number, note = ''): Movement | null {
+  adjustStock(
+    type: CatalogType,
+    id: string,
+    locationId: string,
+    countedQty: number,
+    note = '',
+  ): Movement | null {
     const item = this.getItem(type, id);
     if (!item || !isCountedStock(type)) return null;
+    if (!this.getLocation(locationId)) return null;
     const counted = Math.floor(Number(countedQty));
     if (!Number.isFinite(counted) || counted < 0) return null;
 
-    const before = this.countedQty(item);
+    const before = this.stockAt(item, locationId);
     const delta = counted - before;
     if (delta === 0) return null;
 
-    this.setCountedQty(item, counted);
+    this.writeLevel(type, id, locationId, counted);
+    this.syncStockTotals(item);
     this.refreshStockStatus(item);
     const rec = this.appendMovement({
       type,
       refId: id,
       kind: 'adjust',
       qty: delta,
-      note: note || `Count corrected ${before} → ${counted}`,
+      locationId,
+      note: note || `Count corrected ${before} → ${counted} at ${this.locationPath(locationId)}`,
     });
     this.save();
     return rec;
   }
 
-  /** Quantity a stock row holds, whichever field its type keeps it in. */
+  /** Quantity a stock row holds in total, whichever field its type keeps it in. */
   private countedQty(item: Item): number {
     return item.type === 'bulk' ? item.qtyAvailable ?? item.totalOwned ?? item.qty : item.qtyOnHand ?? item.qty;
-  }
-
-  /**
-   * Write a counted quantity back, keeping a bulk row's three fields coherent:
-   * a count finds what is on the shelf (`qtyAvailable`), so what we *own* is that
-   * plus what is out (`qtyOut`) — otherwise `capacity()` would shrink the moment
-   * someone counted a rack.
-   */
-  private setCountedQty(item: Item, counted: number): void {
-    if (item.type === 'bulk') {
-      item.qtyAvailable = counted;
-      item.totalOwned = counted + (item.qtyOut ?? 0);
-      item.qty = counted;
-      return;
-    }
-    item.qtyOnHand = counted;
-    item.qty = counted;
   }
 
   /** Keep a stock row's stock status in step with its count. */
@@ -1919,17 +2145,23 @@ export class DataService {
       return out;
     }
     if (!catalog) return [];
-    const onHand = catalog.qtyOnHand ?? catalog.qty ?? catalog.qtyAvailable ?? 0;
+    const onHand = this.countedQty(catalog);
     catalog.costPrice = movingCost(onHand, catalog.costPrice, qty, line.unitCost);
-    if (catalog.type === 'bulk') {
-      catalog.totalOwned = (catalog.totalOwned ?? 0) + qty;
-      catalog.qtyAvailable = (catalog.qtyAvailable ?? 0) + qty;
-      catalog.qty = catalog.qtyAvailable;
+    if (isCountedStock(catalog.type)) {
+      // The stock lands as a *level*: receiving into a bin the SKU already sits in
+      // tops that place up, receiving elsewhere adds a place — which is exactly how
+      // one part ends up stocked in two bins. The row's totals and its home place
+      // follow from the levels (see `syncStockTotals`), so nothing here writes
+      // `qtyOnHand` or re-places the row by hand.
+      this.writeLevel(catalog.type, catalog.id, locationId, this.stockAt(catalog, locationId) + qty);
+      this.syncStockTotals(catalog);
     } else {
-      catalog.qtyOnHand = onHand + qty;
-      catalog.qty = catalog.qtyOnHand;
+      // A kit or an attachment is an owned count in one place rather than a set of
+      // units or a shelved quantity: its `qty` *is* its stock, so a receipt tops
+      // the row up and places it, and it needs no level row (see `StockLevel`).
+      catalog.qty = (catalog.qty ?? 0) + qty;
+      catalog.locationId = locationId;
     }
-    catalog.locationId = locationId;
     if (catalog.status === 'Low' && !needsReorder(catalog)) catalog.status = 'In Stock';
     return [{ id: '', poLineId: line.id, type: line.type, refId: catalog.id, qty, unitCost: line.unitCost }];
   }
@@ -3246,6 +3478,39 @@ export class DataService {
     };
   }
 
+
+  /**
+   * The fixture's shelves: one level row per seeded counted quantity, at the
+   * place the row's seed says it sits.
+   *
+   * Stock that a workspace already owns is an *opening balance* — nobody moved
+   * it in, which is why there is no movement behind it — and this is that
+   * balance written the only way the model stores one (`stock_levels`). It runs
+   * from the constructor, after `hydrate()`, because it needs `items` and must
+   * not overwrite a restored snapshot's own levels. The receipts posted right
+   * after it then land *into* these levels (a partial delivery into a bay the
+   * SKU already sits in tops that bin up), which is the point of seeding it
+   * first.
+   */
+  private seedStockLevels(): void {
+    this.db.stockLevels = [];
+    const counted = Object.entries(this.db.items).filter(([type]) => isCountedStock(type as CatalogType));
+    for (const [type, rows] of counted) {
+      for (const row of rows) {
+        const qty = Math.floor(Number(row.qtyOnHand ?? row.qtyAvailable ?? row.qty ?? 0));
+        if (qty > 0 && row.locationId) this.writeLevel(type as CatalogType, row.id, row.locationId, qty);
+      }
+    }
+    // The rows the fixture already keeps in two bins (the same stock, a second
+    // place) — then every counted row's totals are recomputed so its `qtyOnHand`
+    // is its shelves' sum from the first render, a split row included.
+    for (const [type, refId, locationId, qty] of SEED_SPLIT_STOCK) {
+      this.writeLevel(type, refId, locationId, qty);
+    }
+    for (const [, rows] of counted) {
+      for (const row of rows) this.syncStockTotals(row);
+    }
+  }
 
   /**
    * Append-only chain-of-custody seed (prototype `IMS.movements`).

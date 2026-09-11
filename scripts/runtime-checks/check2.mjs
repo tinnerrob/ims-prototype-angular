@@ -71,8 +71,11 @@ check('an edit re-stamps updatedBy without touching the create stamps', () => {
   const item = d.listItems('part').find((i) => i.name === 'Test Widget');
   const created = { at: item.createdAt, by: item.createdBy };
   d.setSessionUser('USR-004');
-  d.updateItem('part', item.id, { qtyOnHand: 9 });
+  // A *real* field: a counted row's quantities are its stock levels' sum (see
+  // check7), so a patch carrying `qtyOnHand` is stripped and would write nothing.
+  d.updateItem('part', item.id, { reorderPoint: 9 });
   const after = d.getItem('part', item.id);
+  assert.equal(after.reorderPoint, 9, 'the field it may set');
   assert.equal(after.updatedBy, 'USR-004', 'last writer wins');
   assert.equal(after.createdBy, created.by, 'author is history');
   assert.equal(after.createdAt, created.at);

@@ -10,6 +10,10 @@ globalThis.localStorage = {
 
 const { DataService } = await import('./data.service.js');
 
+/** The counted types, whose stock lives in `stock_levels` (see check7). */
+const COUNTED_TYPES = ['bulk', 'consumable', 'part'];
+const isCounted = (type) => COUNTED_TYPES.includes(type);
+
 let n = 0;
 const check = (label, fn) => {
   n++;
@@ -113,7 +117,14 @@ check('every receipt line points at a row that is at the receipt location', () =
     for (const l of r.lines) {
       const row = d.getItem(l.type, l.refId);
       assert.ok(row, `${r.id} line ${l.refId} resolves`);
-      assert.equal(row.locationId, r.locationId, `${l.refId} is where the receipt put it`);
+      // "Where the receipt put it" is a *level* for counted stock (the row can be
+      // holding stock elsewhere too) and the row's own FK for a unit: either way
+      // the row holds at least what the line landed, at the receipt's place.
+      assert.ok(
+        d.stockAt(row, r.locationId) >= l.qty,
+        `${l.refId} holds what ${r.id} landed, at its location`,
+      );
+      if (!isCounted(l.type)) assert.equal(row.locationId, r.locationId, 'a unit sits where it landed');
       assert.equal(typeof r.at, 'string');
       assert.ok(d.getLocation(r.locationId), 'the destination is a real place');
       assert.ok(d.getPurchaseOrder(r.poId), 'and the PO it was posted against');
