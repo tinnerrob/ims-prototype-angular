@@ -36,7 +36,7 @@
         </thead>
         <tbody>
           @for (item of rows(); track item.id) {
-            <tr class="row-open" (click)="showView($event, item)">
+            <tr class="row-open" (click)="showView($event, item)" [imsTip]="tipItem(item)">
               @for (c of columns(); track c[0]) {
                 <td [class.num]="c[2] === 'num'">
                   @if (isStatus(c[0])) {

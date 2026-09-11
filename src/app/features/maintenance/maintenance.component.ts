@@ -13,6 +13,9 @@ import {
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { workOrderTip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /**
  * Data-free blank work-order form. Class field initializers run *before* the
@@ -42,7 +45,7 @@ const BLANK_WO_FORM = {
 @Component({
   selector: 'ims-maintenance',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './maintenance.component.html',
   styleUrl: './maintenance.component.scss',
 })
@@ -210,5 +213,12 @@ export class MaintenanceComponent {
       partId: this.parts()[0]?.id ?? '',
       technicianId: this.technicians()[0]?.id ?? '',
     };
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Work-order row: the asset, the service, its date, meter, labour and parts. */
+  tipWorkOrder(w: WorkOrder): Tip {
+    return workOrderTip(this.data, w);
   }
 }

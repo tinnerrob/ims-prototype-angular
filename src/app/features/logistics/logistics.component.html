@@ -47,7 +47,7 @@
           </thead>
           <tbody>
             @for (d of dispatches(); track d.id) {
-              <tr class="row-open" (click)="showView($event, d)">
+              <tr class="row-open" (click)="showView($event, d)" [imsTip]="tipDispatch(d)">
                 <td class="num">{{ d.routeSeq }}</td>
                 <td class="strong mono">{{ d.id }}</td>
                 <td class="strong">{{ d.assetId }}</td>

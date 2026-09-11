@@ -31,7 +31,7 @@
         </thead>
         <tbody>
           @for (c of records(); track c.name) {
-            <tr class="row-open" (click)="showView($event, c)">
+            <tr class="row-open" (click)="showView($event, c)" [imsTip]="tipCategory(c)">
               <td class="strong">{{ c.name }}</td>
               <td>
                 @if (c.active !== false) {

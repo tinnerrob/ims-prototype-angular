@@ -20,6 +20,10 @@ import {
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { stampRange } from '../../shared/tip/tip-format';
+import { assetTip, orderRecordTip, orderTip, tip } from '../../shared/tip/tip-builders';
+import { Tip, TipLine } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 const DAY_MS = 86400000;
 /** Gap within which a second click counts as a double-click (ms). */
@@ -130,7 +134,7 @@ const POOL_ADD_LABEL: Record<string, string> = {
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './scheduler.component.html',
   styleUrl: './scheduler.component.scss',
 })
@@ -462,13 +466,40 @@ export class SchedulerComponent implements OnDestroy {
     return `${this.data.money(this.data.orderAmount(o))} · ${o.lineItems.length} items · ${this.data.orderDays(o)}d`;
   }
 
-  /** Tooltip for an order bar (prototype `cTitle`). */
-  orderTitle(o: Order): string {
-    return (
-      `${o.orderId}\n${o.projectName}\n` +
-      `${this.data.fmtDate(o.startDate)} ${this.fmtMin(this.orderT0(o))} →\n` +
-      `${this.data.fmtDate(o.endDate)} ${this.fmtMin(this.orderT1(o))}`
-    );
+  /** Tooltip for an order bar: code - project, then the order's window. */
+  tipOrder(o: Order): Tip {
+    return orderTip(this.data, o);
+  }
+
+  /** Tooltip for a queue card — a whole record, so it carries more lines. */
+  tipOrderRecord(o: Order): Tip {
+    return orderRecordTip(this.data, o);
+  }
+
+  /** Tooltip for a booked-item bar: item, window, type and order. */
+  tipLine(line: BarModel): Tip {
+    const order = this.data.getOrder(line.orderId);
+    const li = order?.lineItems.find((x) => x.id === line.liId) ?? null;
+    const window =
+      order && li
+        ? stampRange(this.lineStart(li, order), this.lineT0(li, order), this.lineEnd(li, order), this.lineT1(li, order))
+        : '';
+    return tip(line.label, [
+      window,
+      line.sub,
+      { label: 'Order', value: line.orderId },
+      { label: 'Type', value: this.typeLabel(line.type) },
+    ]);
+  }
+
+  /** Tooltip for an asset pool card: the asset, plus its standing in the range. */
+  tipPool(item: Item, av: Availability): Tip {
+    const extra: (TipLine | null)[] = [
+      { label: 'Availability', value: av.badge },
+      av.line ? { label: 'Booking', value: av.line } : null,
+      av.dates ? { label: 'Window', value: av.dates } : null,
+    ];
+    return assetTip(this.data, item, extra);
   }
 
   /* ---------------------------- pool cards ------------------------------ */

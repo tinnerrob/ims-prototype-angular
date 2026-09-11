@@ -7,6 +7,7 @@ import { ModulesService } from './core/modules.service';
 import { TelemetryService } from './core/telemetry.service';
 import { NAV_GROUPS, ViewDef, viewFor } from './core/views';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
+import { TipHostComponent } from './shared/tip/tip-host.component';
 
 /**
  * App shell — sidebar + topbar, ported from the prototype's index.html and
@@ -21,7 +22,7 @@ import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.componen
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, ConfirmDialogComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, ConfirmDialogComponent, TipHostComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

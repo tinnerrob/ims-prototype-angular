@@ -49,7 +49,7 @@
           </thead>
           <tbody>
             @for (r of rows(); track r.loc.id) {
-              <tr class="row-open" (click)="showLocationView($event, r.loc)">
+              <tr class="row-open" (click)="showLocationView($event, r.loc)" [imsTip]="tipLocation(r.loc)">
                 <td>
                   <div class="loc-cell" [style.paddingLeft.px]="indent(r)">
                     <i class="bi {{ r.depth === 0 ? 'bi-diagram-3' : 'bi-arrow-return-right' }} loc-glyph"
@@ -99,7 +99,7 @@
           </thead>
           <tbody>
             @for (t of typeRecords(); track t.name) {
-              <tr class="row-open" (click)="showTypeView($event, t)">
+              <tr class="row-open" (click)="showTypeView($event, t)" [imsTip]="tipLocationType(t)">
                 <td class="strong">{{ t.name }}</td>
                 <td>
                   @if (t.active !== false) {

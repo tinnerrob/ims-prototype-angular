@@ -11,6 +11,10 @@ import {
 } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { stampDate } from '../../shared/tip/tip-format';
+import { tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /** Period filter of the inspection log. */
 type LogRange = 'all' | 'day' | 'week' | 'month';
@@ -44,7 +48,7 @@ interface Overage {
 @Component({
   selector: 'ims-inspections',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective],
+  imports: [FormsModule, ModalDismissDirective, TipDirective],
   templateUrl: './inspections.component.html',
   styleUrl: './inspections.component.scss',
 })
@@ -298,5 +302,22 @@ export class InspectionsComponent {
       lights: v,
       engine: v,
     };
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Inspection row: the asset, the direction, its meter/fuel readings, state. */
+  tipInspection(r: Inspection): Tip {
+    const out = r.meterOut != null || r.fuelOut != null;
+    const back = r.meterIn != null || r.fuelIn != null;
+    return tip(`${r.id} - ${this.data.itemLabel('serialized', r.itemId)}`, [
+      stampDate(r.date),
+      { label: 'Direction', value: r.direction },
+      r.orderId ? { label: 'Order', value: r.orderId } : null,
+      out ? { label: 'Out', value: `${this.data.int(r.meterOut ?? 0)} h · ${this.data.int(r.fuelOut ?? 0)} gal` } : null,
+      back ? { label: 'In', value: `${this.data.int(r.meterIn ?? 0)} h · ${this.data.int(r.fuelIn ?? 0)} gal` } : null,
+      { label: 'Photos', value: String(r.photos ?? 0) },
+      r.notes ?? '',
+    ], { badge: r.status });
   }
 }

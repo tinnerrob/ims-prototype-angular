@@ -64,7 +64,7 @@
         </thead>
         <tbody>
           @for (inv of invoices(); track inv.id) {
-            <tr class="row-open" (click)="showInvoiceView($event, inv)">
+            <tr class="row-open" (click)="showInvoiceView($event, inv)" [imsTip]="tipInvoice(inv)">
               <td class="strong mono">{{ inv.id }}</td>
               <td class="mono text-muted2">{{ inv.orderId }}</td>
               <td class="text-muted2 text-xs2">{{ customer(inv) }}</td>

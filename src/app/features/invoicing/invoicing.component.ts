@@ -4,6 +4,10 @@ import { DataService } from '../../core/data.service';
 import { Invoice, InvoiceStatus, INVOICE_STATUS_LABEL } from '../../core/models';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget } from '../../shared/record-view/record-view.component';
+import { stampDayRange } from '../../shared/tip/tip-format';
+import { tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /**
  * Billing & Invoicing (module) — port of the prototype's `renderInvoicing`
@@ -13,7 +17,7 @@ import { isInteractiveTarget } from '../../shared/record-view/record-view.compon
 @Component({
   selector: 'ims-invoicing',
   standalone: true,
-  imports: [ModalDismissDirective],
+  imports: [ModalDismissDirective, TipDirective],
   templateUrl: './invoicing.component.html',
   styleUrl: './invoicing.component.scss',
 })
@@ -145,5 +149,23 @@ export class InvoicingComponent {
     a.download = 'invoice-details.csv';
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Invoice row: the customer, its cycle window, the breakdown and the total. */
+  tipInvoice(inv: Invoice): Tip {
+    const t = this.totals(inv);
+    return tip(`${inv.id} - ${this.customer(inv)}`, [
+      stampDayRange(inv.cycleStart, inv.cycleEnd),
+      { label: 'Contract', value: inv.orderId },
+      { label: 'Cycle', value: String(inv.cycle) },
+      { label: 'Base', value: this.data.money(t.base) },
+      inv.envFeePct ? { label: 'Environmental', value: this.data.money(t.envFee) } : null,
+      inv.damageWaiver ? { label: 'Damage waiver', value: this.data.money(t.waiver) } : null,
+      inv.fuelCharge ? { label: 'Fuel', value: this.data.money(t.fuel) } : null,
+      { label: 'Tax', value: this.data.money(t.tax) },
+      { label: 'Total', value: this.data.money(t.total) },
+    ], { badge: this.label[inv.status] });
   }
 }

@@ -45,7 +45,7 @@
         </thead>
         <tbody>
           @for (r of rentals(); track r.id) {
-            <tr class="row-open" (click)="showView($event, r)">
+            <tr class="row-open" (click)="showView($event, r)" [imsTip]="tipRental(r)">
               <td class="strong">
                 {{ r.assetName }}
                 @if (r.itemId) { <span class="mono text-muted2">{{ r.itemId }}</span> }

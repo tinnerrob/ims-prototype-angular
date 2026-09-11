@@ -6,6 +6,10 @@ import { Item, Movement, MovementKind, MOVEMENT_KIND_LABEL } from '../../core/mo
 import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { stampDayRange, stampISO, stampRange } from '../../shared/tip/tip-format';
+import { assetTip, tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /** Board list shown at a time (one sub-tab each). */
 type HandoffTab = 'outbound' | 'incoming' | 'custody' | 'log';
@@ -46,7 +50,7 @@ const KIND_CLASS: Record<MovementKind, string> = {
 @Component({
   selector: 'ims-handoff',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './handoff.component.html',
   styleUrl: './handoff.component.scss',
 })
@@ -475,6 +479,46 @@ export class HandoffComponent {
 
   closeViewer(): void {
     this.viewer = null;
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Board row (outbound / incoming): the unit, its contract, window, custodian. */
+  tipBoard(r: BoardRow): Tip {
+    const order = this.data.getOrder(r.orderId);
+    const window = order
+      ? stampRange(r.start, this.data.orderT0(order), r.end, this.data.orderT1(order))
+      : stampDayRange(r.start, r.end);
+    return tip(`${r.itemId} - ${r.model}`, [
+      window,
+      { label: 'Order', value: `${r.orderId} - ${r.project}` },
+      { label: 'Custodian', value: r.custodian },
+      r.outAt ? { label: 'Out since', value: stampISO(r.outAt) } : null,
+      r.overdue ? 'Overdue' : null,
+    ]);
+  }
+
+  /** In-custody row: the asset, plus who has it and for how long. */
+  tipCustody(item: Item): Tip {
+    const out = this.data.outInfo(item.id);
+    return assetTip(this.data, item, [
+      out?.party ? { label: 'Customer', value: out.party } : null,
+      { label: 'Out for', value: this.outFor(item) },
+      { label: 'Since', value: this.outSince(item) },
+    ]);
+  }
+
+  /** Chain-of-custody row: what moved, when, against what, and by whom. */
+  tipMovement(m: Movement): Tip {
+    return tip(`${MOVEMENT_KIND_LABEL[m.kind]} - ${this.data.itemLabel(m.type, m.refId)}`, [
+      stampISO(m.at),
+      m.orderId ? { label: 'Order', value: m.orderId } : null,
+      m.party ? { label: 'Party', value: m.party } : null,
+      m.location ? { label: 'Location', value: m.location } : null,
+      { label: 'Qty', value: String(m.qty) },
+      { label: 'By', value: m.by },
+      m.note ?? '',
+    ]);
   }
 }
 

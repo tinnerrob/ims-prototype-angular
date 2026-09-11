@@ -30,7 +30,7 @@
           </thead>
           <tbody>
             @for (p of parties(); track p.id) {
-              <tr class="row-open" (click)="showView($event, p)">
+              <tr class="row-open" (click)="showView($event, p)" [imsTip]="tipCustomer(p)">
                 <td>
                   <span class="strong">{{ p.name }}</span>
                   @if (p.active === false) {
@@ -79,7 +79,7 @@
           </thead>
           <tbody>
             @for (o of orders(); track o.orderId) {
-              <tr class="row-open" (click)="showContractView($event, o)">
+              <tr class="row-open" (click)="showContractView($event, o)" [imsTip]="tipContract(o)">
                 <td class="strong mono">{{ o.orderId }}</td>
                 <td>{{ o.party }}</td>
                 <td>{{ o.projectName }}</td>

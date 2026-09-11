@@ -14,7 +14,7 @@
             <div
               class="queue-order lab-poolrow ts-order"
               draggable="true"
-              title="Drag onto an employee row to clock in"
+              [imsTip]="tipOrderChip(o)"
               (dragstart)="startChip($event, 'order', o.orderId)"
               (dragend)="endChip()"
             >
@@ -44,7 +44,6 @@
               type="button"
               class="lab-chip {{ kind[t].cls }}"
               draggable="true"
-              title="Drag onto an employee row to clock in"
               (dragstart)="startChip($event, t, null)"
               (dragend)="endChip()"
             >
@@ -58,7 +57,7 @@
                 type="button"
                 class="lab-chip ts-wo"
                 draggable="true"
-                title="Drag onto an employee row to clock in"
+                [imsTip]="tipWorkOrderChip(w)"
                 (dragstart)="startChip($event, 'workorder', w.id)"
                 (dragend)="endChip()"
               >
@@ -137,7 +136,7 @@
               (dragover)="$event.preventDefault()"
               (drop)="onRowDrop($event, lane.emp.id)"
             >
-              <div class="tl-row-label res lab-lbl">
+              <div class="tl-row-label res lab-lbl" [imsTip]="tipEmployee(lane)">
                 <div class="lab-l-name">
                   @if (lane.stacked) {
                     <button
@@ -153,11 +152,7 @@
                       <i class="bi" [class.bi-chevron-up]="lane.isExpanded" [class.bi-chevron-down]="!lane.isExpanded"></i>
                     </button>
                   }
-                  <span
-                    class="lab-l-punch"
-                    [title]="'Punch ' + lane.emp.name + ' — clock in / out, has a lunch break'"
-                    (click)="openPunch(lane.emp.id)"
-                  >{{ lane.emp.name }}</span>
+                  <span class="lab-l-punch" (click)="openPunch(lane.emp.id)">{{ lane.emp.name }}</span>
                   @if (lane.open) {
                     <i class="lab-live-dot" [title]="'On ' + segShort(lane.open) + ' since ' + lane.open.clockIn"></i>
                   }
@@ -173,7 +168,7 @@
                     class="ts-block {{ segClass(bar.ts) }}"
                     [class.ts-live]="bar.live"
                     [class.draggable]="!bar.live"
-                    [title]="tip(bar.ts)"
+                    [imsTip]="tipSegment(bar.ts)"
                     [style.left.%]="bar.left"
                     [style.width.%]="bar.width"
                     [style.top.px]="bar.top"

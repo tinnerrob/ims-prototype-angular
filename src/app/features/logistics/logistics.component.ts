@@ -6,6 +6,10 @@ import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { stampDayRange } from '../../shared/tip/tip-format';
+import { tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /**
  * Logistics & Dispatch (module) — port of the prototype's `renderLogistics`
@@ -15,7 +19,7 @@ import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../share
 @Component({
   selector: 'ims-logistics',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './logistics.component.html',
   styleUrl: './logistics.component.scss',
 })
@@ -212,5 +216,20 @@ export class LogisticsComponent {
 
   private emptyForm() {
     return { orderId: '', vehicleId: '', status: 'Staged' as DispatchStatus };
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Dispatch row: the contract behind it, the unit, the driver and its route. */
+  tipDispatch(d: Dispatch): Tip {
+    const order = this.data.getOrder(d.orderId);
+    return tip(`${d.id} - ${order ? order.projectName : d.orderId}`, [
+      order ? stampDayRange(order.startDate, order.endDate) : '',
+      { label: 'Contract', value: d.orderId },
+      d.assetId ? { label: 'Asset', value: d.assetId } : null,
+      { label: 'Driver', value: this.driverValue(d) || 'unassigned' },
+      { label: 'Vehicle', value: this.vehicleValue(d) || 'unassigned' },
+      { label: 'Route', value: String(d.routeSeq) },
+    ], { badge: d.status });
   }
 }

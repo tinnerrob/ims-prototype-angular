@@ -54,7 +54,7 @@
           </thead>
           <tbody>
             @for (r of outbound(); track r.itemId) {
-              <tr class="row-open" (click)="showBoardView($event, r)">
+              <tr class="row-open" (click)="showBoardView($event, r)" [imsTip]="tipBoard(r)">
                 <td class="strong mono">{{ r.itemId }}</td>
                 <td class="text-muted2 text-12">{{ r.model }}</td>
                 <td class="mono text-12">{{ r.orderId }}</td>
@@ -87,7 +87,7 @@
           </thead>
           <tbody>
             @for (r of incoming(); track r.itemId) {
-              <tr class="row-open" (click)="showBoardView($event, r)">
+              <tr class="row-open" (click)="showBoardView($event, r)" [imsTip]="tipBoard(r)">
                 <td class="strong mono">{{ r.itemId }}</td>
                 <td class="text-muted2 text-12">{{ r.model }}</td>
                 <td class="mono text-12">{{ r.orderId }}</td>
@@ -128,7 +128,7 @@
           </thead>
           <tbody>
             @for (item of custody(); track item.id) {
-              <tr class="row-open" (click)="showCustodyView($event, item)">
+              <tr class="row-open" (click)="showCustodyView($event, item)" [imsTip]="tipCustody(item)">
                 <td class="strong mono">{{ item.id }}</td>
                 <td class="text-muted2 text-12">{{ data.mkName(item) || item.name }}</td>
                 <td class="text-12">{{ data.outInfo(item.id)?.party || '—' }}</td>
@@ -165,7 +165,7 @@
           </thead>
           <tbody>
             @for (m of movements(); track m.id) {
-              <tr class="row-open" (click)="showMovementView($event, m)">
+              <tr class="row-open" (click)="showMovementView($event, m)" [imsTip]="tipMovement(m)">
                 <td class="strong mono">{{ m.id }}</td>
                 <td><span class="badge-status {{ kindClass(m.kind) }}">{{ kindLabel[m.kind] }}</span></td>
                 <td class="strong mono">{{ m.refId }}</td>

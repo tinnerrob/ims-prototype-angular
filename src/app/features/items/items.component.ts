@@ -6,6 +6,9 @@ import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { assetTip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 interface InvTab {
   key: CatalogType;
@@ -111,7 +114,7 @@ const BLANK_ITEM_FORM = {
 @Component({
   selector: 'ims-items',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './items.component.html',
   styleUrl: './items.component.scss',
 })
@@ -327,6 +330,18 @@ export class ItemsComponent {
 
   private emptyForm() {
     return { ...BLANK_ITEM_FORM, category: this.data.categoriesFor(this.type)[0] ?? '' };
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Inventory row: the asset's specs, its stock and its reorder state. */
+  tipItem(item: Item): Tip {
+    return assetTip(this.data, item, [
+      { label: 'On hand', value: String(item.qty) },
+      item.baseWeekly ? { label: 'Weekly', value: this.data.money(item.baseWeekly) } : null,
+      item.purchaseValue ? { label: 'Value', value: this.data.money(item.purchaseValue) } : null,
+      this.reorder(item) ? 'Below the reorder point' : null,
+    ]);
   }
 }
 

@@ -11,7 +11,7 @@
         </div>
         <div class="card-body queue-scroll">
           @for (o of orders(); track o.orderId) {
-            <div class="queue-order" [class.active]="selectedOrderId === o.orderId" (click)="focusOrder(o.orderId)" (dblclick)="showOrderView(o)">
+            <div class="queue-order" [class.active]="selectedOrderId === o.orderId" (click)="focusOrder(o.orderId)" (dblclick)="showOrderView(o)" [imsTip]="tipOrderRecord(o)">
               <div class="qc-head">
                 <i class="bi bi-briefcase"></i><span class="strong">{{ o.orderId }}</span>
               </div>
@@ -50,7 +50,7 @@
                 [class.inactive]="av.blocked"
                 [class.partial]="av.key === 'partial'"
                 draggable="true"
-                [title]="av.note || 'Drag to an order block to book this resource — double-click to view it'"
+                [imsTip]="tipPool(it, av)"
                 (dragstart)="onPoolStart($event, it)"
                 (dragend)="onDragEnd()"
                 (dblclick)="showAssetView(it)"
@@ -146,7 +146,7 @@
                       [class.tl-moving]="isMoving(m.order.orderId, null)"
                       [style.left.%]="m.orderBar.geom.left"
                       [style.width.%]="m.orderBar.geom.width"
-                      [title]="orderTitle(m.order) + ' — drag to another day · double-click to view'"
+                      [imsTip]="tipOrder(m.order)"
                       (pointerdown)="startMove($event, m.orderBar)"
                       (dblclick)="showOrderView(m.order)"
                     >
@@ -190,7 +190,7 @@
                         [class.tl-moving]="isMoving(line.orderId, line.liId)"
                         [style.left.%]="line.geom.left"
                         [style.width.%]="line.geom.width"
-                        [title]="line.label + ' · ' + line.sub + ' — drag to another day · double-click to view'"
+                        [imsTip]="tipLine(line)"
                         (pointerdown)="startMove($event, line)"
                         (dblclick)="showLineView(line)"
                       >

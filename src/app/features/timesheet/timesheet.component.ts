@@ -2,9 +2,12 @@ import { ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService, dISO, hmMin, minHM, periodLabel, snap15 } from '../../core/data.service';
-import { Item, Timesheet, TIMESHEET_KIND, TimesheetTarget } from '../../core/models';
+import { Item, Order, Timesheet, TIMESHEET_KIND, TimesheetTarget, WorkOrder } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { employeeTip, orderRecordTip, segmentTip, workOrderTip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 const DAY_MS = 86400000;
 const DAY_A = 0;
@@ -61,7 +64,7 @@ interface DragState {
 @Component({
   selector: 'ims-timesheet',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective],
+  imports: [FormsModule, ModalDismissDirective, TipDirective],
   templateUrl: './timesheet.component.html',
   styleUrl: './timesheet.component.scss',
 })
@@ -332,12 +335,26 @@ export class TimesheetComponent implements OnDestroy {
     };
   }
 
-  /** Hover tooltip for a bar (prototype `tsTip`). */
-  tip(ts: Timesheet): string {
-    const e = this.data.getItem('labor', ts.empId);
-    const end = ts.clockOut ?? 'now';
-    const hrs = ts.clockOut ? `${this.data.segmentHours(ts)} hr` : 'running';
-    return `${ts.date}  ${ts.clockIn}–${end}  ${hrs}\n${this.data.segmentLabel(ts)}\n${e?.name ?? ts.empId} · ${e?.role ?? ''}`;
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Segment bar: what was clocked into, its window, its hours, who worked it. */
+  tipSegment(ts: Timesheet): Tip {
+    return segmentTip(this.data, ts);
+  }
+
+  /** Employee lane label (which is also the punch trigger). */
+  tipEmployee(lane: Lane): Tip {
+    return employeeTip(this.data, lane.emp, this.rounded(lane.logged));
+  }
+
+  /** Contract chip: the whole order record, since the chip only shows the id. */
+  tipOrderChip(o: Order): Tip {
+    return orderRecordTip(this.data, o);
+  }
+
+  /** Work-order chip: the whole work order, not just its number. */
+  tipWorkOrderChip(w: WorkOrder): Tip {
+    return workOrderTip(this.data, w);
   }
 
   segClass(ts: Timesheet): string {

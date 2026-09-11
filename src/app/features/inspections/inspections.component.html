@@ -47,7 +47,7 @@
       <tbody>
         @for (r of logEntries(); track r.id) {
           <!-- Row click opens the editor, as in the prototype (`inspectionModal`). -->
-          <tr class="row-open" (click)="openEdit(r)">
+          <tr class="row-open" (click)="openEdit(r)" [imsTip]="tipInspection(r)">
             <td class="strong mono">{{ r.id }}</td>
             <td class="strong">{{ r.itemId }}</td>
             <td>{{ r.direction }}</td>

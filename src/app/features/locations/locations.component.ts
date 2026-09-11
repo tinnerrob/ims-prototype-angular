@@ -6,6 +6,9 @@ import { Location, LocationType } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /** A location plus its depth in the ragged hierarchy (drives table indentation). */
 interface LocationRow {
@@ -43,7 +46,7 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 @Component({
   selector: 'ims-locations',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './locations.component.html',
   styleUrl: './locations.component.scss',
 })
@@ -341,5 +344,27 @@ export class LocationsComponent {
     }
     const loc = this.locations().find((l) => l.id === v.id);
     if (loc) this.openForm(loc);
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Location row: where it sits in the tree, and how to reach it. */
+  tipLocation(loc: Location): Tip {
+    return tip(`${loc.id} - ${loc.name}`, [
+      { label: 'Type', value: loc.type },
+      { label: 'Parent', value: this.parentName(loc) },
+      { label: 'Children', value: String(this.childCount(loc.id)) },
+      loc.address ? { label: 'Address', value: loc.address } : null,
+      loc.phone ? { label: 'Phone', value: loc.phone } : null,
+      loc.tz ? { label: 'Time zone', value: loc.tz } : null,
+    ]);
+  }
+
+  /** Location-type row: what it is used by. */
+  tipLocationType(t: LocationType): Tip {
+    return tip(t.name, [{ label: 'Locations', value: String(this.typeCount(t.name)) }], {
+      badge: t.active === false ? 'Inactive' : 'Active',
+      badgeClass: t.active === false ? 'st-out' : 'st-active',
+    });
   }
 }

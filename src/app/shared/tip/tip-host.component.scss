@@ -1,0 +1,127 @@
+/* The single smart tooltip.
+   ---------------------------------------------------------------------------
+   One panel for the whole app, so a tip looks identical whether it is over a
+   calendar bar, a table row or a chip. The palette is declared as custom
+   properties on the host, so re-skinning every tip in the app is a one-line
+   change here.
+
+   Slate-dark like the sidebar: the calendar is full of pastel bars, and a tip
+   that reads as a floating dark label never gets confused with a card, a bar or
+   a badge. Values are tabular so a stack of tips lines up. */
+:host {
+  --tip-bg: #1b2333;
+  --tip-ink: #eef2f8;
+  --tip-ink-dim: #97a4ba;
+  --tip-line: rgba(255, 255, 255, .10);
+  --tip-accent: rgba(129, 140, 248, .55);
+  --tip-radius: 10px;
+}
+
+.ims-tip {
+  position: fixed;
+  z-index: 1600;
+  top: 0;
+  left: 0;
+  max-width: min(360px, calc(100vw - 20px));
+  padding: 8px 10px 9px;
+  border-radius: var(--tip-radius);
+  background: var(--tip-bg);
+  border: 1px solid var(--tip-line);
+  box-shadow: 0 18px 40px -18px rgba(8, 12, 20, .7), 0 2px 6px rgba(8, 12, 20, .35);
+  color: var(--tip-ink);
+  font-size: 11.5px;
+  line-height: 1.35;
+  /* never in the way of the hover that opened it, or of a drag */
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity .1s ease, transform .1s ease;
+}
+.ims-tip.ready { opacity: 1; transform: none; }
+
+/* pointer notch */
+.ims-tip::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 14px;
+  width: 8px;
+  height: 8px;
+  background: var(--tip-bg);
+  border-left: 1px solid var(--tip-line);
+  border-top: 1px solid var(--tip-line);
+  transform: rotate(45deg);
+}
+.ims-tip.above::before {
+  top: auto;
+  bottom: -5px;
+  border-left: none;
+  border-top: none;
+  border-right: 1px solid var(--tip-line);
+  border-bottom: 1px solid var(--tip-line);
+}
+
+.ims-tip-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ims-tip-title {
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .1px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.ims-tip-badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  background: rgba(255, 255, 255, .12);
+  color: var(--tip-ink);
+}
+.ims-tip-sub {
+  margin-top: 1px;
+  font-size: 11px;
+  color: var(--tip-ink-dim);
+}
+
+/* one datum per line — the shared shape */
+.ims-tip-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--tip-line);
+}
+.ims-tip-line {
+  font-variant-numeric: tabular-nums;
+  color: var(--tip-ink);
+  white-space: nowrap;
+}
+.ims-tip-line + .ims-tip-line { margin-top: 1px; }
+
+.ims-tip-pair {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.ims-tip-label {
+  flex: 0 0 auto;
+  color: var(--tip-ink-dim);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+}
+.ims-tip-value {
+  flex: 1 1 auto;
+  text-align: right;
+  color: var(--tip-ink);
+  font-weight: 600;
+}

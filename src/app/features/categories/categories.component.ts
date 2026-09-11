@@ -6,6 +6,9 @@ import { CatalogType, CategoryOption } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 interface CategoryTab {
   key: CatalogType;
@@ -30,7 +33,7 @@ const CAT_TYPES: CategoryTab[] = [
 @Component({
   selector: 'ims-categories',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './categories.component.html',
   styleUrl: './categories.component.scss',
 })
@@ -160,5 +163,15 @@ export class CategoriesComponent {
     const c = this.viewing;
     this.closeViewer();
     if (c) this.openRename(c);
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Category row: which catalog type it belongs to and how much uses it. */
+  tipCategory(c: CategoryOption): Tip {
+    return tip(c.name, [
+      { label: 'Catalog', value: this.label() },
+      { label: 'Items', value: String(this.itemsIn(c.name)) },
+    ], { badge: c.active === false ? 'Inactive' : 'Active', badgeClass: c.active === false ? 'st-out' : 'st-active' });
   }
 }

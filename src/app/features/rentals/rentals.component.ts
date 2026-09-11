@@ -6,6 +6,9 @@ import { RentalSub } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { tip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 /**
  * Data-free blank sub-rental form. Class field initializers run *before* the
@@ -31,7 +34,7 @@ const BLANK_RENT_FORM = {
 @Component({
   selector: 'ims-rentals',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './rentals.component.html',
   styleUrl: './rentals.component.scss',
 })
@@ -155,5 +158,21 @@ export class RentalsComponent {
 
   private emptyForm() {
     return { ...BLANK_RENT_FORM, orderId: this.data.listOrders()[0]?.orderId ?? '' };
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Sub-rental row: the source, the vendor deal and the spread it earns. */
+  tipRental(r: RentalSub): Tip {
+    const spread = r.retailRate - r.vendorCost;
+    return tip(r.assetName, [
+      { label: 'Vendor', value: r.vendor },
+      r.orderId ? { label: 'Contract', value: r.orderId } : null,
+      { label: 'Vendor cost', value: `${this.data.money(r.vendorCost)}/day` },
+      { label: 'Retail', value: `${this.data.money(r.retailRate)}/day` },
+      { label: 'Spread', value: `${this.data.money(spread)}/day` },
+      { label: 'Qty', value: String(r.qty) },
+      r.note ?? '',
+    ]);
   }
 }

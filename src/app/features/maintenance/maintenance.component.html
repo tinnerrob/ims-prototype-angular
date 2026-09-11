@@ -29,7 +29,7 @@
       </thead>
       <tbody>
         @for (w of workOrders(); track w.id) {
-          <tr class="row-open" (click)="showView($event, w)">
+          <tr class="row-open" (click)="showView($event, w)" [imsTip]="tipWorkOrder(w)">
             <td class="strong mono">{{ w.id }}</td>
             <td class="strong">{{ assetLabel(w) }}</td>
             <td>{{ w.type }}</td>

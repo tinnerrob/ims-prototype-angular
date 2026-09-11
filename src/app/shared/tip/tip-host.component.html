@@ -1,0 +1,36 @@
+@if (tips.tip(); as tip) {
+  <div
+    #panel
+    class="ims-tip"
+    role="tooltip"
+    aria-hidden="true"
+    [class.above]="pos()?.above"
+    [class.ready]="!!pos()"
+    [style.top.px]="pos()?.top"
+    [style.left.px]="pos()?.left"
+  >
+    <div class="ims-tip-head">
+      <span class="ims-tip-title">{{ tip.title }}</span>
+      @if (tip.badge) {
+        <span class="ims-tip-badge" [class]="tip.badgeClass ?? 'st-on'">{{ tip.badge }}</span>
+      }
+    </div>
+    @if (tip.subtitle) {
+      <div class="ims-tip-sub">{{ tip.subtitle }}</div>
+    }
+    @if (tip.lines?.length) {
+      <div class="ims-tip-lines">
+        @for (line of tip.lines; track $index) {
+          @if (isPair(line)) {
+            <div class="ims-tip-pair">
+              <span class="ims-tip-label">{{ line.label }}</span>
+              <span class="ims-tip-value">{{ line.value }}</span>
+            </div>
+          } @else {
+            <div class="ims-tip-line">{{ line }}</div>
+          }
+        }
+      </div>
+    }
+  </div>
+}

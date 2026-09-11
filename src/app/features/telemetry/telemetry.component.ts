@@ -6,6 +6,9 @@ import { DataService } from '../../core/data.service';
 import { Item, statusClass } from '../../core/models';
 import { GEO_BOUNDS, TrackedPosition, TelemetryService } from '../../core/telemetry.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { assetTip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 interface Pin {
   id: string;
@@ -37,7 +40,7 @@ const MAP_WIDTH_M = LNG_SPAN_DEG * 111320 * Math.cos((33.735 * Math.PI) / 180);
 @Component({
   selector: 'ims-telemetry',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent],
+  imports: [FormsModule, RecordViewComponent, TipDirective],
   templateUrl: './telemetry.component.html',
   styleUrl: './telemetry.component.scss',
 })
@@ -191,5 +194,16 @@ export class TelemetryComponent {
       const p = this.toXY(t.lat, t.lng);
       return { id: t.item.id, x: p.x, y: p.y, alerting: t.breached };
     });
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Tracked asset row: the unit, its fix and whether it is out of the fence. */
+  tipTracked(t: TrackedPosition): Tip {
+    const asset = t.item;
+    return assetTip(this.data, asset, [
+      { label: 'Position', value: `${t.lat.toFixed(4)}, ${t.lng.toFixed(4)}` },
+      { label: 'Geofence', value: t.breached ? 'Breached' : 'Inside' },
+    ]);
   }
 }

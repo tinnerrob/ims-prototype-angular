@@ -6,6 +6,9 @@ import { Order, ORDER_STATUS_LABEL, Party, statusClass } from '../../core/models
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
+import { orderRecordTip, partyTip } from '../../shared/tip/tip-builders';
+import { Tip } from '../../shared/tip/tip.service';
+import { TipDirective } from '../../shared/tip/tip.directive';
 
 const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
 
@@ -17,7 +20,7 @@ const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
 @Component({
   selector: 'ims-orders',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './orders.component.html',
   styleUrl: './orders.component.scss',
 })
@@ -245,5 +248,17 @@ export class OrdersComponent {
       notes: '',
       active: true,
     };
+  }
+
+  /* ------------------------------ tooltips ------------------------------ */
+
+  /** Customer row: contact details and how much business is live with them. */
+  tipCustomer(p: Party): Tip {
+    return partyTip(this.data, p);
+  }
+
+  /** Contract row: the whole order record — window, site, size and value. */
+  tipContract(o: Order): Tip {
+    return orderRecordTip(this.data, o);
   }
 }
