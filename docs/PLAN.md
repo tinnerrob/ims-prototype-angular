@@ -36,6 +36,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A4 | Movements write real locations: `Movement.location` string → `locationId` FK, hand-off picks a location, custody log shows the path | ✅ `6fd10ad` |
 | A5 | Purchasing as core: supplier → PO → receipt → stock (absent entirely today) | ✅ `fc643e1` |
 | A5.1 | Close the holes A5 exposed: the `transfer` / `adjust` write paths (Move, Count), a reorder that raises a document instead of a count, sub-rental vendors as supplier FKs | ✅ `1a8bf96` |
+| A5.2 | Purchasing lists page by period: the PO and Receipts lists take the inspection log's `All/Day/Week/Month` chips + `‹ range ›` pager, on one shared `periodBounds()` window that the log now reads too | ✅ |
 | A6 | One SKU, many places: `stock_levels(item_id, location_id, qty)` as the truth for counted stock, with `qtyOnHand` as its sum and a move / count that act on a place | ✅ |
 | A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ |
 | A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ |
@@ -92,6 +93,24 @@ quantity, so a reorder cannot become stock without a supplier and a receipt; and
 a sub-rental names a partner carrying the supplier role. The Items page gained the
 **Move** and **Count** actions and a **Ledger** section in the record viewer, so
 the screen that writes a movement is where it is read back.
+
+**A5.2 — the buying lists read by date.** A5's two document lists were long: a
+purchase order carries the day it was raised and a receipt the instant it was
+posted, so neither list could answer "what came in last week?" without reading the
+whole table. Both now take the inspection log's period filter — `All / Day / Week /
+Month` chips with the `‹ range ›` pager — reading orders by `orderedAt` and
+receipts by the day their posting instant falls on. The window itself is **one
+definition for the app**: `periodBounds(view, anchor)` beside `periodLabel()` in
+`core/data.service.ts`, Monday-based weeks and months ending on their last day,
+with the cursor kept on the period's *first* day so that the label names the window
+the rows were filtered by — which is exactly why the chip that switches the view
+snaps the cursor (a week to its Monday, a month to its 1st). Each list keeps its
+own window, because "what did we order?" and "what arrived?" are asked of two
+different dates and one shared cursor would put a different week under one label.
+The empty state names the period when the period is the reason it is empty, the
+record count and the topbar search pill count what the list actually shows, and
+the inspection log reads the same helper instead of keeping private copies of the
+week/month maths — so the two logs cannot drift apart.
 
 **A6 — one SKU, many places.** A3 gave an item a *place* (one FK) and A5.1 made a
 change of place a logged movement, but a part could still only be in one bin with
@@ -207,7 +226,7 @@ person is created by a sign-up, and `users.tenant_id` already scopes the row) ar
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 113 runtime checks against the real store, no browser
+npm run check:store    # 120 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -313,6 +332,17 @@ hand-roll `localStorage` and assert on the store's own output:
   which is what fails if the writer keys rows by name alone); a settings write not
   smearing its neighbours; and the whole settings surface still stamped after an
   unrelated write.
+
+- `check11.mjs` — **7 checks:** the day/week/month window the two Purchasing &
+  Receiving lists filter by (`periodBounds()`, shared with the inspection log) —
+  a day is its own day, a week is Monday→Sunday *wherever* the cursor sits in it
+  (Sunday's `getDay()` of 0 is the case a naive offset gets wrong), a month is the
+  1st to its last day including a leap February, and the pager's label names the
+  window the filter selects (the cursor has to be the period's first day, which is
+  why `setRange()` snaps it). Then the fixture's own dates: a purchase order is
+  dated by the *day* it was raised and a receipt by the instant it was posted, so
+  the day/week/month windows select exactly the documents the seed intends — a
+  month, a week that straddles a month end, and a single day.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.

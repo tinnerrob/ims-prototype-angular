@@ -18,10 +18,11 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (113 checks across tenancy,
+services to JS and drives the real store from Node (120 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
-transfer / adjust / reorder paths, and configuration attribution — see
+transfer / adjust / reorder paths, configuration attribution, and the day/week/
+month windows the purchasing lists filter by — see
 `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
@@ -54,7 +55,7 @@ than editing a count, and a change of place or a physical count logs a
 | Categories | `features/categories` | type tabs (named by the tenant's vertical registry), add/rename/remove (Admin submenu) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
 | Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location, with tabs/labels/columns/defaults read from the tenant's vertical registry; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
-| Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock |
+| Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock — the two document lists filter by **period** (All/Day/Week/Month + `‹ range ›`, the inspection log's control) |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
 | Hand-Off & Custody | `features/handoff` | movements: issue/return + log, each logged at a location FK |
 | **Scheduling** | `features/scheduler` | prototype-style scheduler (see below) |
@@ -488,9 +489,13 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   edge, so the page reads selector-first and controls-last. The Scheduler and Timesheet
   timeline navs use `.period-pager.end`, which packs the pager against the **right** end:
   `[Day|Week|Month] … ‹ range › [Today]`. Hand-Off's day stepper + Today button sit right
-  after the card title (`me-auto`), the Inspection log's navigator (`.log-pager`, only
-  rendered with a Day/Week/Month filter) leads that header before the chips +
-  **Log Inspection** button. See `.period-pager` in `styles.scss`.
+  after the card title (`me-auto`). The two **log filters** read the same way — chips first,
+  then the navigator, and the navigator only exists with a Day/Week/Month filter: the
+  Inspection log's (`.log-pager`) sits in its card header between the `All/Day/Week/Month`
+  chips and the **Log Inspection** button, and the two Purchasing & Receiving lists (POs,
+  Receipts) put theirs in the body's filter row beside the record count, since that header's
+  left is already the sub-tab strip. Both window their rows through the same
+  `periodBounds()`. See `.period-pager` in `styles.scss`.
 - **A "Today" reset trails the period navigation** (Hand-Off's board was the first: ‹ › day
   stepper, then `Today`, then the action). The two calendars now carry the same control in
   the same place — `goToday()` + `isToday()` on the Scheduler, `goToday()` + `atToday()` on
@@ -510,12 +515,20 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   Bootstrap's grey — same button, two colours. Grey in both states keeps the chip stable as
   the period moves; the disabled state only flattens it (Bootstrap's `opacity: .65` fade is
   deliberately overridden, it read as a broken control).
+  The two **log filters** carry no `Today` on purpose: their default is `All` with the newest
+  row first, so today is already the top of the list — the chips are there to narrow *away*
+  from it, and coming back is one click on `All`.
 - **One label wording for every navigator** (`periodLabel()` in `core/data.service.ts`, used
-  by the Scheduler, Labor & Timesheets, the inspection log and Hand-Off): `Monday, Aug 17, 2026`
+  by the Scheduler, Labor & Timesheets, the inspection log, Hand-Off and both purchasing
+  lists): `Monday, Aug 17, 2026`
   for a day, `Week of Aug 17, 2026` for a Monday-anchored week (first day only — no end date)
   and `Month of August 2026` for a month. `periodPhrase()` is the sentence form for prose
   (`free for the week of Aug 17, 2026`, `No inspections logged for the month of August 2026.`)
-  used by the Scheduler's availability line/note and the log's empty state. The label is one
+  used by the Scheduler's availability line/note and the two logs' empty states. A **list**
+  filter (the inspection log, the two purchasing lists) takes its window from
+  `periodBounds(view, anchor)` beside it — one definition of "this week" (Monday-based, month
+  to its last day) for every pager, with the cursor kept on the period's first day so the
+  label names the window the rows were filtered by. The label is one
   shared pill — `.period-pager .tl-range` in `styles.scss` (Hand-Off's stepper, whose label
   sits inside its `.btn-group`, matches it via `.btn-group .tl-range`).
 - **Calendar styling (Scheduler + Labor & Timesheets) is token-driven** — both calendars

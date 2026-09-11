@@ -28,8 +28,42 @@
   </div>
 
   <div class="card-body">
-    <div class="d-flex align-items-center justify-content-end flex-wrap mb-3 gap-2">
-      <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
+    <!-- The filter row: period chips + their date pager for the two document
+         lists (suppliers carries no date to page), then the record count. The
+         chips live here rather than in the card header because the sub-tab strip
+         already owns that bar's left and the primary action its right — and they
+         narrow the *same* list the count reports, so they share its line. -->
+    <div class="d-flex align-items-center flex-wrap mb-3 gap-2">
+      @if (tab !== 'suppliers') {
+        <div class="d-flex align-items-center flex-shrink-0">
+          <div class="btn-group">
+            @for (v of ranges; track v) {
+              <button
+                class="btn btn-sm2"
+                type="button"
+                [class.btn-ims]="activeRange() === v"
+                [class.btn-ims-outline]="activeRange() !== v"
+                (click)="setRange(v)"
+              >
+                {{ rangeLabelOf(v) }}
+              </button>
+            }
+          </div>
+        </div>
+        <!-- Only rendered with a Day/Week/Month filter: `All` has nothing to page. -->
+        @if (rangeFiltered()) {
+          <div class="period-pager">
+            <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shiftRange(-1)">
+              <i class="bi bi-chevron-left"></i>
+            </button>
+            <span class="tl-range">{{ rangeLabel() }}</span>
+            <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shiftRange(1)">
+              <i class="bi bi-chevron-right"></i>
+            </button>
+          </div>
+        }
+      }
+      <span class="text-muted2 ms-auto">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
     </div>
 
     <!-- ============================ SUPPLIERS ============================ -->

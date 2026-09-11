@@ -159,6 +159,41 @@ export function periodPhrase(view: PeriodView, date: Date): string {
   return view === 'day' ? label : `the ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
 }
 
+/** Monday of the week containing `d` — the app's one week convention (see `periodBounds`). */
+export function mondayOf(d: Date): Date {
+  return dayAt(d, -((d.getDay() + 6) % 7));
+}
+
+/** `d` moved by `days`, as a new Date (a period pager's step). */
+export function dayAt(d: Date, days: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
+}
+
+/**
+ * Inclusive ISO bounds of the period a `day` / `week` / `month` navigator shows,
+ * anchored on the day its label names — Monday-based weeks and a month ending on
+ * its last day, the same day `periodLabel()` words.
+ *
+ * This is the window a **list** filter tests its rows against (`date >= start &&
+ * date <= end`); the two calendars build their own columns from the same
+ * convention rather than asking for bounds, so only the logs share this.
+ */
+export function periodBounds(view: PeriodView, anchor: Date): { start: string; end: string } {
+  if (view === 'month') {
+    return {
+      start: dISO(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
+      end: dISO(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)),
+    };
+  }
+  if (view === 'week') {
+    const start = mondayOf(anchor);
+    return { start: dISO(start), end: dISO(dayAt(start, 6)) };
+  }
+  return { start: dISO(anchor), end: dISO(anchor) };
+}
+
 
 /** Calendar days spanned by [a, b], minimum 1 (prototype `daysBetween`). */
 function daysBetween(a: string, b: string): number {

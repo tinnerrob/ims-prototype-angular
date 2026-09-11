@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
 import {
   CatalogType,
   Party,
@@ -25,6 +25,27 @@ import { TipDirective } from '../../shared/tip/tip.directive';
 
 /** Which of the page's three sub-tables is showing. */
 type Tab = 'suppliers' | 'orders' | 'receipts';
+
+/** The two lists that carry dates, and so carry a period filter. */
+type DatedTab = 'orders' | 'receipts';
+
+/** Period filter of a dated list — the inspection log's All/Day/Week/Month chips. */
+type ListRange = 'all' | 'day' | 'week' | 'month';
+
+const LIST_RANGES: ListRange[] = ['all', 'day', 'week', 'month'];
+
+const LIST_RANGE_LABEL: Record<ListRange, string> = {
+  all: 'All',
+  day: 'Day',
+  week: 'Week',
+  month: 'Month',
+};
+
+/** One list's filter: the period chosen, and the cursor its window is built on. */
+interface ListFilter {
+  range: ListRange;
+  anchor: Date;
+}
 
 /** One PO line as the editor holds it (the store assigns ids and numbers). */
 interface LineForm {
@@ -72,6 +93,11 @@ const BLANK_LINE: LineForm = {
  * The "Receive" action on a PO row posts a receipt through
  * `DataService.receiveAgainst()` — the same call the seed uses — which is what
  * makes `qtyOnHand`, the units in the pool and the custody ledger agree.
+ *
+ * Both document lists also narrow to a **period**: the inspection log's
+ * All/Day/Week/Month chips with its `‹ range ›` pager, reading purchase orders by
+ * the day they were raised and receipts by the instant they were posted. Each
+ * list keeps its own window, because those are two different dates.
  */
 @Component({
   selector: 'ims-purchasing',
@@ -91,6 +117,21 @@ export class PurchasingComponent {
   ];
 
   tab: Tab = 'suppliers';
+
+  /** The period-filter chips, and their labels (the inspection log's pair). */
+  readonly ranges = LIST_RANGES;
+  readonly rangeLabelOf = (v: ListRange): string => LIST_RANGE_LABEL[v];
+
+  /**
+   * The period filter of each dated list, with the cursor date its day/week/month
+   * window is built on. Suppliers carries no date, so it has none; the two
+   * document lists keep their own window, since "what did we order?" is asked of
+   * `orderedAt` and "what arrived?" of the receipt's posting instant.
+   */
+  private readonly listFilters: Record<DatedTab, ListFilter> = {
+    orders: { range: 'all', anchor: new Date() },
+    receipts: { range: 'all', anchor: new Date() },
+  };
 
   /** Supplier editor (a party row with the supplier role). */
   supplierOpen = false;
@@ -148,13 +189,80 @@ export class PurchasingComponent {
 
   emptyLabel(t: Tab): string {
     if (t === 'suppliers') return 'No suppliers match.';
-    if (t === 'orders') return 'No purchase orders match.';
-    return 'No receipts posted yet.';
+    const f = this.filterOf(t);
+    // The period is named only when it is the reason — a filtered list that says
+    // merely "none" reads as "there are none", which is a different statement.
+    if (f && f.range !== 'all' && this.search.isBlank()) {
+      const w = periodPhrase(f.range, f.anchor);
+      return t === 'orders' ? `No purchase orders ordered for ${w}.` : `No receipts posted for ${w}.`;
+    }
+    return t === 'orders' ? 'No purchase orders match.' : 'No receipts posted yet.';
   }
 
   /** Shared badge class for a status string (PO rows derive their own). */
   badge(status: string): string {
     return 'badge-status st-' + statusClass(status);
+  }
+
+  /* --------------------------- list period filter ------------------------ */
+
+  /** The filter of a list, or `null` for the undated one (suppliers). */
+  private filterOf(t: Tab): ListFilter | null {
+    return t === 'orders' || t === 'receipts' ? this.listFilters[t] : null;
+  }
+
+  /** The period chip the open list has chosen (the template ticks it). */
+  activeRange(): ListRange {
+    return this.filterOf(this.tab)?.range ?? 'all';
+  }
+
+  /** Is this list narrowed to a day / week / month? */
+  rangeFiltered(t: Tab = this.tab): boolean {
+    return (this.filterOf(t)?.range ?? 'all') !== 'all';
+  }
+
+  /** Label of the open list's window — the pager only renders when filtered. */
+  rangeLabel(): string {
+    const f = this.filterOf(this.tab);
+    if (!f) return '';
+    // `All` is never labelled (the pager is hidden), so it reads as the cursor's day.
+    const view: PeriodView = f.range === 'all' ? 'day' : f.range;
+    return periodLabel(view, f.anchor);
+  }
+
+  /**
+   * Switch the open list's period, keeping the cursor inside the new window — a
+   * week anchors on its Monday and a month on its 1st, so the label names the
+   * first day of the period it is about to show (the log's `setLogRange`).
+   */
+  setRange(v: ListRange): void {
+    const f = this.filterOf(this.tab);
+    if (!f) return;
+    f.range = v;
+    if (v === 'month') f.anchor = new Date(f.anchor.getFullYear(), f.anchor.getMonth(), 1);
+    else if (v === 'week') f.anchor = mondayOf(f.anchor);
+  }
+
+  /** Page the open list's window one day / week / month. */
+  shiftRange(dir: number): void {
+    const f = this.filterOf(this.tab);
+    if (!f || f.range === 'all') return;
+    f.anchor =
+      f.range === 'month'
+        ? new Date(f.anchor.getFullYear(), f.anchor.getMonth() + dir, 1)
+        : dayAt(f.anchor, dir * (f.range === 'week' ? 7 : 1));
+  }
+
+  /**
+   * Does a document fall inside its list's window? `date` is the ISO day the list
+   * reads the document by — a receipt carries a full instant, so its caller
+   * passes the day it landed on.
+   */
+  private inRange(t: DatedTab, date: string): boolean {
+    const f = this.listFilters[t];
+    if (f.range === 'all') return true;
+    const b = periodBounds(f.range, f.anchor);
+    return date >= b.start && date <= b.end;
   }
 
   /* ----------------------------- suppliers ------------------------------ */
@@ -219,17 +327,20 @@ export class PurchasingComponent {
   /* -------------------------- purchase orders --------------------------- */
 
   orders(): PurchaseOrder[] {
-    return this.data.listPurchaseOrders().filter((po) =>
-      this.search.matches(
-        po.id,
-        this.data.partyName(po.supplierId),
-        this.data.poStatusLabel(po),
-        po.reference,
-        po.orderedAt,
-        po.expectedAt,
-        po.notes,
-        ...po.lines.map((l) => `${l.description} ${l.refId ?? ''}`),
-      ),
+    return this.data.listPurchaseOrders().filter(
+      (po) =>
+        // A PO is dated by the day it was raised — the field the list sorts on.
+        this.inRange('orders', po.orderedAt) &&
+        this.search.matches(
+          po.id,
+          this.data.partyName(po.supplierId),
+          this.data.poStatusLabel(po),
+          po.reference,
+          po.orderedAt,
+          po.expectedAt,
+          po.notes,
+          ...po.lines.map((l) => `${l.description} ${l.refId ?? ''}`),
+        ),
     );
   }
 
@@ -453,15 +564,19 @@ export class PurchasingComponent {
   /* ------------------------------- receipts ----------------------------- */
 
   receipts(): Receipt[] {
-    return this.data.listReceipts().filter((r) =>
-      this.search.matches(
-        r.id,
-        r.poId,
-        this.data.partyName(r.supplierId),
-        this.data.locationPath(r.locationId),
-        r.note,
-        ...r.lines.map((l) => l.refId),
-      ),
+    return this.data.listReceipts().filter(
+      (r) =>
+        // A receipt is dated by the instant it was posted; `at` is a full
+        // timestamp, so the window test reads its day.
+        this.inRange('receipts', r.at.slice(0, 10)) &&
+        this.search.matches(
+          r.id,
+          r.poId,
+          this.data.partyName(r.supplierId),
+          this.data.locationPath(r.locationId),
+          r.note,
+          ...r.lines.map((l) => l.refId),
+        ),
     );
   }
 

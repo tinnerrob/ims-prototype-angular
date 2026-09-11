@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, PeriodView, periodLabel, periodPhrase } from '../../core/data.service';
+import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
 import {
   Inspection,
@@ -154,14 +154,14 @@ export class InspectionsComponent {
   setLogRange(v: LogRange): void {
     this.logRange = v;
     if (v === 'month') this.logAnchor = new Date(this.logAnchor.getFullYear(), this.logAnchor.getMonth(), 1);
-    else if (v === 'week') this.logAnchor = this.mondayOf(this.logAnchor);
+    else if (v === 'week') this.logAnchor = mondayOf(this.logAnchor);
   }
 
   /** Page the log cursor one day / week / month (scheduler `shift`). */
   shiftLog(dir: number): void {
     const a = this.logAnchor;
     if (this.logRange === 'month') this.logAnchor = new Date(a.getFullYear(), a.getMonth() + dir, 1);
-    else this.logAnchor = this.dayAt(a, dir * (this.logRange === 'week' ? 7 : 1));
+    else this.logAnchor = dayAt(a, dir * (this.logRange === 'week' ? 7 : 1));
   }
 
   /* ------------------------------- editor ------------------------------- */
@@ -294,36 +294,12 @@ export class InspectionsComponent {
 
   /* ------------------------------ utilities ----------------------------- */
 
-  /** Inclusive ISO bounds of the selected log period. */
+  /**
+   * Inclusive ISO bounds of the selected log period (`periodBounds()` — the same
+   * Monday-based weeks and month lengths every navigator in the app words).
+   */
   private logBounds(): { start: string; end: string } {
-    const a = this.logAnchor;
-    if (this.logRange === 'month') {
-      return {
-        start: this.iso(new Date(a.getFullYear(), a.getMonth(), 1)),
-        end: this.iso(new Date(a.getFullYear(), a.getMonth() + 1, 0)),
-      };
-    }
-    if (this.logRange === 'week') {
-      const start = this.mondayOf(a);
-      return { start: this.iso(start), end: this.iso(this.dayAt(start, 6)) };
-    }
-    return { start: this.iso(a), end: this.iso(a) };
-  }
-
-  private dayAt(d: Date, days: number): Date {
-    const x = new Date(d);
-    x.setDate(x.getDate() + days);
-    return x;
-  }
-
-  /** Monday of the week containing `d` (the scheduler's week convention). */
-  private mondayOf(d: Date): Date {
-    return this.dayAt(d, -((d.getDay() + 6) % 7));
-  }
-
-  private iso(d: Date): string {
-    const p = (n: number) => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    return periodBounds(this.logRange === 'all' ? 'day' : this.logRange, this.logAnchor);
   }
 
   private allChecks(v: boolean): Record<InspectionCheckKey, boolean> {
