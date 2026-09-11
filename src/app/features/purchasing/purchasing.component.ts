@@ -144,6 +144,12 @@ export class PurchasingComponent {
   editingPoId: string | null = null;
   poForm = this.emptyPo();
   private poSnap = '';
+  /**
+   * The cost we last put on a line (A11's default), so a later supplier or item
+   * change can recognise a figure *we* supplied and re-default it, while a cost the
+   * buyer typed is left alone. Keyed by the form line, and reset with the form.
+   */
+  private seededCost = new WeakMap<LineForm, number>();
 
   /** Receiving editor (posts against one PO). */
   receiveOpen = false;
@@ -377,6 +383,7 @@ export class PurchasingComponent {
           })),
         }
       : { ...this.emptyPo(), supplierId: this.data.supplierParties()[0]?.id ?? '' };
+    this.seededCost = new WeakMap<LineForm, number>();
     this.poSnap = snapshotForm(this.poForm);
     this.poOpen = true;
   }
@@ -409,10 +416,41 @@ export class PurchasingComponent {
     line.description = item.name;
     // The supplier's own negotiated price comes before the catalog's (A11) — the
     // card is the cost side's default, and once the PO is raised its stored
-    // `unitCost` is the document's fact, so this only ever pre-fills a blank.
-    const agreed = this.data.supplierCardCost(this.poForm.supplierId, line.type, line.refId);
-    if (!line.unitCost) line.unitCost = agreed ?? item.costPrice ?? item.purchaseValue ?? 0;
+    // `unitCost` is the document's fact, so this only ever replaces a *default*:
+    // a blank, or a figure we put there ourselves (`seededCost`), never one a
+    // person typed. That is what lets a supplier picked *after* the lines were
+    // entered still reach them.
+    if (this.costIsDefault(line)) this.seedCost(line);
     if (this.isUnit(line.type) && !line.rateDaily) line.rateDaily = item.rateDaily;
+  }
+
+  /**
+   * Re-default the lines when the supplier changes: a price negotiated with the
+   * previous counterparty is no longer this document's starting point, so every
+   * line still holding a figure *we* supplied moves to the new supplier's (or back
+   * to the catalog). Lines costing what a person typed are left alone — that
+   * number is the buyer's, and the change of supplier is not evidence against it.
+   *
+   * Bound to the select rather than `[(ngModel)]` so the old supplier is still
+   * readable in `poForm.supplierId` when the handler runs.
+   */
+  onSupplierChange(supplierId: string): void {
+    const changed = supplierId !== this.poForm.supplierId;
+    this.poForm.supplierId = supplierId;
+    if (!changed) return;
+    for (const line of this.poForm.lines) {
+      if (line.refId && this.costIsDefault(line)) this.seedCost(line);
+    }
+  }
+
+  /** Was this line's cost a figure the form supplied, rather than one typed? */
+  private costIsDefault(line: LineForm): boolean {
+    return !line.unitCost || line.unitCost === this.seededCost.get(line);
+  }
+
+  private seedCost(line: LineForm): void {
+    line.unitCost = this.data.poLineCostFor(this.poForm.supplierId, line.type, line.refId);
+    this.seededCost.set(line, line.unitCost);
   }
 
   savePo(): void {

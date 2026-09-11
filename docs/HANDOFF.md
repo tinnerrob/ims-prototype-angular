@@ -18,7 +18,7 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (134 checks across tenancy,
+services to JS and drives the real store from Node (135 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
@@ -333,8 +333,11 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   rather than a re-pricing of history. The catalog keeps its list prices
   underneath (`items.rateDaily` is the fallback). The buying side is deliberately
   asymmetric: a PO line stores the cost it was raised at, so a supplier's card is
-  the PO editor's *default* (`supplierCardCost()`, read by `syncLine()`) and the
-  raised document holds its own price. Nothing references a card, so removing one
+  the PO editor's *default* — one rule, `poLineCostFor()` (the card, else the row's
+  cost), applied when a line is picked and again when the supplier changes, so a
+  supplier chosen *after* the lines (the reorder draft the dashboard raises names
+  none) still reaches them, while a cost the buyer typed is never overwritten.
+  Nothing references a card, so removing one
   needs no guard — it re-prices, visibly, on the order screens.
 - **A movement's place is the same FK.** `Movement.locationId` points at the same
   hierarchy, so "what left Yard A this month?" is `movementsAtLocation(id)` — a

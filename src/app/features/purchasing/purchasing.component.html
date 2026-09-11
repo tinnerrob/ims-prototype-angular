@@ -290,7 +290,7 @@
           <div class="row g-3">
             <div class="col-md-5 field-group">
               <label class="form-label">Supplier *</label>
-              <select class="form-select" [(ngModel)]="poForm.supplierId">
+              <select class="form-select" [ngModel]="poForm.supplierId" (ngModelChange)="onSupplierChange($event)">
                 @for (s of data.supplierParties(); track s.id) {
                   <option [value]="s.id">{{ s.name }}</option>
                 }

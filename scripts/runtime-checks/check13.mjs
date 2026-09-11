@@ -178,6 +178,42 @@ check('the buying side takes the card as a default, and the document keeps its o
   assert.equal(d.supplierCardCost('PTY-007', 'part', 'PRT-001'), 16.1, 'and the agreement underneath is back');
 });
 
+check('a supplier picked after the lines still reaches them — the reorder draft', () => {
+  // The flow the default has to survive. The dashboard raises a reorder warning as
+  // a *draft naming no supplier* (`raiseReorder`), so its line already costs the
+  // catalog's figure; the buyer then picks the supplier in the editor and the
+  // agreed price has to land on that line. `poLineCostFor()` is the one rule both
+  // fills read — the first by `syncLine`, the re-fill when the supplier changes —
+  // so "what the editor supplies" and "what the draft stored" cannot drift apart.
+  const at = d.getItem('part', 'PRT-001').locationId;
+  d.adjustStock('part', 'PRT-001', at, 4, 'down to the last four');
+  d.adjustStock('part', 'PRT-001', 'LOC-15', 0, 'bin emptied');
+
+  const draft = d.raiseReorder('part', 'PRT-001');
+  assert.ok(draft, 'the warning raises a document');
+  const line = d.listPurchaseOrders().find((p) => p.id === draft.id).lines[0];
+  assert.equal(draft.supplierId, '', 'the draft names no supplier yet');
+  assert.equal(line.unitCost, 18.5, 'so its line costs the catalog figure');
+  assert.equal(
+    d.poLineCostFor(draft.supplierId, 'part', 'PRT-001'),
+    line.unitCost,
+    'which is exactly the default the editor would supply for it',
+  );
+
+  // Picking a supplier: the same rule answers with the card's price.
+  assert.equal(d.poLineCostFor('PTY-007', 'part', 'PRT-001'), 16.1, "the supplier's agreed price");
+  assert.equal(d.poLineCostFor('PTY-006', 'part', 'PRT-001'), 18.5, 'back to the catalog for a supplier with no card');
+  // A row the card is silent about falls back too (its figure is the row's own —
+  // a receipt has moved the fixture's cost, so the assertion reads it, not 34.00).
+  const silent = d.getItem('part', 'PRT-005');
+  assert.equal(d.poLineCostFor('PTY-007', 'part', 'PRT-005'), silent.costPrice, 'the catalog cost where the card says nothing');
+  assert.notEqual(silent.costPrice, 16.1, 'which is not the price the card carries for another part');
+
+  assert.equal(d.removePurchaseOrder(draft.id), true, 'the probe cleans up after itself');
+  d.adjustStock('part', 'PRT-001', at, 24, 'put back');
+  d.adjustStock('part', 'PRT-001', 'LOC-15', 6, 'bin back');
+});
+
 check('a card is not referenced, so removal needs no guard — it re-prices', () => {
   // Nothing holds a `price_card_id`: the card is read. That is why the store has
   // no `priceCardRemovalBlockers` — the consequence shows on the order screens,

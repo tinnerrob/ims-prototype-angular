@@ -536,7 +536,12 @@ removing one cannot dangle an FK, it only re-prices the orders it priced (visibl
 on those screens). That is also why the two directions are not symmetrical: an
 order line has no price column, so its price is derived; a purchase order line
 stores the `unit_cost` it was raised at, so a supplier's card is the editor's
-*default* and the raised document keeps stating its own price.
+*default* and the raised document keeps stating its own price. The default is one
+rule (`poLineCostFor()`: the card, else the row's cost), applied whenever the form
+supplies the figure — when a line is picked, and again when the supplier changes,
+since a price agreed with one counterparty is not the next one's starting point.
+Only a figure the form supplied is ever replaced; a cost the buyer typed is the
+document's.
 
 `effective_from` / `effective_to` are the window (inclusive, either bound may be
 null = open). An order prices at the card in force on the day its booking starts,

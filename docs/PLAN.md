@@ -36,13 +36,13 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A4 | Movements write real locations: `Movement.location` string → `locationId` FK, hand-off picks a location, custody log shows the path | ✅ `6fd10ad` |
 | A5 | Purchasing as core: supplier → PO → receipt → stock (absent entirely today) | ✅ `fc643e1` |
 | A5.1 | Close the holes A5 exposed: the `transfer` / `adjust` write paths (Move, Count), a reorder that raises a document instead of a count, sub-rental vendors as supplier FKs | ✅ `1a8bf96` |
-| A5.2 | Purchasing lists page by period: the PO and Receipts lists take the inspection log's `All/Day/Week/Month` chips + `‹ range ›` pager, on one shared `periodBounds()` window that the log now reads too | ✅ |
-| A6 | One SKU, many places: `stock_levels(item_id, location_id, qty)` as the truth for counted stock, with `qtyOnHand` as its sum and a move / count that act on a place | ✅ |
-| A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ |
-| A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ |
-| A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ |
-| A10 | The last hole A8 named: `orders.party` (a stored copy of the counterparty's name) leaves the model — the screens read the join — and `partyRemovalBlockers()` keeps the FK from dangling | ✅ |
-| A11 | Negotiated rates per party: `price_cards` + `price_card_lines` hang off `parties`, an order bills at the card in force on the day its booking starts (`cardRateFor()`), a supplier's card is the PO editor's cost default, and the Pricing page edits them | ✅ |
+| A5.2 | Purchasing lists page by period: the PO and Receipts lists take the inspection log's `All/Day/Week/Month` chips + `‹ range ›` pager, on one shared `periodBounds()` window that the log now reads too | ✅ `e043478` |
+| A6 | One SKU, many places: `stock_levels(item_id, location_id, qty)` as the truth for counted stock, with `qtyOnHand` as its sum and a move / count that act on a place | ✅ `1ede7b5` |
+| A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ `522f885` |
+| A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ `5560a98` |
+| A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ `c1812bf` |
+| A10 | The last hole A8 named: `orders.party` (a stored copy of the counterparty's name) leaves the model — the screens read the join — and `partyRemovalBlockers()` keeps the FK from dangling | ✅ `99653e1` |
+| A11 | Negotiated rates per party: `price_cards` + `price_card_lines` hang off `parties`, an order bills at the card in force on the day its booking starts (`cardRateFor()`), a supplier's card is the PO editor's cost default (one rule, re-applied when the supplier changes), and the Pricing page edits them | ✅ `13f8f5b` |
 
 ### Acceptance criteria per increment
 
@@ -230,9 +230,16 @@ still has to read back.
 The buying side is deliberately **not symmetric**, and the document says why: an
 order line has no price column (its price is derived), while a purchase order line
 stores the `unit_cost` it was raised at — a supplier's quote is the document's own
-fact. So a supplier's card seeds the PO editor's cost (`supplierCardCost()`, read
-by `syncLine()`) and the raised PO keeps stating its own price. One table, two
-readers, each reading its own half. The counterparty is a row in `parties` because
+fact. So a supplier's card seeds the PO editor's cost and the raised PO keeps
+stating its own price. The default is **one rule** (`poLineCostFor()`: the card,
+else the row's cost), read both when a line is picked (`syncLine()`) and when the
+supplier changes (`onSupplierChange()`): a price agreed with the previous
+counterparty is not the next one's starting point, so those lines move — which is
+what makes the dashboard's reorder draft (lines, no supplier) end up at the
+negotiated price the moment the buyer picks who it is going to. The form only ever
+replaces a figure *it* supplied; a cost a person typed is the document's. One
+table, two readers, each reading its own half. The counterparty is a row in
+`parties` because
 A5 made a customer and a supplier the same row, so a partner that is both has one
 card, not two that drift. That FK joins the party guard, so a party whose only row
 is a card cannot be removed either — the card has to go first.
@@ -277,7 +284,7 @@ is a card cannot be removed either — the card has to go first.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 134 runtime checks against the real store, no browser
+npm run check:store    # 135 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -405,7 +412,7 @@ hand-roll `localStorage` and assert on the store's own output:
   list (a PO's supplier, every receipt's supplier, a sub-rental vendor), and a
   party nothing points at still removes — the guard is a guard, not a freeze.
 
-- `check13.mjs` — **A11, 8 checks:** a negotiated rate is a join like the name is.
+- `check13.mjs` — **A11, 9 checks:** a negotiated rate is a join like the name is.
   Every card in the fixture names a real party and carries its stamps; one order
   bills at its customer's card (the weekly basis prints the *card's* `baseWeekly`,
   the one-time types its `unitPrice`, and the Gross is the sum of them); and the
@@ -417,7 +424,9 @@ hand-roll `localStorage` and assert on the store's own output:
   moves the Gross **without writing the order row** (A10's test, in money), a card
   for one customer does not touch another's order, the buying side takes a
   supplier's card as the editor's *default* while the raised PO keeps the price it
-  was ordered at, and removing a card — a row nothing references, so it needs no
+  was ordered at, the dashboard's reorder draft (a line and no supplier) lands on
+  the agreed price the moment a supplier is picked — one rule, `poLineCostFor()`,
+  behind both fills — and removing a card — a row nothing references, so it needs no
   guard — sends the booking back to the catalog rates. Finally the FK A11 added
   joins the party guard: a party whose only row is a rate card cannot be removed
   either (the card has to go first), which is what keeps `price_cards.party_id`
@@ -441,7 +450,9 @@ the cheapest way to prove an invariant still holds.
 - Rates are resolved the same way (A11): one reader (`cardRateFor()`) feeds both
   the printed rate and the line total, and the catalog keeps its own list prices
   underneath. Anything a counterparty *agreed* is read through the FK; anything a
-  document *states* (a PO line's `unitCost`) is the document's own fact.
+  document *states* (a PO line's `unitCost`) is the document's own fact. A default
+  is one rule too (`poLineCostFor()`), never an inline `??` chain in a form —
+  anywhere the same figure is filled twice, the two copies will drift.
 - A movement's place is *derived*, not asked for: the store resolves it from the
   unit (`logMovement`), so a hand-off can't be logged somewhere the machine never
   was. Only a `return` re-homes a unit — the shelf follows the ledger, and the

@@ -982,6 +982,19 @@ export class DataService {
     return this.cardLineFor(this.priceCardFor(partyId, onDate), type, refId)?.unitCost;
   }
 
+  /**
+   * What a PO line's cost *starts* at with a given supplier: their card's price if
+   * the agreement names the row, else the catalog's own cost figure. One reader for
+   * the editor's default, so the initial fill (`syncLine`) and the re-fill after a
+   * change (`onSupplierChange`) can never disagree about the order of the fallback.
+   */
+  poLineCostFor(supplierId: string, type: CatalogType, refId: string): number {
+    const agreed = this.supplierCardCost(supplierId, type, refId);
+    if (agreed != null) return agreed;
+    const item = refId ? this.getItem(type, refId) : undefined;
+    return item?.costPrice ?? item?.purchaseValue ?? 0;
+  }
+
   private nextPriceCardId(): string {
     let max = 0;
     for (const c of this.db.priceCards) {
