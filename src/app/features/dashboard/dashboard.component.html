@@ -72,7 +72,7 @@
                 <td class="strong mono">{{ row.order.orderId }}</td>
                 <td>
                   {{ row.order.projectName }}
-                  <div class="text-muted2 small">{{ row.order.party }}</div>
+                  <div class="text-muted2 small">{{ data.partyName(row.order.partyId) }}</div>
                 </td>
                 <td class="num">{{ row.days }}</td>
                 <td class="num">{{ data.money(row.gross) }}</td>

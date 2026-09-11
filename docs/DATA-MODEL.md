@@ -501,8 +501,11 @@ supplier tests `kinds` for membership and a reader that counts customers counts
 the nulls too. A schema that prefers a join table uses
 (`party_id`, `kind`) with a row per kind instead of the array.
 
-Removal is refused while an order or a purchase order points at the party — the
-API's `ON DELETE RESTRICT`; leaving the trade is `active = false`.
+Removal is refused while an order, a purchase order, a receipt or a sub-rental
+points at the party — the API's `ON DELETE RESTRICT`, enforced in the store by
+`partyRemovalBlockers()` (one list the guard and the grids' disabled buttons
+share), because those rows carry the FK that is now the only name the screens
+have. Leaving the trade is `active = false`.
 
 ## Orders (the selling side)
 
@@ -512,7 +515,6 @@ API's `ON DELETE RESTRICT`; leaving the trade is `active = false`.
 orders(
   order_id         text         PRIMARY KEY,
   party_id         text         NOT NULL REFERENCES parties(id),
-  party            text         NOT NULL,
   project_name     text         NOT NULL,
   job_site         text         NOT NULL,
   start_date       date         NOT NULL,
@@ -532,10 +534,15 @@ key here and the FK's target everywhere else. `status` is the lifecycle a person
 chooses (`draft` → `active` → `closed`) — whether the equipment has actually
 gone out is a different, derived fact (`isOut()` reads the ledger).
 
-`party_id` is the counterparty; `party` is a **stored copy of its name** for
-display on the ported screens. That copy is the one place the model duplicates a
-join: the API should derive it (`JOIN parties`), and if a cached column is kept
-for list performance it needs a trigger or a view, not a hand-written string.
+`party_id` is the counterparty and the **only** place the customer is named: the
+row stores the FK, and the screens read the name through it (`partyName()`), so a
+partner renamed on the Parties grid renames every contract at once. There is no
+`party` column — a stored copy is the one duplication this table used to carry, and
+the API derives it with a `JOIN parties`; if a cached column is ever wanted for
+list performance it needs a trigger or a view, not a hand-written string. That is
+what makes the FK's guard load-bearing: a party named by an order cannot be
+deleted (`partyRemovalBlockers()`, the API's `ON DELETE RESTRICT`), because with
+no copy to fall back on the removal would print a raw id where a customer belongs.
 
 `t0` / `t1` are minutes of the day (the Day view's window, defaulting 08:00–17:00
 when null) and the per-line columns below override them. `site_lat` / `site_lng` /
@@ -874,11 +881,14 @@ two copies drift. Each has a single reader in the store:
 | a timesheet segment's hours, bill, cost | `clock_in`/`clock_out` and the employee's rates | `segmentHours()`, `segmentBill()`, `segmentCost()` |
 | the reorder list, page row counts, KPIs | the rows themselves | `reorders()`, `PageSearchService`, `fleetKpis()` |
 
-Three of these escape into a column anyway, and they are named above rather than
+Two of these escape into a column anyway, and they are named above rather than
 hidden: `items.qty*` (written only by `syncStockTotals()`, so a grid can sort
-without a join), `orders.party` (the display copy of a name), and `items.status`
+without a join) and `items.status`
 for a stock row — *partly* derived, because a person chooses between `In Stock`
-and `Low` and a count can move it.
+and `Low` and a count can move it. A third used to: `orders.party` was a stored
+copy of the counterparty's name, and it is gone — the column the API would have had
+to sync is now a join (`parties.name` through `orders.party_id`), which is why the
+party's removal guard matters.
 
 
 ## What the API must enforce
@@ -903,7 +913,7 @@ end will not be the only writer.
 | a receipt is immutable | nothing edits or deletes it | no `UPDATE`/`DELETE` grant |
 | a location with stock or history cannot be deleted | `locationRemovalBlockers()` | `ON DELETE RESTRICT` on both FKs |
 | a location type in use cannot be deleted | `removeLocationType()` returns false | `ON DELETE RESTRICT` |
-| a party with open documents cannot be deleted | order / PO blockers | `ON DELETE RESTRICT` |
+| a party with documents cannot be deleted | `partyRemovalBlockers()` (orders, POs, receipts, sub-rentals) | `ON DELETE RESTRICT` |
 | a category in use cannot be deleted | `removeCategory()` refuses | `ON DELETE RESTRICT` |
 | a deleted item takes its shelves with it | `removeItem()` drops its levels | `ON DELETE CASCADE` on `stock_levels` |
 | a movement is appended, never rewritten | no edit path exists | no `UPDATE`/`DELETE` grant |

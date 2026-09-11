@@ -123,8 +123,13 @@ export interface OrderLine {
 
 export interface Order extends AuditFields {
   orderId: string;
+  /**
+   * The counterparty — a FK into `parties.id`. The customer's *name* is not
+   * stored beside it: display strings are resolved at read time
+   * (`partyName(partyId)`), so renaming a partner renames every screen at once
+   * rather than leaving copies of the old name behind.
+   */
   partyId: string;
-  party: string;
   projectName: string;
   jobSite: string;
   startDate: string;

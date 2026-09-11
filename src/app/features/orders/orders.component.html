@@ -50,7 +50,10 @@
                   <button class="btn btn-ims-outline btn-sm2" type="button" title="Toggle active" (click)="toggleActive(p)">
                     <i class="bi bi-power"></i>
                   </button>
-                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeCustomer(p)">
+                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                          [disabled]="customerRemoveBlocked(p)"
+                          [title]="customerRemoveTitle(p)"
+                          (click)="removeCustomer(p)">
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </td>
@@ -81,7 +84,7 @@
             @for (o of orders(); track o.orderId) {
               <tr class="row-open" (click)="showContractView($event, o)" [imsTip]="tipContract(o)">
                 <td class="strong mono">{{ o.orderId }}</td>
-                <td>{{ o.party }}</td>
+                <td>{{ data.partyName(o.partyId) }}</td>
                 <td>{{ o.projectName }}</td>
                 <td class="text-muted2 text-xs2">{{ o.jobSite }}</td>
                 <td class="mono text-muted2">{{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}</td>

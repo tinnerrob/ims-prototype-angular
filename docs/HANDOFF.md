@@ -18,11 +18,11 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (120 checks across tenancy,
+services to JS and drives the real store from Node (126 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
-transfer / adjust / reorder paths, configuration attribution, and the day/week/
-month windows the purchasing lists filter by — see
+transfer / adjust / reorder paths, configuration attribution, the day/week/
+month windows the purchasing lists filter by, and the order↔party join — see
 `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
@@ -53,7 +53,7 @@ than editing a count, and a change of place or a physical count logs a
 | **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules (the vertical switch + what it exposes) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
 | Categories | `features/categories` | type tabs (named by the tenant's vertical registry), add/rename/remove (Admin submenu) |
-| Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking** |
+| Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking**; a party's name is read through the order's FK (never stored) and removal is refused while a document names it |
 | Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location, with tabs/labels/columns/defaults read from the tenant's vertical registry; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
 | Purchasing & Receiving | `features/purchasing` | suppliers (parties w/ role) · purchase orders · receipts that land stock — the two document lists filter by **period** (All/Day/Week/Month + `‹ range ›`, the inspection log's control) |
 | Inspections | `features/inspections` | check in/out with meter/fuel log |
@@ -310,6 +310,17 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   while stock is stored *at* it (`removeLocation()` returns `false`) — that is
   what keeps a stored FK always resolvable, so no screen has to invent a
   fallback for a dangling place.
+- **A partner is a foreign key too, and the name is read through it.**
+  `Order.partyId` points into `parties` and the customer's *name* is not stored
+  beside it — `partyName(order.partyId)` prints it. That was the last column in
+  the model that duplicated a join (A10 dropped it), and it is what makes a rename
+  on the Parties grid reach every contract at once. The price is a rule that now
+  has to hold: because there is no copy to fall back on, **a party a document
+  names cannot be removed**. `partyRemovalBlockers()` — orders, purchase orders,
+  their receipts, sub-rentals — is the single list the guard and the Customers
+  grid's disabled Remove button read, so a dangling `party_id` cannot be created;
+  the same shape as `locationRemovalBlockers()`, and the store's version of
+  `ON DELETE RESTRICT`.
 - **A movement's place is the same FK.** `Movement.locationId` points at the same
   hierarchy, so "what left Yard A this month?" is `movementsAtLocation(id)` — a
   subtree query — instead of a substring search on a stored label. The store
@@ -676,11 +687,13 @@ The store models the SaaS boundary the API will implement, so these are load-bea
     constraints, so every rule the doc lists under "What the API must enforce" —
     never over-receive a line, never let a level hold nothing, never patch a
     derived column, keep the ledger append-only — is enforced by `DataService`
-    mutators returning `null`/`false`, not by a database. One hole the doc named in
-    A8 is now closed (A9: the configuration tables are stamped like everything
-    else, and check9 fails if a mapped table is not), which leaves the other one it
-    names: `orders.party` is a stored copy of a party name the API should derive
-    with a join.
+    mutators returning `null`/`false`, not by a database. The two holes the doc
+    named in A8 are now both closed, and both by *deleting* rather than syncing:
+    A9 stamped the configuration tables, and A10 removed `orders.party` — the last
+    stored copy of a name a join should have produced — replacing it with
+    `partyName(partyId)` at every read site and a `partyRemovalBlockers()` guard
+    so the FK the screens now depend on cannot dangle. What the doc still states
+    and nothing enforces is the rest of the table; it is the API's to implement.
 
 ## Source of truth for behavior
 The original vanilla-JS prototype lives in the sibling repo

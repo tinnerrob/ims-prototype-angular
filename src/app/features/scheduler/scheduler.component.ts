@@ -774,7 +774,7 @@ export class SchedulerComponent implements OnDestroy {
         {
           title: 'Customer & Job',
           fields: [
-            { label: 'Customer', value: this.data.partyName(order.partyId) || order.party },
+            { label: 'Customer', value: this.data.partyName(order.partyId) },
             { label: 'Project', value: order.projectName },
             { label: 'Job Site', value: order.jobSite || '—' },
             { label: 'Geofence', value: (order.geofenceRadius ?? 300) + ' m' },
@@ -837,7 +837,7 @@ export class SchedulerComponent implements OnDestroy {
         fields: [
           { label: 'Order', value: order.orderId, mono: true },
           { label: 'Project', value: order.projectName },
-          { label: 'Customer', value: this.data.partyName(order.partyId) || order.party },
+          { label: 'Customer', value: this.data.partyName(order.partyId) },
           {
             label: 'Window',
             value: this.data.fmtDate(this.lineStart(li, order)) + ' → ' + this.data.fmtDate(this.lineEnd(li, order)),
@@ -967,7 +967,6 @@ export class SchedulerComponent implements OnDestroy {
     if (!party || !f.projectName.trim()) return;
     const created = this.data.createOrder({
       partyId: party.id,
-      party: party.name,
       projectName: f.projectName.trim(),
       jobSite: f.jobSite.trim() || party.billingAddress || '—',
       startDate: f.startDate,

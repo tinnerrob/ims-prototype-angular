@@ -95,7 +95,9 @@ export class OrdersComponent {
     return this.data.listOrders().filter((o) =>
       this.search.matches(
         o.orderId,
-        o.party,
+        // The customer's name is a join, so the search reads it the same way the
+        // grid prints it — a search for "Halstead" has to find the contract.
+        this.data.partyName(o.partyId),
         o.projectName,
         o.jobSite,
         this.statusLabel[o.status],
@@ -164,6 +166,16 @@ export class OrdersComponent {
     this.data.removeParty(p.id);
   }
 
+  /** Why this customer cannot be removed — the grid's disabled Remove button. */
+  customerRemoveTitle(p: Party): string {
+    const blockers = this.data.partyRemovalBlockers(p.id);
+    return blockers.length ? 'Remove — blocked: ' + blockers.join(' and ') : 'Remove';
+  }
+
+  customerRemoveBlocked(p: Party): boolean {
+    return this.data.partyRemovalBlockers(p.id).length > 0;
+  }
+
   closeCustomer(): void {
     this.customerOpen = false;
     this.editingCustomerId = null;
@@ -196,7 +208,6 @@ export class OrdersComponent {
     if (!party || !f.projectName.trim()) return;
     this.data.createOrder({
       partyId: party.id,
-      party: party.name,
       projectName: f.projectName,
       jobSite: f.jobSite || party.billingAddress || '—',
       startDate: f.startDate,

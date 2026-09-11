@@ -43,7 +43,7 @@ export function orderRecordTip(data: DataService, o: Order): Tip {
     `${o.orderId} - ${o.projectName}`,
     [
       stampRange(o.startDate, data.orderT0(o), o.endDate, data.orderT1(o)),
-      { label: 'Customer', value: o.party },
+      { label: 'Customer', value: data.partyName(o.partyId) },
       { label: 'Site', value: o.jobSite },
       { label: 'Items', value: `${o.lineItems.length}` },
       { label: 'Value', value: data.money(data.orderAmount(o)) },

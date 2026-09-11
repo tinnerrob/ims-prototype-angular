@@ -15,7 +15,7 @@
               <div class="qc-head">
                 <i class="bi bi-briefcase"></i><span class="strong">{{ o.orderId }}</span>
               </div>
-              <div class="qc-party">{{ o.party }}</div>
+              <div class="qc-party">{{ data.partyName(o.partyId) }}</div>
               <div class="qc-dates">{{ data.fmtDate(o.startDate) }} → {{ data.fmtDate(o.endDate) }}</div>
             </div>
           } @empty {
@@ -150,7 +150,7 @@
               >
                 <div class="tl-row-label">
                   {{ m.order.orderId }}
-                  <div class="text-muted2 text-10">{{ m.order.party }}</div>
+                  <div class="text-muted2 text-10">{{ data.partyName(m.order.partyId) }}</div>
                 </div>
                 <div class="tl-row-track">
                   @if (m.orderBar) {

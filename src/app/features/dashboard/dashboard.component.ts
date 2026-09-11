@@ -104,7 +104,7 @@ export class DashboardComponent {
     const o = row.order;
     this.viewer = {
       title: o.orderId,
-      subtitle: `${o.projectName} · ${o.party}`,
+      subtitle: `${o.projectName} · ${this.data.partyName(o.partyId)}`,
       icon: 'bi-briefcase',
       badge: o.status === 'active' ? 'Active' : 'Closed',
       badgeClass: 'st-' + statusClass(o.status),

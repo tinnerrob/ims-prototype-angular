@@ -734,20 +734,52 @@ export class DataService {
     }
   }
 
-  removeParty(id: string): void {
+  /**
+   * Remove a party. Refused (`false`) while a document names it — the rows that
+   * point at the party would keep a dangling FK, and since the order screens
+   * derive the customer's name from `party_id`, the gap would show. Deactivate
+   * instead (`togglePartyActive`) if the trade has ended.
+   */
+  removeParty(id: string): boolean {
     const i = this.db.parties.findIndex((x) => x.id === id);
-    if (i >= 0) {
-      this.db.parties.splice(i, 1);
-      this.save();
-    }
+    if (i < 0 || this.partyRemovalBlockers(id).length > 0) return false;
+    this.db.parties.splice(i, 1);
+    this.save();
+    return true;
   }
 
-  /** Party/order display name by id (prototype `partyName`). */
+  /**
+   * Party display name by id — the join every screen prints instead of storing a
+   * copy of the name (prototype `partyName`). An id that names no party reads
+   * back as itself: a row pointing at a partner the table no longer holds is a
+   * bug, and showing the raw id beats showing nothing.
+   */
   partyName(id: string): string {
-    const p = this.getParty(id);
-    if (p) return p.name;
-    const o = this.getOrder(id);
-    return o ? o.party : id;
+    return this.getParty(id)?.name ?? id;
+  }
+
+  /**
+   * What stops a party being removed — the single list the guard and the grid's
+   * disabled button read (the `locationRemovalBlockers` pattern).
+   *
+   * A party is a document's counterparty, so every row that names one points at
+   * it: orders (`orders.party_id`), purchase orders and their receipts
+   * (`supplier_id`), and the sub-rentals they hire to us. That FK now carries the
+   * only copy of the name — the order screens derive it — so a party deleted out
+   * from under a document would print a raw id where a customer belongs. Leaving
+   * the trade is `active = false`, exactly as the document says.
+   */
+  partyRemovalBlockers(id: string): string[] {
+    const out: string[] = [];
+    const orders = this.orderCount(id);
+    if (orders > 0) out.push(`${orders} order(s)`);
+    const pos = this.supplierOrderCount(id);
+    if (pos > 0) out.push(`${pos} purchase order(s)`);
+    const receipts = this.db.receipts.filter((r) => r.supplierId === id).length;
+    if (receipts > 0) out.push(`${receipts} receipt(s)`);
+    const subs = this.rentalsFromSupplier(id).length;
+    if (subs > 0) out.push(`${subs} sub-rental(s)`);
+    return out;
   }
 
   /** Active-order count for a party (Customers grid "N active"). */
@@ -3273,7 +3305,6 @@ export class DataService {
       {
         orderId: 'CT-2024-001',
         partyId: 'PTY-001',
-        party: 'Halstead Construction',
         jobSite: 'Downtown Plaza, 245 Peachtree St',
         geofenceRadius: 300,
         projectName: 'Downtown Plaza Renovation',
@@ -3293,7 +3324,6 @@ export class DataService {
       {
         orderId: 'CT-2024-002',
         partyId: 'PTY-002',
-        party: 'Meridian Civil Works',
         jobSite: 'Riverside Bridge, 88 River Rd',
         geofenceRadius: 500,
         projectName: 'Riverside Bridge Repair',
@@ -3312,7 +3342,6 @@ export class DataService {
       {
         orderId: 'CT-2024-003',
         partyId: 'PTY-003',
-        party: 'Coastal Energy Group',
         jobSite: 'Bayport Refinery, 1 Fuel Pier',
         geofenceRadius: 400,
         projectName: 'Refinery Catalyst Swap',
@@ -3331,7 +3360,6 @@ export class DataService {
       {
         orderId: 'CT-2024-004',
         partyId: 'PTY-004',
-        party: 'Port Authority',
         jobSite: 'Pier 12 Bulkhead, Terminal Way',
         geofenceRadius: 250,
         projectName: 'Pier 12 Bulkhead Repair',

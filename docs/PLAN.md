@@ -41,6 +41,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A7 | Vertical metadata registry: the per-vertical field/tab/label sets become data `core/vertical-metadata.ts` carries, read by the store, not conditionals in components | ✅ |
 | A8 | `docs/DATA-MODEL.md` — tables, columns, FKs and enums derived from `models.ts`, as the schema the API implements | ✅ |
 | A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ |
+| A10 | The last hole A8 named: `orders.party` (a stored copy of the counterparty's name) leaves the model — the screens read the join — and `partyRemovalBlockers()` keeps the FK from dangling | ✅ |
 
 ### Acceptance criteria per increment
 
@@ -186,6 +187,26 @@ a request context (`tenants` — the workspace is its own boundary; `users` — 
 person is created by a sign-up, and `users.tenant_id` already scopes the row) are
 **declared exceptions** in the document, with the reason, rather than left silent.
 
+**A10 — the customer is a join, not a copy.** A9's close-out left one hole A8 had
+named still open, and the follow-up list carried it: `orders.party` was a stored
+copy of the counterparty's name — the single column in the model that duplicated a
+join, and one the API would have had to keep in step with `parties` by hand. The
+fix is subtraction: the column is gone from `models.ts`, from the fixture and from
+both order-creation paths, and every screen that printed it now resolves the name
+through the FK (`partyName(order.partyId)`) — the same rule `userName()` and
+`locationPath()` already follow, and the reason a partner renamed on the Parties
+grid renames every contract at once. Removing a stored copy is only safe if the
+join cannot fail, so the increment adds the other half: `partyRemovalBlockers()`
+names what points at a party (orders, purchase orders, their receipts, the
+sub-rentals it hires to us) and `removeParty()` refuses while that list is
+non-empty. That is the API's `ON DELETE RESTRICT` — and it is enforced now, not
+claimed: before A10 the document asserted the refusal and `removeParty()` deleted
+the row anyway, which is exactly the kind of promise a derived name would have
+turned into a screen printing a raw `PTY-00x` where a customer belongs. The
+Customers grid's Remove button reads the same list the guard does (the
+`locationRemovalBlockers` pattern: one source, two readers). What is left of a
+party with history is `active = false`, which the document already said.
+
 
 ## Open decisions (need the owner's call)
 
@@ -226,7 +247,7 @@ person is created by a sign-up, and `users.tenant_id` already scopes the row) ar
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 120 runtime checks against the real store, no browser
+npm run check:store    # 126 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -344,6 +365,16 @@ hand-roll `localStorage` and assert on the store's own output:
   the day/week/month windows select exactly the documents the seed intends — a
   month, a week that straddles a month end, and a single day.
 
+- `check12.mjs` — **A10, 6 checks:** the order's customer is a join — no order row
+  carries a name (`'party' in o` is false), the store resolves one for every
+  seeded order from `parties`, and a **rename reaches every contract without
+  writing an order row** (the test a stored copy cannot pass: the order's own
+  `updatedAt`/`updatedBy` stand while the name it prints changes). Then the FK
+  that makes the derivation safe: a party named by an order is refused removal for
+  every order in the fixture, the buying side and the sub-rentals are in the same
+  list (a PO's supplier, every receipt's supplier, a sub-rental vendor), and a
+  party nothing points at still removes — the guard is a guard, not a freeze.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -355,8 +386,10 @@ the cheapest way to prove an invariant still holds.
   exception, which only `tenants` and `users` are).
 - A new seed shape must bump `VERSION`, and the shell must keep telling the user
   their data was replaced.
-- Display strings are resolved at read time (`userName`, `locationPath`), never
-  stored.
+- Display strings are resolved at read time (`userName`, `locationPath`,
+  `partyName`), never stored — an order names its customer by FK and nothing else,
+  so a rename on the Parties grid reaches every contract without touching a single
+  order row (A10).
 - A movement's place is *derived*, not asked for: the store resolves it from the
   unit (`logMovement`), so a hand-off can't be logged somewhere the machine never
   was. Only a `return` re-homes a unit — the shelf follows the ledger, and the
