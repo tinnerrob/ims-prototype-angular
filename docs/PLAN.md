@@ -309,21 +309,43 @@ any phase yet, and this section says so rather than implying them.
 
 | # | Increment | Status |
 |---|---|---|
-| B1 | A credential on `users` (`passwordHash` + `passwordSalt` — never the password, never read back) and the store's one sign-in path: `signIn(email, password)` proves it, `signOut()` drops the session, and a wrong password and an inactive person both refuse | ⏳ |
+| B1 | A credential in a table of its own (`user_credentials` — a per-person salt and a digest, never a password) and the store's one sign-in path: `signIn(email, password)` proves it, `signOut()` drops the session, and an empty session acts as nobody | ✅ `90ff25d` |
 | B2 | Sign-in as a screen: every route carries `requireAuth`, an unauthenticated visitor lands on the form, the shell chip names who is signed in and offers **Sign out**, and the seeded demo accounts are listed so the workspace is still enterable | ⏳ |
 | B3 | The session has an *end*: an idle expiry the store stamps and rolls on activity, so an unattended tab stops acting as someone without a reload | ⏳ |
 
 **B1 — a credential, and the one place that checks it.** The password never enters
-the model: `users` gains `passwordSalt` and `passwordHash`, and the store's
-`signIn()` is the only method that reads them. A wrong password, an unknown email
-and an inactive person all return the *same* refusal, so the form cannot be used to
-enumerate accounts — and the refusal is data (`{ ok: false, reason }`) rather than
-`null`, because a screen has to say something and the seam C opens needs a result it
-can serialise. Verification is one call, `verifyCredential(user, password)`, so
-there is exactly one function for the server's `POST /api/sessions` to replace. The
-digest is salted and computed with `crypto.subtle` **because the fixture has to be
-enterable**; the column pair is the shape the API stores, the algorithm is not, and
-the doc comment says so where the code is.
+the model, and it does not enter the `users` row either: the credential is **a table
+of its own** (`user_credentials`, model `Credential` — one row per person, a per-person
+`salt` and the digest of `salt + ':' + password`). A `users` row is read by every list,
+join and audit block in the app, so a digest must not travel with the row a screen
+prints — and the check that proves it is the one that stringifies a `users` list and
+looks for any salt or digest in it. `signIn()` is the only reader: it finds the person
+by address (case-insensitively, trimmed), compares digests through one call
+(`credentialMatches()` → the module-level `credentialDigest()`), and answers in data —
+a `SignInResult`, either the person or one `SignInFailure` a screen may print. An
+unknown address and a wrong password answer the same `'invalid'`, so the form cannot
+be used to find out who works here; `'inactive'` is told only *after* the credential
+proves, because that person already knew the account existed (a wrong password on a
+deactivated account still learns nothing).
+
+Two consequences follow from "a session has an origin", and both are asserted. A
+session names a person **or nobody**: `activeUser` no longer falls back to the first
+person in the tenant, so signing out leaves an app with nobody in it and `can()`
+already answers no rights for that. And the state round-trips: signing out is
+persisted, so a reload cannot sign the person back in behind their back — which meant
+`hydrate()` had to stop treating an empty `userId` as "no session to restore", the
+one line where a falsy check would have quietly undone the increment.
+
+The fixture's digests are literals because a seed cannot `await` (`crypto.subtle` is
+asynchronous) and a credential table holding a *digest* rather than a hash function is
+the honest shape anyway; `check14` re-derives every one of them from `DEMO_PASSWORDS`
+with an independent implementation, so a literal that drifts from the documented rule
+fails loudly instead of locking the demo out. `DEMO_PASSWORDS` is the single place a
+password is written down, deliberately: this prototype's permissions *are* the
+demonstration, so the sign-in screen prints the list and the fixture stays enterable.
+The client's digest is explicitly **not** the KDF a server ships — the column, the
+function and the document all say so, and the server's job is `POST /api/sessions`
+with argon2id and a digest it never sends.
 
 **B2 — sign-in as a screen, and the guard that makes it mandatory.** An
 unauthenticated client must not be able to *read* a workspace by typing a URL: every
