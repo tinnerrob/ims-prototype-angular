@@ -44,4 +44,4 @@ cp src/app/core/api.ts src/app/app.config.ts "$OUT/"
 mkdir -p "$OUT/src" && cp -r src/app "$OUT/src/app"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs

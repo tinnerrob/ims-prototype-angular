@@ -522,6 +522,19 @@ that every injection site names `IMS_API` and types it as the contract, that no 
 site asks Angular for the class as a token, and that nothing constructs a second store.
 The new rule for the next screen is the same one, and it is in the conventions below.
 
+**C1's wiring, proven at runtime.** Shape and sweep are both static; the one claim
+neither can hold is the one the seam exists for — that a screen asking for `IMS_API` is
+handed *the* store and not a second copy of the workspace. `check19` settles it with an
+injector rather than a browser: `@angular/core`'s standalone `createEnvironmentInjector`
+runs in Node (the same move the other harnesses make on `localStorage` — hand-roll the
+environment, drive the real thing), and the check builds the app's two layers, asks for
+the contract, and then proves the alias by writing through the contract and reading
+through the class. It found two things worth keeping in mind: JIT-compiling an
+`@Injectable` in Node needs `@angular/compiler` loaded first (a browser never does this;
+`ng build` is AOT), and a *parentless* environment injector cannot resolve a
+root-scoped service at all — so the check builds the root provider the way the app's
+root injector does, because that hierarchy is part of what it is testing.
+
 **C2 — one shape for "no".** Today a refusal is `null` (no such row, refused edit) or
 `false` (refused removal) and a screen decides what to say — which is how a guard and
 its button can print different reasons for one rule (`partyRemovalBlockers()` is the
@@ -729,7 +742,7 @@ compares a role name to decide what to show.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 182 runtime checks against the real store, no browser
+npm run check:store    # 185 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -963,6 +976,14 @@ hand-roll `localStorage` and assert on the store's own output:
   exists because the compiler does *not* catch the regression it guards: injecting the
   class again compiles and runs, so a view would quietly go back to depending on the
   implementation.
+
+- `check19.mjs` — **C1's wiring, 3 checks:** the only harness here that runs Angular's
+  dependency injection instead of reading about it (`createEnvironmentInjector` in Node,
+  with the app's two layers and `@angular/compiler` loaded for JIT). The contract
+  resolves and the store is what answers; asking for `IMS_API` and asking for the class
+  give *the same instance*, proved by writing through the contract and reading through
+  the class (`useExisting`, not a second workspace); and B1 still works through the seam
+  — a fresh fixture acts as nobody, a credential signs somebody in, `signOut()` ends it.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.

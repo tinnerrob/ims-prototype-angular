@@ -29,7 +29,7 @@ the *server's* term and the client only reads the stamp.
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (182 checks across tenancy,
+services to JS and drives the real store from Node (185 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
