@@ -16,22 +16,26 @@ npm start          # dev server → http://localhost:4200 (hot reload)
 npm run build      # production build to dist/ims-web
 ```
 
-**Entering the app (B2).** A fresh browser lands on the **sign-in form**, not on a
+**Entering the app (B2, B3).** A fresh browser lands on the **sign-in form**, not on a
 dashboard: the fixture ships signed out, and every screen is a child of a route parent
 that carries `requireAuth`. The form lists the six seeded demo accounts with the
 passwords this build publishes (click a row to sign in as that role) — a real
 deployment has neither the list nor the passwords, and the sidebar chip's account
-panel is now **Sign out**.
+panel is now **Sign out**. A session also **ends**: signing in stamps an expiry, every
+navigation rolls it (`session.touch()` is the guard's question and the app's activity),
+and the store stops acting as that person the moment the stamp passes — a lapsed session
+is cleared when the guard notices it and the form says the session ended. The window is
+the *server's* term and the client only reads the stamp.
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (161 checks across tenancy,
+services to JS and drives the real store from Node (171 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
 month windows the purchasing lists filter by, the order↔party join, the
-counterparty rate cards, credentials / sign-in, and the route guard + sign-in
-screen's wiring — see `docs/PLAN.md` → "Verification recipe").
+counterparty rate cards, credentials / sign-in, session expiry, and the route
+guard + sign-in screen's wiring — see `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
@@ -46,11 +50,14 @@ Core (always-on) + all six industry modules, all on one typed, versioned,
 persisted data store. Module views are gated by `ModulesService` + a route guard
 against the active tenant's licence flags; **Admin → Feature Modules** toggles
 them. The workspace and the people in it (roles → permissions) are modelled in the
-store, and **B1 + B2 are in**: each person has a credential (`user_credentials` — a
+store, and **B1 + B2 + B3 are in**: each person has a credential (`user_credentials` — a
 salt and a digest, never a password), `signIn()` proves one and `signOut()` ends the
 session, a fresh fixture ships *signed out*, every screen sits behind `requireAuth`
 (so the **sign-in form** is what a visitor meets), and the shell's chip offers Sign
-out instead of switching the acting person. An empty session acts as nobody —
+out instead of switching the acting person. A session also lapses: an expiry is stamped
+at sign-in, rolled by `touchSession()` on each navigation, enforced where identity is
+read (`activeUser` / `sessionUserId()` answer nobody once the stamp passes) and cleared
+where it is noticed. An empty session acts as nobody —
 `activeUser` used to fall back to the first person in the tenant.
 
 Stock only moves through documents and movements: a purchase arrives by receiving
@@ -62,7 +69,7 @@ than editing a count, and a change of place or a physical count logs a
 
 | Area | Path | Notes |
 |---|---|---|
-| **Sign in** | `features/sign-in` | the one screen outside the shell (B2): proves the credential pair, prints the one refusal it gets back, and lists the fixture's demo accounts so the seeded roles stay enterable |
+| **Sign in** | `features/sign-in` | the one screen outside the shell (B2): proves the credential pair, prints the one refusal it gets back, says so when a session *ended* (B3, `?expired=1`), and lists the fixture's demo accounts so the seeded roles stay enterable |
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
 | **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules (the vertical switch + what it exposes) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
@@ -278,10 +285,13 @@ detail right**, with orders as the top rows.
   (its sum). This is the **`apiAdapter` seam** — swap for an
   `HttpClient` later without touching features.
 - `src/app/core/session.service.ts` — who the app is signed in as (workspace +
-  person) as signals over the store, `signedIn` for the route guard, `signIn()` /
-  `signOut()`, and `can('stock.adjust')`-style permission checks.
+  person) as signals over the store, `signIn()` / `signOut()`, `touch()` (the guard's
+  question, B3: it rolls the expiry or reports that the session lapsed), and
+  `can('stock.adjust')`-style permission checks.
 - `src/app/core/auth.guard.ts` + `app.routes.ts` — `requireAuth` on the route parent
-  every screen is a child of (B2); `/signin` is the one route outside it.
+  every screen is a child of (B2); `/signin` is the one route outside it. It reads
+  every navigation as activity and marks a session that *ended* with `?expired=1` so
+  the form can say why it is on screen (B3).
 - `src/app/core/modules.service.ts` + `module.guard.ts` — module gating, read from
   the **tenant's** licence flags (`Tenant.disabledModules`), not a browser pref.
 - `src/app/features/*` — one folder per view (component.ts/html/scss).
@@ -696,13 +706,15 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    the real backend. The four phases beyond Phase A are now recorded in
    `docs/PLAN.md` — **B authentication · C this seam · D persistence/offline ·
    E tenant administration** — with their scope and acceptance criteria; **B is the
-   active phase** and is scoped as B1–B3 there. **B1 and B2 are done** — the credential
-   table, the `signIn()` / `signOut()` path, `activeUser` no longer falling back to the
-   first person, the fixture shipping signed out, the `requireAuth` route parent, the
-   sign-in screen (with the demo pick-list) and the shell's Sign out. **B3 (a session
-   that ends on its own) is still open**: nothing lapses an idle tab, and there is no
-   revocation list — so a machine left on the form stays signed in until somebody signs
-   out (the *third* bullet of DATA-MODEL's "not in the model yet" is that pair).
+   active phase** and is scoped as B1–B3 there. **B1, B2 and B3 are done** — the
+   credential table, the `signIn()` / `signOut()` path, `activeUser` no longer falling
+   back to the first person, the fixture shipping signed out, the `requireAuth` route
+   parent, the sign-in screen (with the demo pick-list), the shell's Sign out, and the
+   session's **idle expiry** (stamped at sign-in, rolled by `touchSession()` on each
+   navigation, cleared where it is noticed, with `?expired=1` telling the form why it is
+   on screen). Still open on this seam, and named in DATA-MODEL's "not in the model
+   yet": **revocation** — nothing cuts a session short before it is given up, and no
+   other client is told one ended (the API's job: a `sessions` row or a token version).
 6. Scheduler **drag-to-position** (drop a pool item at a specific calendar position
    to set its window) is not yet implemented — currently drops book the full order
    window (a multi-unit resource asks for its count first; the count is editable

@@ -124,7 +124,13 @@ principal, and it replaces every `sessionUserId()` / `sessionTenantId()` call
 site. A user may hold more than one tenant later; today one round-trips through
 the demo fixture. B1 gave that principal an *origin*: `user_credentials` proves it
 and `signIn()` / `signOut()` start and end it, so the client can no longer assert
-who it is (the switcher that did is gone).
+who it is (the switcher that did is gone). B3 gave it an *end*: the session also
+carries `expiresAt` — client state, like the two ids — and `touchSession()` is the
+one thing that rolls it, answering a `SessionTouch` (`'active'` / `'lapsed'` /
+`'none'`) rather than a boolean, because "your session ended" and "nobody is signed
+in" are different things to say to a person. A stamp that has passed is enforced
+**where the person is read** — `activeUser` answers nobody and `sessionUserId()`
+answers `''` — so a lapsed session authors nothing, not merely "is not drawn".
 
 ### `user_credentials` — `Credential`
 
@@ -157,6 +163,17 @@ the same `'invalid'`, so the form cannot be used to discover who works here;
 already knew the account existed). An unsigned session is not "the first user":
 `activeUser` is `undefined`, `can()` answers no rights, and signing out survives a
 reload.
+
+**The window is not the client's (B3).** How long a session lives is the server's
+term — the API stamps `expires_at` on the session (or the token) and this client
+honours the stamp — so no call here takes a lifetime as an argument:
+`touchSession()` is told nothing and `signIn()` is handed a credential. A client
+that chose its own window would not be a security boundary, and an expiry it
+*cannot read* is refused as a lapse rather than read as "no expiry, therefore for
+ever" (which is what a hand-edited snapshot would otherwise buy itself). What the
+client does decide is what a lapse means: reading stops acting as that person, and
+the session is cleared where the guard notices it — so the form can say the session
+ended rather than appearing for no reason.
 
 **The fixture's pick-list is not a table (B2).** `DataService.demoAccounts()` returns
 a `DemoAccount` — a seeded person *with* the password this build publishes — because
@@ -1255,11 +1272,12 @@ each is an increment waiting for its turn:
 - **Multi-tenant membership.** `users.tenant_id` is a single FK: a person belongs
   to one workspace. Contractors who work across two workspaces need a membership
   table, and the session is where that shows up first.
-- **A session that expires, and one that can be revoked.** B1 gives the session an
-  origin (a credential proves it) but not an end: nothing lapses an idle tab on its
-  own, and there is no revocation list, so a session that has been handed out cannot
-  be cancelled before it is given up (B3 adds the idle window; revocation is the
-  API's — a `sessions` row, or a token version on the user).
+- **A session that can be revoked.** B1 gives the session an origin (a credential
+  proves it) and B3 gives it an end (an idle window that lapses, cleared where it is
+  noticed) — but not a way to *cancel* one: there is no revocation list, so a session
+  handed out cannot be cut short before it is given up, and no other client is told it
+  ended. Revocation is the API's (a `sessions` row, or a token version on the user),
+  and two tabs agreeing is D's (one store, two clients).
 - **SSO, 2FA, invitations and password reset.** None is modelled. `signIn()` is one
   address and one password; an invitation that mints a credential for somebody else,
   a reset that replaces one, a second factor and a federated identity are all

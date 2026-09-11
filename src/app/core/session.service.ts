@@ -1,7 +1,7 @@
 import { computed, Injectable, Signal } from '@angular/core';
 
 import { DataService } from './data.service';
-import { can, Permission, RoleDef, roleDef, SignInResult, Tenant, User } from './models';
+import { can, Permission, RoleDef, roleDef, SessionTouch, SignInResult, Tenant, User } from './models';
 
 /**
  * IMS — SessionService (who the app is acting as).
@@ -14,8 +14,13 @@ import { can, Permission, RoleDef, roleDef, SignInResult, Tenant, User } from '.
  *
  * B2 made it the client's only way *in*. `signIn()` proves a credential (the store
  * does the comparing) and `signOut()` ends the session, so a screen can no longer
- * set the acting person at all — the demo switcher that used to is gone, and
- * `signedIn` is what the route guard asks before it lets a screen render.
+ * set the acting person at all — the demo switcher that used to is gone.
+ *
+ * B3 gave the session an end. `touch()` is what the route guard asks on every
+ * navigation: it rolls the session's expiry while it is still valid, and reports a
+ * lapse — which the store has already *cleared*, and which its readers stopped
+ * honouring the moment the stamp passed — separately from "nobody was signed in",
+ * because the form says different things for those two.
  */
 @Injectable({ providedIn: 'root' })
 export class SessionService {
@@ -25,8 +30,6 @@ export class SessionService {
   readonly user: Signal<User | undefined>;
   /** The current user's role definition (label + permission list). */
   readonly role: Signal<RoleDef>;
-  /** True while somebody is signed in — the one thing the guard needs (B2). */
-  readonly signedIn: Signal<boolean>;
 
   constructor(private readonly data: DataService) {
     // Each computed reads `revision()` first, so any persisted write (a sign-in, a
@@ -40,7 +43,6 @@ export class SessionService {
       return this.data.activeUser;
     });
     this.role = computed(() => roleDef(this.user()?.role ?? 'viewer'));
-    this.signedIn = computed(() => !!this.user());
   }
 
   /** True when the current user's role holds the capability. */
@@ -65,5 +67,15 @@ export class SessionService {
   /** End the session — the shell's **Sign out**, and the guard's other half. */
   signOut(): void {
     this.data.signOut();
+  }
+
+  /**
+   * Ask the session to continue (B3) — the guard's one question, and the place a lapse
+   * is *ended* (the store's readers have already stopped honouring it; this is what
+   * clears it and persists that). The answer is in data (`SessionTouch`); the service
+   * does not decide what a lapse means, it carries the answer to whoever asked.
+   */
+  touch(): SessionTouch {
+    return this.data.touchSession();
   }
 }

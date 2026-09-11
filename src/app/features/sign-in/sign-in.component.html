@@ -21,6 +21,14 @@
       </div>
 
       <form (ngSubmit)="submit()">
+        <!-- Why this form is on screen (B3): the guard marks a session it ended, so an
+             idle tab is told what happened instead of looking like an unexplained exit. -->
+        @if (endedSession) {
+          <div class="signin-notice" role="status">
+            <i class="bi bi-clock-history"></i>
+            <span>Your session ended after a period of inactivity. Sign in to carry on.</span>
+          </div>
+        }
         <div class="field-group">
           <label class="form-label" for="signin-email">Email</label>
           <input

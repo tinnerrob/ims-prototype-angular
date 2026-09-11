@@ -863,6 +863,26 @@ export type SignInFailure = 'invalid' | 'inactive';
 export type SignInResult = { ok: true; user: User } | { ok: false; reason: SignInFailure };
 
 /**
+ * What the store says when a session is *asked to continue* (B3) — the guard's one
+ * question, and the only place a lapsed session is noticed.
+ *
+ * `'active'`  — somebody is signed in and the session's expiry was still ahead, so it
+ *               is rolled forward (activity *is* a navigation: that is what a person
+ *               does, and the guard runs for each one).
+ * `'lapsed'`  — a session existed and its expiry has passed (or it carries no expiry
+ *               this client stamped). It has been cleared, so what the person sees is
+ *               a sign-in form rather than a half-working screen.
+ * `'none'`    — nobody was signed in to begin with. Only this case and `'lapsed'` are
+ *               distinguished, because the form says different things for them: an
+ *               idle tab was *ended*, a visitor never started.
+ *
+ * The window itself is the **server's** term, not the client's: the API stamps
+ * `expires_at` on the session (or the token) it hands back, and this client only
+ * honours it. A client that chose its own lifetime would not be a security boundary.
+ */
+export type SessionTouch = 'active' | 'lapsed' | 'none';
+
+/**
  * A seeded person **with the password the sign-in screen publishes** (B2).
  *
  * Not a table and not a shape any real deployment has: it is the fixture's own

@@ -383,13 +383,53 @@ published pair and asserts each one lands as that person with the role its row n
 A real deployment renders no such list and stores no such password.
 
 **B3 — a session that ends.** A credential only matters if the session it creates
-can lapse: `session.expiresAt` is stamped at sign-in and rolled by activity, and a
-lapsed session is refused by the same guard (and cleared, so the person sees a
-sign-in form rather than a half-working screen). The idle window is a setting
-(`settings.sessionMinutes`), which is the shape the API needs anyway — how long a
-token lives is a workspace's term, not a constant. B deliberately stops there:
-demonstrating expiration in one tab is possible, but proving two tabs agree is D's
-(one store, two clients).
+can lapse, so the session gained an `expiresAt`, stamped by `signIn()` and rolled by
+`touchSession()` — and the guard now asks *that* instead of asking whether anybody is
+signed in, which makes every navigation the app's activity (a person navigating is
+what "in use" means, and the guard already runs for each one). The answer is not a
+boolean: `SessionTouch` separates a session that is still live (`'active'`) from one
+that *ended* (`'lapsed'`) and one that never existed (`'none'`), because those are two
+different things to say to somebody standing at a form — only a lapse carries
+`?expired=1`, and only a lapse gets the sentence "your session ended after a period of
+inactivity".
+
+A lapse is enforced **where identity is read**, not only where routes are checked: a
+server refuses a request carrying a dead token, and the store's readers are that
+request, so `activeUser` answers nobody and `sessionUserId()` answers `''` the moment
+the stamp passes — which means a lapsed session authors nothing (`actor()` is the
+store's request context) and holds nothing, whatever is rendered. The guard is then
+the write half and the *UX* half: it rolls the stamp while it is live, and **clears** a
+lapsed one by the same shape `signOut()` leaves, so the end is persisted and the person
+lands on the form with a reason. A session that lapsed while the tab was *closed* is
+handled by the same split — `hydrate()` restores the stamp with the session and does
+not judge it, which is the honest division of labour: restoring is the store's job,
+honouring is the reader's.
+
+What is left, and stated rather than implied: a tab sitting idle *on a screen* keeps
+its rendered DOM until the next navigation, because this app has no timer, no polling
+and no socket to notice with — but the data underneath it has already stopped acting as
+that person, and D (one store, two clients) is where two tabs agreeing about one
+session belongs.
+
+The window itself is **the server's term**, and this is the one place the increment
+departs from how it was scoped: the plan said `settings.sessionMinutes` (a workspace
+setting the client reads), and that would have been the wrong shape. How long a token
+lives is decided by whoever issues it — the API stamps `expires_at` on the session (or
+the token) it hands back and the client honours the stamp — so a client-side lifetime
+is not a security boundary at all, it is a preference that *looks* like one. There is
+therefore no `settings.sessionMinutes` and no call that takes one: `touchSession()` is
+told nothing, `signIn()` is handed a credential, and the window exists as a single
+constant (`SESSION_MINUTES`) only because this build plays both parts. It is stated
+that way in the code, the model and the data-model document, so the seam C has one
+rule to move: the server stamps, the client reads.
+
+What follows from the same reasoning is what an unreadable stamp means. An expiry
+missing, empty or unparseable is treated as a **lapse**, not as "no expiry, therefore
+for ever" — the case a `!expiresAt → still valid` shortcut gets exactly backwards, and
+the one a hand-edited snapshot would otherwise exploit to mint itself an unlimited
+session. B deliberately stops there: proving two tabs agree about one session is D's
+(one store, two clients), and revocation (cutting a session short before it is given
+up) is the API's.
 
 **Acceptance criteria (B).** A password is never stored, printed, logged or read
 back — the credential columns hold a salt and a digest, and no screen or result
@@ -639,7 +679,7 @@ compares a role name to decide what to show.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 161 runtime checks against the real store, no browser
+npm run check:store    # 171 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -830,9 +870,26 @@ hand-roll `localStorage` and assert on the store's own output:
   prove without a browser, read as source text the way check9 reads the model: every
   screen route is a child of the parent carrying `requireAuth` and `/signin` is the
   one route outside it (bracket-matched, so a route added later is *checked* rather
-  than assumed), the guard asks `session.signedIn()` and carries `?next=` so a deep
-  link survives, and the shell offers Sign out — with no `switchUser`, no
-  `session.users()` and no "Switch user" left in it.
+  than assumed), the guard asks the session to continue (`session.touch()`, B3) and
+  carries `?next=` so a deep link survives, and the shell offers Sign out — with no
+  `switchUser`, no `session.users()` and no "Switch user" left in it.
+
+- `check16.mjs` — **B3, 10 checks:** a session has an *end*, and the client does not own
+  it. Signing in stamps a readable expiry that is ahead of now and is a window rather
+  than for ever; a session with time left is **rolled** (handed a stamp a minute out,
+  the touch moves it further out — and by the same window sign-in writes, so there is
+  no second number); a session whose stamp has passed is refused `'lapsed'` **and
+  cleared**, and — the stronger half — it has already stopped *acting as* that person
+  before anything clears it: `activeUser` is `undefined`, `sessionUserId()` is `''`,
+  `can()` answers no rights and an attributed write lands with no author; and a stamp
+  that is empty or unparseable is a lapse too, never an unlimited session. Then the
+  shape that makes the window the server's: `touchSession()` takes no argument and
+  `signIn()` takes a credential, so there is nowhere to pass a lifetime; a session is
+  stamped in exactly two places (where it starts and where it is rolled); and — read as
+  source text — the guard treats the touch as activity and marks **only** a lapse
+  (`?expired=1`, which the form renders as an explanation), while a first visit is not
+  told it timed out. The harness never sleeps: an expiry it would have to *live
+  through* is an expiry no check can hold, so it hands the store snapshots instead.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
@@ -849,6 +906,11 @@ the cheapest way to prove an invariant still holds.
   (B2): `check15` reads the route map and fails if a `component:` route sits outside
   the parent that carries `requireAuth`. The same harness fails if the store grows a
   way to set the acting person without a credential.
+- A session's *lifetime* belongs to whoever issues it (B3), so nothing in the client
+  takes one: `signIn()` is handed a credential, `touchSession()` is handed nothing,
+  and the stamp (`session.expiresAt`) is read rather than chosen. An expiry that
+  cannot be read is a lapse, not an unlimited session — `check16` fails if a stamp
+  appears anywhere but the two places that write one.
 - Display strings are resolved at read time (`userName`, `locationPath`,
   `partyName`), never stored — an order names its customer by FK and nothing else,
   so a rename on the Parties grid reaches every contract without touching a single

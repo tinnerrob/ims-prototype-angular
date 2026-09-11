@@ -89,7 +89,7 @@ await check('SessionService derives from the store (signals stay in step)', asyn
   assert.equal(session.user().name, 'Dana Reynolds');
   assert.equal(session.tenant().slug, 'northline');
   assert.equal(session.role().label, 'Manager');
-  assert.equal(session.signedIn(), true, 'the guard asks exactly this');
+  assert.equal(session.touch(), 'active', 'the guard asks exactly this (B3)');
   assert.equal(session.can('stock.adjust'), true);
   // The service's own path in — a credential, not an assertion about who we are.
   assert.equal((await session.signIn('sandra@northline.example', DEMO_PASSWORDS['USR-006'])).ok, true);
@@ -97,7 +97,7 @@ await check('SessionService derives from the store (signals stay in step)', asyn
   assert.equal(session.can('stock.adjust'), false);
   assert.equal(session.role().label, 'Viewer');
   session.signOut();
-  assert.equal(session.signedIn(), false, 'and Sign out ends it');
+  assert.equal(session.touch(), 'none', 'and Sign out ends it — nobody to touch');
   assert.equal(session.can('items.view'), false);
   await signInAs(data, 'USR-003');
 });

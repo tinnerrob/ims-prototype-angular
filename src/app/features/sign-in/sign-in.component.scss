@@ -8,6 +8,14 @@
   background: rgba(220, 38, 38, .07); border: 1px solid rgba(220, 38, 38, .25);
   color: var(--danger); font-size: 12px; font-weight: 600;
 }
+/* Why the visitor is looking at this form (B3): a session that ran out says so,
+   rather than looking like a screen that appeared for no reason. */
+.signin-notice {
+  display: flex; align-items: flex-start; gap: 7px;
+  margin-bottom: 12px; padding: 8px 10px; border-radius: 8px;
+  background: rgba(217, 119, 6, .07); border: 1px solid rgba(217, 119, 6, .25);
+  color: #b45309; font-size: 12px; font-weight: 600;
+}
 /* The fixture's pick-list: one row per seeded role, and the password this build
    publishes is printed on it — that is what keeps the demo enterable. */
 .signin-demo { border-top: 1px solid var(--line); background: #fbfcfe; padding: 10px 16px 14px; }

@@ -22,6 +22,10 @@ const REFUSAL: Record<SignInFailure, string> = {
  * the demonstration and this screen publishes the passwords that enter each one
  * (see `DataService.demoAccounts()`); a real deployment has no such list, and the
  * credential it is proving never leaves the store.
+ *
+ * B3 added one sentence this screen does have an opinion about: when the guard says
+ * the session *ended* (`?expired=1`), it says so, because a person who was working a
+ * minute ago is owed the reason they are back here.
  */
 @Component({
   selector: 'ims-sign-in',
@@ -33,6 +37,8 @@ const REFUSAL: Record<SignInFailure, string> = {
 export class SignInComponent {
   /** The fixture's people, each with the password this screen publishes. */
   readonly accounts: DemoAccount[];
+  /** True when the guard sent the visitor here because their session ran out (B3). */
+  readonly endedSession: boolean;
 
   email = '';
   password = '';
@@ -51,6 +57,10 @@ export class SignInComponent {
     // constructor's parameters exist, so reading an injected service there is the
     // blank-screen bug `lint:ctor` exists to catch.
     this.accounts = data.demoAccounts();
+    // A lapse and a first visit are not the same thing (B3): the guard marks the
+    // first, so an idle tab gets an explanation instead of looking like a reload that
+    // threw the person out for no reason.
+    this.endedSession = this.route.snapshot.queryParamMap.get('expired') === '1';
   }
 
   /** The workspace being signed into — named, so the form is not anonymous. */

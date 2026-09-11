@@ -40,6 +40,7 @@ import {
   ReceiptLine,
   RentalSub,
   SignInResult,
+  SessionTouch,
   StockLevel,
   TaxSchedule,
   Tenant,
@@ -298,6 +299,24 @@ export const DEMO_PASSWORDS: Record<string, string> = {
   'USR-006': 'sandra-northline',
 };
 
+/**
+ * How long a session lives without activity (B3), in minutes.
+ *
+ * The window is the **server's** term, and this constant exists only because this
+ * build plays both parts: the API will stamp `expires_at` on the session (or the
+ * token) it hands back and this client will honour that stamp — the client must never
+ * pick its own lifetime, because a client that decides when it stops being
+ * trustworthy is not a security boundary. Everything below treats the stamp as
+ * something it was *given*: `touchSession()` reads it, rolls it, and refuses an
+ * expiry it did not write.
+ */
+const SESSION_MINUTES = 30;
+
+/** When a session stamped now would lapse (ISO), for a window of `minutes`. */
+function expiryFrom(minutes: number): string {
+  return new Date(Date.now() + minutes * 60_000).toISOString();
+}
+
 /** The audit columns, ignored when comparing a row with the last saved copy. */
 const AUDIT_KEYS = ['tenantId', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
 
@@ -369,7 +388,7 @@ async function credentialDigest(salt: string, password: string): Promise<string>
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 13;
+  private readonly VERSION = 14;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -420,10 +439,16 @@ export class DataService {
      * not travel with it. `signIn()` is the only reader (see `credentialDigest()`).
      */
     credentials: Credential[];
-    /** Who the current session is acting as. */
+    /** Who the current session is acting as, and when its token lapses (B3). */
     session: {
       tenantId: string;
       userId: string;
+      /**
+       * When this session stops being honoured (ISO), stamped at sign-in and rolled by
+       * `touchSession()` — see `SESSION_MINUTES` for why the *client* does not own that
+       * window. Empty when nobody is signed in.
+       */
+      expiresAt: string;
     };
     yard: Yard;
     parties: Party[];
@@ -466,7 +491,7 @@ export class DataService {
     tenants: this.seedTenants(),
     users: this.seedUsers(),
     credentials: this.seedCredentials(),
-    session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID },
+    session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID, expiresAt: '' },
     yard: { name: 'Main Yard — Buckhead Hub', lat: 33.749, lng: -84.388 },
     parties: this.seedParties(),
     priceCards: this.seedPriceCards(),
@@ -519,7 +544,7 @@ export class DataService {
     // meets is the sign-in form. A session the fixture invented for you is exactly
     // what "the session stops being a stand-in" removes; restoring a snapshot
     // (above) keeps whatever session the person actually left behind.
-    if (seeded) this.db.session = { ...this.db.session, userId: '' };
+    if (seeded) this.db.session = { ...this.db.session, userId: '', expiresAt: '' };
     // The fixture posting above persisted on its way in; write once more now
     // that every row carries its tenant/author stamps.
     if (seeded) this.save();
@@ -562,8 +587,16 @@ export class DataService {
         // A session restores even when it names *nobody* (B1): signing out is a
         // state that has to survive a reload, or a refresh would sign the person
         // back in behind their back. An older snapshot without a `userId` string
-        // keeps the seed's session instead.
-        if (snap.session && typeof snap.session.userId === 'string') this.db.session = snap.session;
+        // keeps the seed's session instead. Its expiry comes back with it (B3), so a
+        // session that lapsed while the tab was closed is refused on the way in
+        // rather than restored as if it were live.
+        if (snap.session && typeof snap.session.userId === 'string') {
+          this.db.session = {
+            tenantId: snap.session.tenantId,
+            userId: snap.session.userId,
+            expiresAt: typeof snap.session.expiresAt === 'string' ? snap.session.expiresAt : '',
+          };
+        }
       } else if (snap) {
         // Older schema: the seed replaces the snapshot. Flagged so the shell can
         // say so — a version bump must never look like data that vanished.
@@ -3333,17 +3366,35 @@ export class DataService {
    * whoever happened to be listed first (B1). A session names a person or it is
    * empty; `can(undefined, …)` already answers "no rights", so nothing downstream
    * has to change to respect that.
+   *
+   * B3 made "or nobody" cover a session whose stamp has passed: this is where an
+   * expiry is *enforced*, not merely noticed. A server refuses a request carrying a
+   * dead token, and the store's readers are the equivalent of that request — so a
+   * lapsed session authors nothing and holds nothing the moment its stamp passes,
+   * even before a navigation (which is what clears it and sends the person back to
+   * the form).
    */
   get activeUser(): User | undefined {
-    return this.getUser(this.db.session.userId);
+    return this.sessionIsLive() ? this.getUser(this.db.session.userId) : undefined;
   }
 
   sessionUserId(): string {
-    return this.db.session.userId;
+    return this.sessionIsLive() ? this.db.session.userId : '';
   }
 
   sessionTenantId(): string {
     return this.db.session.tenantId;
+  }
+
+  /**
+   * True while the session names a person **and** carries a stamp that is still ahead
+   * of now (B3). An expiry this client cannot read is not live: a stamp it did not
+   * write is not one it may honour.
+   */
+  private sessionIsLive(): boolean {
+    if (!this.db.session.userId) return false;
+    const endsAt = Date.parse(this.db.session.expiresAt);
+    return Number.isFinite(endsAt) && endsAt > Date.now();
   }
 
   /* ------------------------------- sign-in (B1) --------------------------- */
@@ -3366,8 +3417,14 @@ export class DataService {
     if (!user || !credential) return { ok: false, reason: 'invalid' };
     if (!(await this.credentialMatches(credential, password))) return { ok: false, reason: 'invalid' };
     if (!user.active) return { ok: false, reason: 'inactive' };
-    // The session follows the person: the workspace it acts as is theirs.
-    this.db.session = { ...this.db.session, userId: user.id, tenantId: user.tenantId };
+    // The session follows the person: the workspace it acts as is theirs, and the
+    // token it hands back carries the expiry it will be honoured for (B3).
+    this.db.session = {
+      ...this.db.session,
+      userId: user.id,
+      tenantId: user.tenantId,
+      expiresAt: expiryFrom(SESSION_MINUTES),
+    };
     this.save();
     return { ok: true, user };
   }
@@ -3376,11 +3433,37 @@ export class DataService {
    * End the session. Persisted, so a reload cannot sign the person back in — the
    * session row it leaves behind names nobody, which `activeUser` reports as
    * `undefined` and `can()` answers "no rights" for. The workspace it acted as is
-   * kept, so the sign-in screen can still name it.
+   * kept, so the sign-in screen can still name it; the expiry goes with the person,
+   * because a stamp left behind on an empty session is an expiry nothing owns.
    */
   signOut(): void {
-    this.db.session = { ...this.db.session, userId: '' };
+    this.db.session = { ...this.db.session, userId: '', expiresAt: '' };
     this.save();
+  }
+
+  /**
+   * Let the session continue, rolling its expiry (B3) — the client's stand-in for the
+   * touch/refresh an API does on an authenticated request.
+   *
+   * Liveness itself is enforced by `sessionIsLive()`, which every reader of "who is
+   * acting" consults; this method is the *write* side of it — the one thing that rolls
+   * the stamp — plus the distinction the guard needs (`SessionTouch`): `'active'` when
+   * it rolled the stamp, `'lapsed'` when a session existed and had run out — in which
+   * case it is **cleared here**, by the same shape `signOut()` leaves, so a lapse is a
+   * state that survives a reload rather than one that has to be re-derived — and
+   * `'none'` when no session existed at all.
+   */
+  touchSession(): SessionTouch {
+    if (!this.db.session.userId) return 'none';
+    if (!this.sessionIsLive()) {
+      this.signOut();
+      return 'lapsed';
+    }
+    // Activity is a navigation (the guard runs for each one), so the window rolls
+    // from *now*: an idle tab stops being somebody, and a working one does not.
+    this.db.session = { ...this.db.session, expiresAt: expiryFrom(SESSION_MINUTES) };
+    this.save();
+    return 'active';
   }
 
   /** Whether `password` is the one behind a stored credential (reads no plaintext). */

@@ -134,11 +134,11 @@ await check('every screen is a child of the guarded parent, and the form is the 
 await check('the guard asks the session, and carries the URL the visitor wanted', () => {
   const src = read('./auth.guard.ts');
   assert.match(src, /CanActivateChildFn/, 'it guards every child route, not one screen');
-  assert.match(src, /session\.signedIn\(\)/, 'it asks whether anybody is signed in');
+  assert.match(src, /session\.touch\(\)/, 'it asks whether the session is still alive (B3)');
   assert.match(src, /createUrlTree\(\['\/signin'\]/, 'a stranger is sent to the form');
   assert.match(
     src,
-    /queryParams: \{ next: state\.url \}/,
+    /next: state\.url/,
     'naming where they were going, so a deep link survives the sign-in',
   );
 });
