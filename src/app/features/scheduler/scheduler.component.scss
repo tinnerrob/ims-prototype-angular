@@ -227,6 +227,9 @@
   font-size: 10px;
 }
 
+/* Scheduler page specifics (this file) + the shared design system
+   (src/styles.scss) carry the rest. The pool cards' compact controls are local
+   overrides of the shared buttons/selects — base geometry first, density here. */
 .sched-side .form-select {
   padding: 0.28rem 1.6rem 0.28rem 0.6rem;
   font-size: 12px;

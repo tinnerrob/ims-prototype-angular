@@ -257,6 +257,21 @@ detail right**, with orders as the top rows.
 - Angular templates **cannot use inline arrow functions** — put logic in methods.
 - Feature = model + DataService table (+seed/persistence) + list/overlay UI + route +
   nav + roadmap note. Build + serve each change; commit + push.
+- **One stylesheet, layered — pages override it, they don't restyle it.** `src/styles.scss`
+  is the base → refresh → polish cascade, and each layer is the last word on what it
+  declares, so a rule states only what *it* decides: a declaration a later layer re-sets is
+  dead weight. Reuse the base before adding a page rule — the `Today` reset is the single
+  `.btn-ims-quiet` chip on all three pager headers, every list toolbar shares
+  `.filter-input.search`, and page SCSS files hold only real page overrides (pool-card
+  density on the Scheduler, the inspection log's filters, month-head tuning). When a shared
+  control needs a variant, add the variant beside its base in this file with a name
+  (`.btn-ims-quiet`, `.btn-ims.btn-create`, `.btn-ims-outline.btn-sm2` row actions) rather
+  than a page-scoped copy, and delete rules whose classes no template mentions
+  (`.rn-*` / `.rw-*` / `.ho-*` / `.tc-*` were prototype leftovers, as were the dead
+  `#viewToggle` / `#tsViewToggle` / `#tlWeek` / `#schedQueue` / `#invPanel` / `#ccPanel`
+  hooks). A stylesheet edit is verifiable without a browser: compile it (`npx sass`)
+  before/after and compare the *winning* declaration of every `(selector, property)` pair —
+  a pure declutter moves none of them.
 - **Table row actions** use one shared pattern (Admin → Locations is the reference):
   `class="btn btn-ims-outline btn-sm2"` + a single Bootstrap icon, no label text —
   `bi-plus-lg` (add a child), `bi-pencil` (edit/rename), `bi-x-lg` (remove),
@@ -332,6 +347,13 @@ detail right**, with orders as the top rows.
   clears the expanded lanes and the focused order (exactly like `shift()`), the Timesheet
   leaves lane expansion alone (like `nav()` — the same employees are on the board either
   way).
+  All three buttons are `class="btn btn-ims-quiet btn-sm2"` — one shared chip, not three
+  copies: `btn-ims-quiet` (in `styles.scss`, "6. Buttons") is **grey at rest *and* when
+  disabled**, because the earlier `btn-ims-outline` version took that class's brand blue
+  whenever the pager happened to be off today while the two disabled ones fell back to
+  Bootstrap's grey — same button, two colours. Grey in both states keeps the chip stable as
+  the period moves; the disabled state only flattens it (Bootstrap's `opacity: .65` fade is
+  deliberately overridden, it read as a broken control).
 - **One label wording for every navigator** (`periodLabel()` in `core/data.service.ts`, used
   by the Scheduler, Labor & Timesheets, the inspection log and Hand-Off): `Monday, Aug 17, 2026`
   for a day, `Week of Aug 17, 2026` for a Monday-anchored week (first day only — no end date)

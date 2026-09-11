@@ -21,9 +21,4 @@
 .log-pager .tl-range {
   max-width: none;
 }
-/* The log's label keeps its full width (the pager owns the slack here, so the
-   global 46% cap isn't needed) and inherits the shared pill size. */
-.log-pager .tl-range {
-  max-width: none;
-}
 

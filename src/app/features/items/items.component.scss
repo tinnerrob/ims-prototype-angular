@@ -1,4 +1,4 @@
-/* Items & Stock: the toolbar search field is narrower than the pool filter. */
-.filter-input.search {
-  max-width: 320px;
-}
+/* Styling comes from the global design system (src/styles.scss), ported from the
+   prototype CSS. Component styles are scoped, so rules here would out-rank those
+   globals — the markup uses the prototype class names directly. The toolbar
+   search field's cap is shared (`.filter-input.search`). */

@@ -103,9 +103,10 @@
       </div>
       <!-- The reset trails the pager (the item hand-off & custody board's order:
            ‹ range ›, then "Today"), and disables itself while it is already the
-           period on screen. -->
+           period on screen. `btn-ims-quiet` is the shared grey reset chip — see
+           the buttons section of src/styles.scss. -->
       <button
-        class="btn btn-ims-outline btn-sm2"
+        class="btn btn-ims-quiet btn-sm2"
         type="button"
         title="Jump to today"
         [disabled]="atToday()"

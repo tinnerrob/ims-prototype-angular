@@ -1,12 +1,7 @@
 /* ------------------------------------------------------------------
    Hand-Off board. The card, sub-tab strip, table and modal shell all come from
    the global design system (src/styles.scss), which also stretches the card so
-   `.table-wrap` owns the scrolling — so only page-specific bits live here.
+   `.table-wrap` owns the scrolling — so only page-specific bits live here. The
+   toolbar search field's cap is shared too (`.filter-input.search`).
    ------------------------------------------------------------------ */
-
-/* The toolbar search field is wider than the pool filter but should not run the
-   full width of a wide board table. */
-.filter-input.search {
-  max-width: 340px;
-}
 
