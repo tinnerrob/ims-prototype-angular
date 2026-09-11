@@ -2618,3 +2618,26 @@ button:focus-visible,
 /* Same idea for the record-viewer / card headers that use a plain icon. */
 .card-title i { opacity: .9; }
 
+/* ---- 6. Selector strip + its primary action share one line ------------- */
+/* The list pages that carry a Customers/Contracts-style selector (Orders,
+   Items, Locations, Categories) used to repeat the page name in a card header
+   and park the "New X" button up there — a whole row spent on a title the page
+   header already shows. The header is gone; the action rides the selector
+   line, so the card starts with the strip and gains back that row.
+   `flex: 0 0 auto` keeps the row at its natural height inside the fixed-height
+   card layouts (both `.content` and the nested `.admin-pane` variants), so only
+   the table below it takes and scrolls in the remaining space. */
+.tabs-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+}
+.tabs-row > .subtabs { margin-bottom: 0; }
+.tabs-row > .btn { flex-shrink: 0; }
+@media (max-width: 991.98px) { .tabs-row { margin-bottom: 10px; } }
+
+/* A header that lost its (redundant) title keeps its controls, pushed right so
+   they still line up with the card's action edge. */
+.card-header.controls-only { justify-content: flex-end; }
+

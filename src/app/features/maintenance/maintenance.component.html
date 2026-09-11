@@ -1,8 +1,9 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-header">
-    <span class="card-title"><i class="bi bi-tools"></i> Work Order Grid</span>
+  <!-- controls only — the page header already names this view ("Field Service &
+       Maintenance") and this card is the page's only pane. -->
+  <div class="card-header controls-only">
     <div class="d-flex align-items-center gap-2">
       <select class="form-select form-select-sm w-auto" [value]="filter" (change)="filter = $any($event.target).value">
         <option value="all">All</option>

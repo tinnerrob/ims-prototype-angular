@@ -1,21 +1,22 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-header">
-    <span class="card-title"><i class="bi bi-tags"></i> Resource Categories</span>
-    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openAdd()">
-      <i class="bi bi-plus-lg"></i> Add Category
-    </button>
-  </div>
   <div class="card-body">
-    <!-- type tab strip -->
-    <div class="subtabs">
-      @for (t of tabs; track t.key) {
-        <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
-          <i class="bi {{ t.icon }}"></i>{{ t.label }}
-          <span class="count-pill">{{ data.categoryRecordsFor(t.key).length }}</span>
-        </button>
-      }
+    <!-- The Administration submenu already marks this page, and the type strip
+         below names the active group, so the card carries no title of its own:
+         the selector strip and "Add Category" share one line. -->
+    <div class="tabs-row">
+      <div class="subtabs">
+        @for (t of tabs; track t.key) {
+          <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
+            <i class="bi {{ t.icon }}"></i>{{ t.label }}
+            <span class="count-pill">{{ data.categoryRecordsFor(t.key).length }}</span>
+          </button>
+        }
+      </div>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openAdd()">
+        <i class="bi bi-plus-lg"></i> Add Category
+      </button>
     </div>
 
     <div class="table-wrap">

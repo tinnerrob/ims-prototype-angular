@@ -1,21 +1,22 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-header">
-    <span class="card-title"><i class="bi bi-box-seam"></i> Inventory &amp; Assets</span>
-    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
-      <i class="bi bi-plus-lg"></i> {{ activeTab()?.addLabel }}
-    </button>
-  </div>
   <div class="card-body">
-    <!-- per-vertical tab strip -->
-    <div class="subtabs">
-      @for (t of tabs(); track t.key) {
-        <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
-          <i class="bi {{ t.icon }}"></i>{{ t.label }}
-          <span class="count-pill">{{ count(t.key) }}</span>
-        </button>
-      }
+    <!-- The page header already names this view ("Items & Stock"), so the card
+         carries no title of its own: the type strip and the "add" action it
+         belongs to share one line. -->
+    <div class="tabs-row">
+      <div class="subtabs">
+        @for (t of tabs(); track t.key) {
+          <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
+            <i class="bi {{ t.icon }}"></i>{{ t.label }}
+            <span class="count-pill">{{ count(t.key) }}</span>
+          </button>
+        }
+      </div>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+        <i class="bi bi-plus-lg"></i> {{ activeTab()?.addLabel }}
+      </button>
     </div>
 
     <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">

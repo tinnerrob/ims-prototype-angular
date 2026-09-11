@@ -1,19 +1,21 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-header">
-    <span class="card-title"><i class="bi bi-folder2-open"></i> Customers &amp; Contracts</span>
-    <button class="btn btn-ims btn-create" type="button" (click)="tab === 'customers' ? openCustomer() : newOrder()">
-      <i class="bi bi-plus-lg"></i> {{ tab === 'customers' ? 'New Customer' : 'New Contract' }}
-    </button>
-  </div>
   <div class="card-body">
-    <div class="subtabs">
-      <button class="subtab" type="button" [class.active]="tab === 'customers'" (click)="setTab('customers')">
-        <i class="bi bi-people"></i>Customers<span class="count-pill">{{ parties().length }}</span>
-      </button>
-      <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="setTab('orders')">
-        <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ data.listOrders().length }}</span>
+    <!-- The page header already names this view ("Parties & Orders"), so the
+         card carries no title of its own: the selector strip and the action it
+         belongs to share one line. -->
+    <div class="tabs-row">
+      <div class="subtabs">
+        <button class="subtab" type="button" [class.active]="tab === 'customers'" (click)="setTab('customers')">
+          <i class="bi bi-people"></i>Customers<span class="count-pill">{{ parties().length }}</span>
+        </button>
+        <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="setTab('orders')">
+          <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ data.listOrders().length }}</span>
+        </button>
+      </div>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="tab === 'customers' ? openCustomer() : newOrder()">
+        <i class="bi bi-plus-lg"></i> {{ tab === 'customers' ? 'New Customer' : 'New Contract' }}
       </button>
     </div>
 

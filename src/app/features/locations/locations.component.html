@@ -1,32 +1,30 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-header">
-    <span class="card-title">
-      <i class="bi {{ tab === 'locations' ? 'bi-diagram-3' : 'bi-tags' }}"></i>
-      {{ tab === 'locations' ? 'Location Hierarchy' : 'Location Types' }}
-    </span>
-    @if (tab === 'locations') {
-      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
-        <i class="bi bi-plus-lg"></i> New Location
-      </button>
-    } @else {
-      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openTypeAdd()">
-        <i class="bi bi-plus-lg"></i> Add Location Type
-      </button>
-    }
-  </div>
   <div class="card-body">
-    <!-- sub-page toggle (same pattern as Categories) -->
-    <div class="subtabs">
-      <button class="subtab" type="button" [class.active]="tab === 'locations'" (click)="selectTab('locations')">
-        <i class="bi bi-diagram-3"></i>Locations
-        <span class="count-pill">{{ locations().length }}</span>
-      </button>
-      <button class="subtab" type="button" [class.active]="tab === 'types'" (click)="selectTab('types')">
-        <i class="bi bi-tags"></i>Location Types
-        <span class="count-pill">{{ typeRecords().length }}</span>
-      </button>
+    <!-- The active sub-tab already names the sub-page ("Locations" / "Location
+         Types"), so the card carries no title of its own: the selector strip
+         and the action it belongs to share one line. -->
+    <div class="tabs-row">
+      <div class="subtabs">
+        <button class="subtab" type="button" [class.active]="tab === 'locations'" (click)="selectTab('locations')">
+          <i class="bi bi-diagram-3"></i>Locations
+          <span class="count-pill">{{ locations().length }}</span>
+        </button>
+        <button class="subtab" type="button" [class.active]="tab === 'types'" (click)="selectTab('types')">
+          <i class="bi bi-tags"></i>Location Types
+          <span class="count-pill">{{ typeRecords().length }}</span>
+        </button>
+      </div>
+      @if (tab === 'locations') {
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+          <i class="bi bi-plus-lg"></i> New Location
+        </button>
+      } @else {
+        <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openTypeAdd()">
+          <i class="bi bi-plus-lg"></i> Add Location Type
+        </button>
+      }
     </div>
 
     @if (tab === 'locations') {

@@ -1,14 +1,11 @@
 <div class="page-head"></div>
 
 <div class="card">
-  <div class="card-header">
-    <span class="card-title">
-      <i class="bi {{ activeTab().icon }}"></i>
-      {{ activeTab().label }}
-    </span>
-
-    <!-- day stepper: only the two board lists are day-scoped -->
-    @if (boardTab()) {
+  <!-- Day stepper, only for the two day-scoped board lists. When there is no
+       stepper the card has no header at all: the sub-tabs below already name the
+       active list, so a title here only repeated the selected tab. -->
+  @if (boardTab()) {
+    <div class="card-header">
       <div class="period-pager">
         <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous day" (click)="moveDay(-1)">
           <i class="bi bi-chevron-left"></i>
@@ -27,8 +24,8 @@
       >
         Today
       </button>
-    }
-  </div>
+    </div>
+  }
 
   <div class="card-body">
     <!-- sub-page toggle (same pattern as Categories / Locations) -->

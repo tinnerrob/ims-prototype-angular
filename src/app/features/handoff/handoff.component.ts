@@ -132,11 +132,6 @@ export class HandoffComponent {
     }
   }
 
-  /** Definition of the active tab (drives the card title). */
-  activeTab(): { key: HandoffTab; label: string; icon: string } {
-    return this.tabs.find((t) => t.key === this.tab) ?? this.tabs[0];
-  }
-
   searchPlaceholder(): string {
     switch (this.tab) {
       case 'outbound':
