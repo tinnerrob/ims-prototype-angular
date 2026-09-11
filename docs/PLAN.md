@@ -472,7 +472,7 @@ Tenant administration is **E**'s.
 | # | Increment | Status |
 |---|---|---|
 | C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `2ffca74` |
-| C1b | The screens depend on the contract: features inject `IMS_API` instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ⏳ |
+| C1b | The screens depend on the contract: every component, service and helper takes `IMS_API` (typed `ApiAdapter`) instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ✅ `C1b-sha` |
 | C2 | Commands answer in one shape: a typed result (value or `reason`) replacing the `null`/`false` sentinels, so a screen renders a refusal instead of guessing what `null` meant | ⏳ |
 | C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
 | C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
@@ -505,6 +505,23 @@ a second workspace would be worse than no seam). C1a lands the contract and the 
 C1b moves the features onto the token, the half that makes "a screen depends on the
 interface" true of screens rather than of a file.
 
+**C1b — the sweep, and the rule that makes it hold.** Twenty-three files: every
+component and core service that was constructed with `private readonly data:
+DataService` now takes `@Inject(IMS_API) …: ApiAdapter`, and the tooltip builders —
+which take the store as an *argument* rather than injecting it — take `ApiAdapter`
+too. Nothing about behaviour changed, which is the point: the app still talks to the
+store, but it can only reach a member the contract declares, and which class answers is
+decided in one provider.
+
+What is worth stating is what does *not* catch a regression here. Injecting the class
+again **compiles** (it is still `@Injectable({ providedIn: 'root' })`), and it runs —
+the app would quietly go back to depending on the implementation and nobody would see
+it. So the sweep needs a harness, and `check18` is it: it walks every `.ts` under
+`src/app` and asserts the class is named in exactly two files (its own and `api.ts`),
+that every injection site names `IMS_API` and types it as the contract, that no call
+site asks Angular for the class as a token, and that nothing constructs a second store.
+The new rule for the next screen is the same one, and it is in the conventions below.
+
 **C2 — one shape for "no".** Today a refusal is `null` (no such row, refused edit) or
 `false` (refused removal) and a screen decides what to say — which is how a guard and
 its button can print different reasons for one rule (`partyRemovalBlockers()` is the
@@ -531,6 +548,13 @@ feature, and the runtime checks can drive the store *through the seam* — which
 proof, since a seam only one implementation ever crosses is a rename. A refusal
 reaches the screen as a reason it prints. Nothing in the client reads `db.session` to
 decide who is writing or which workspace a row is in.
+
+**C1 is complete** (C1a `2ffca74`, C1b `C1b-sha`): the contract exists, the store is its
+first implementation, every screen goes through `IMS_API`, and two harnesses plus two
+compile-time assertions hold the line. **C2 is next** — a command's refusal becoming one
+typed result instead of `null`/`false` — and it is the increment that makes "a refusal
+reaches the screen as a reason it prints" true; the paging and load-state halves (C3,
+C4) come after it.
 
 ## Phase D — persistence and offline: what a client keeps when nobody answers
 
@@ -705,7 +729,7 @@ compares a role name to decide what to show.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 178 runtime checks against the real store, no browser
+npm run check:store    # 182 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -930,6 +954,16 @@ hand-roll `localStorage` and assert on the store's own output:
   `useExisting: DataService` — the store answers the contract, as the same instance, and
   no `useClass` anywhere.
 
+- `check18.mjs` — **C1b, 4 checks:** the sweep that makes the contract binding for the
+  *screens*, checked by walking every `.ts` under `src/app`. The store class must be
+  named in exactly two files — its own and `api.ts`; every one of the 22 injection sites
+  must name `IMS_API` and type the parameter as `ApiAdapter` (the tooltip builders, which
+  take the store as an argument, take it the same way); nothing outside the seam may ask
+  Angular for the class as a token; and nothing may construct a second store. This check
+  exists because the compiler does *not* catch the regression it guards: injecting the
+  class again compiles and runs, so a view would quietly go back to depending on the
+  implementation.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -954,6 +988,9 @@ the cheapest way to prove an invariant still holds.
   neither union is a **compile error** (`NothingOutsideTheContract`), and putting it on
   the wrong side fails `check17`: a command is a method that persists, directly or
   through another command it calls.
+- A new view injects `IMS_API` and types it `ApiAdapter`, never `DataService` (C1b).
+  The compiler will not stop you — the class is still injectable — so `check18` walks
+  `src/app` and fails, which is the only reason the seam stays a seam.
 - Display strings are resolved at read time (`userName`, `locationPath`,
   `partyName`), never stored — an order names its customer by FK and nothing else,
   so a rename on the Parties grid reaches every contract without touching a single

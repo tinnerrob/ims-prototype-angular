@@ -1,6 +1,6 @@
-import { computed, Injectable, Signal } from '@angular/core';
+import { computed, Inject, Injectable, Signal } from '@angular/core';
 
-import { DataService } from './data.service';
+import { ApiAdapter, IMS_API } from './api';
 import { INDUSTRY_MODULES, ModuleKey } from './models';
 
 /**
@@ -21,7 +21,7 @@ export class ModulesService {
   /** All module definitions (importing for convenient iteration). */
   readonly modules = INDUSTRY_MODULES;
 
-  constructor(private readonly data: DataService) {
+  constructor(@Inject(IMS_API) private readonly data: ApiAdapter) {
     this.flags = computed(() => {
       this.data.revision();
       return this.data.moduleFlags();

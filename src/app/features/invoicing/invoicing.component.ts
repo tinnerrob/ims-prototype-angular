@@ -1,6 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { Invoice, InvoiceStatus, INVOICE_STATUS_LABEL } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -31,7 +31,7 @@ export class InvoicingComponent {
   lastRun = 0;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: report how much of the ledger

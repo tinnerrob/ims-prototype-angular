@@ -1,6 +1,7 @@
-import { Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, Inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DataService, hmMin, periodLabel, periodPhrase } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
+import { hmMin, periodLabel, periodPhrase } from '../../core/data.service';
 import {
   CatalogType,
   CATALOG_TYPES,
@@ -188,7 +189,7 @@ export class SchedulerComponent implements OnDestroy {
   bookPrompt: { type: CatalogType; refId: string; orderId: string; qty: number } | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     private cdr: ChangeDetectorRef,
     private confirm: ConfirmService,
   ) {

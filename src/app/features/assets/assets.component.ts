@@ -1,7 +1,7 @@
-import { Component, effect } from '@angular/core';
+import { Component, Inject, effect } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { PageSearchService } from '../../core/page-search.service';
 import { CatalogType, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
 import { ColumnMeta, VerticalTabMeta } from '../../core/vertical-metadata';
@@ -102,7 +102,7 @@ export class AssetsComponent {
   private viewing: Item | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // The page opens on the vertical's own first tab (Healthcare lands on

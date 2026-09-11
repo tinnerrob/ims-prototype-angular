@@ -29,7 +29,7 @@ the *server's* term and the client only reads the stamp.
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (178 checks across tenancy,
+services to JS and drives the real store from Node (182 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
@@ -278,18 +278,19 @@ detail right**, with orders as the top rows.
   Vehicle/Dispatch, Invoice, module + status enums/labels, `AuditFields`).
   `docs/DATA-MODEL.md` is the same thing as *tables* — the schema the API
   implements, and the document `check9` keeps in step with this file.
-- `src/app/core/api.ts` — **the API seam** (C1a): the store's whole public surface as
+- `src/app/core/api.ts` — **the API seam** (C1): the store's whole public surface as
   a contract, split into `ApiQueries` (reads) and `ApiCommands` (writes), `Pick`ed from
   `DataService` so no signature is copied, with two compile-time assertions that fail
   the build if a member is unclassified or the store does not satisfy it. `IMS_API` is
-  the token a screen injects and `provideImsApi()` decides who answers it (`useExisting`
-  — the store, as the same instance). `check17` re-derives the split from the store.
+  the token every screen injects (C1b: all 22 injection sites, typed `ApiAdapter`) and
+  `provideImsApi()` decides who answers it (`useExisting` — the store, as the same
+  instance). `check17` re-derives the split, `check18` keeps the sweep swept.
 - `src/app/core/data.service.ts` — one typed in-memory store + versioned
   localStorage persistence (`ims-web.store`); typed accessors + the pricing calcs:
   `lineTotal(li, order)` (port of the prototype's `computeLineTotal()` — the
   per-booking gross Order Details prints and the queues show) and `orderAmount()`
-  (its sum). It is the **first implementation** of the contract above; features move
-  onto `IMS_API` in C1b, and `useExisting` is what keeps them talking to this instance.
+  (its sum). It is the **first implementation** of the contract above: nothing outside
+  `core/api.ts` names the class any more, so an HTTP client is a provider change.
 - `src/app/core/session.service.ts` — who the app is signed in as (workspace +
   person) as signals over the store, `signIn()` / `signOut()`, `touch()` (the guard's
   question, B3: it rolls the expiry or reports that the session lapsed), and
@@ -712,10 +713,12 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    phases beyond Phase A are recorded in `docs/PLAN.md` — **B authentication · C this
    seam · D persistence/offline · E tenant administration** — with their scope and
    acceptance criteria. **B is complete** (B1/B2/B3, each with its own note and harness
-   there) and **C is the active phase**: C1a has landed the contract
+   there) and **C is the active phase**: **C1 is done** — C1a landed the contract
    (`core/api.ts` — the store's surface split into queries and commands, held by two
-   compile-time assertions and `check17`), and **C1b is next** (the features inject
-   `IMS_API` instead of the `DataService` class). Still open on the *auth* seam, and
+   compile-time assertions and `check17`) and C1b moved every screen onto it (all 22
+   injection sites take `IMS_API`, held by `check18`), so swapping the implementation is
+   a provider change. **C2 is next** (a command's refusal becomes one typed result
+   instead of `null`/`false`). Still open on the *auth* seam, and
    named in DATA-MODEL's "not in the model yet": **revocation** — nothing cuts a session
    short before it is given up, and no other client is told one ended (the API's job: a
    `sessions` row or a token version).

@@ -1,11 +1,11 @@
-import { DataService } from '../../core/data.service';
+import { ApiAdapter } from '../../core/api';
 import { Item, Order, Party, Timesheet, WorkOrder, statusClass } from '../../core/models';
 import { Tip, TipLine } from './tip.service';
 import { stampAt, stampDate, stampRange } from './tip-format';
 
 /* Domain content for the smart tooltips.
 
-   These need `DataService` (rate money, order totals, segment labels), so this
+   These need `ApiAdapter` (rate money, order totals, segment labels), so this
    file is the one place in `shared/` that leans on `core/` — the builders are
    the shared definition of "what a tip about an order/asset/person looks like",
    and every page that shows those entities binds the same function, which is
@@ -31,14 +31,14 @@ export function tip(title: string, lines: (TipLine | null | undefined)[], extra:
  * Deliberately just the two lines the calendar needs — the bar already prints
  * its value · items · days sub-line.
  */
-export function orderTip(data: DataService, o: Order): Tip {
+export function orderTip(data: ApiAdapter, o: Order): Tip {
   return tip(`${o.orderId} - ${o.projectName}`, [
     stampRange(o.startDate, data.orderT0(o), o.endDate, data.orderT1(o)),
   ]);
 }
 
 /** Full order record (orders table, hand-off, dispatch rows). */
-export function orderRecordTip(data: DataService, o: Order): Tip {
+export function orderRecordTip(data: ApiAdapter, o: Order): Tip {
   return tip(
     `${o.orderId} - ${o.projectName}`,
     [
@@ -57,7 +57,7 @@ export function orderRecordTip(data: DataService, o: Order): Tip {
  * `extra` carries context the caller knows (a booking note, on-hand levels) and
  * is appended as further lines, so one asset always reads the same way.
  */
-export function assetTip(data: DataService, item: Item, extra: (TipLine | null | undefined)[] = []): Tip {
+export function assetTip(data: ApiAdapter, item: Item, extra: (TipLine | null | undefined)[] = []): Tip {
   const model = [item.make, item.model].filter(Boolean).join(' ');
   return tip(
     `${item.id} - ${item.name}`,
@@ -76,7 +76,7 @@ export function assetTip(data: DataService, item: Item, extra: (TipLine | null |
 }
 
 /** Customer / vendor / site card. */
-export function partyTip(data: DataService, p: Party): Tip {
+export function partyTip(data: ApiAdapter, p: Party): Tip {
   return tip(
     p.name,
     [
@@ -96,7 +96,7 @@ export function partyTip(data: DataService, p: Party): Tip {
  * and who worked it — the same one-fact-per-line shape as the scheduler's, and
  * the same `CODE - Name` title (the bar itself only has room for a short label).
  */
-export function segmentTip(data: DataService, ts: Timesheet): Tip {
+export function segmentTip(data: ApiAdapter, ts: Timesheet): Tip {
   const employee = data.getItem('labor', ts.empId);
   const running = !ts.clockOut;
   const order = ts.targetType === 'order' && ts.targetId ? data.getOrder(ts.targetId) : undefined;
@@ -121,7 +121,7 @@ export function segmentTip(data: DataService, ts: Timesheet): Tip {
  * Employee lane label: who they are, and how much of the visible window they
  * have logged. `logged` comes from the lane (already summed by the caller).
  */
-export function employeeTip(data: DataService, emp: Item, logged: number): Tip {
+export function employeeTip(data: ApiAdapter, emp: Item, logged: number): Tip {
   return tip(`${emp.id} - ${emp.name}`, [
     emp.role ? { label: 'Role', value: emp.role } : null,
     { label: 'Logged', value: `${logged} hr` },
@@ -130,7 +130,7 @@ export function employeeTip(data: DataService, emp: Item, logged: number): Tip {
 }
 
 /** Service work order (timesheet chips, maintenance grid). */
-export function workOrderTip(data: DataService, w: WorkOrder): Tip {
+export function workOrderTip(data: ApiAdapter, w: WorkOrder): Tip {
   const parts = w.parts
     .map((p) => data.itemLabel(p.kind === 'part' ? 'part' : 'consumable', p.refId))
     .filter(Boolean);

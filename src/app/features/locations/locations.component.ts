@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { Location, LocationType } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -76,7 +76,7 @@ export class LocationsComponent {
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: { kind: 'location' | 'type'; id: string } | null = null;
 
-  constructor(readonly data: DataService) {}
+  constructor(@Inject(IMS_API) readonly data: ApiAdapter) {}
 
   /** Switch sub-table — closing any open editor so a stale modal can't linger. */
   selectTab(t: Tab): void {

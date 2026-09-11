@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { PageSearchService } from '../../core/page-search.service';
 import {
   SERVICE_TYPES,
@@ -64,7 +64,7 @@ export class MaintenanceComponent {
   viewer: ViewModel | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: report how much of the

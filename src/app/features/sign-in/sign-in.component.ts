@@ -1,8 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component, Inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { DemoAccount, roleLabel, SignInFailure } from '../../core/models';
 import { SessionService } from '../../core/session.service';
 
@@ -48,7 +48,7 @@ export class SignInComponent {
   readonly busy = signal(false);
 
   constructor(
-    data: DataService,
+    @Inject(IMS_API) data: ApiAdapter,
     private readonly session: SessionService,
     private readonly router: Router,
     private readonly route: ActivatedRoute,

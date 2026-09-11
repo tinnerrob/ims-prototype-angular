@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { RentalSub } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -47,7 +47,7 @@ export class RentalsComponent {
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
 
-  constructor(readonly data: DataService) {}
+  constructor(@Inject(IMS_API) readonly data: ApiAdapter) {}
 
   rentals(): RentalSub[] {
     return this.data.listRentals();

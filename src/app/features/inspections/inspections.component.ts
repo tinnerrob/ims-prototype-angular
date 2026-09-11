@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
+import { PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
 import {
   Inspection,
@@ -70,7 +71,7 @@ export class InspectionsComponent {
   private editSnap = '';
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: report how much of the log

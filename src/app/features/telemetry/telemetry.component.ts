@@ -1,6 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { Item, statusClass } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { GEO_BOUNDS, TrackedPosition, TelemetryService } from '../../core/telemetry.service';
@@ -48,7 +48,7 @@ export class TelemetryComponent {
   viewer: ViewModel | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly telemetry: TelemetryService,
     readonly search: PageSearchService,
   ) {

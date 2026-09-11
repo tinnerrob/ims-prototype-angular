@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, periodLabel } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
+import { periodLabel } from '../../core/data.service';
 import { Item, Movement, MovementKind, MOVEMENT_KIND_LABEL } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
@@ -88,7 +89,7 @@ export class HandoffComponent {
   viewer: ViewModel | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: one query for all four tabs,

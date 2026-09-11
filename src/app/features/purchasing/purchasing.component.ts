@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
+import { PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
 import {
   CatalogType,
   Party,
@@ -163,7 +164,7 @@ export class PurchasingComponent {
   viewer: ViewModel | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // One topbar search covers all three sub-tables, so the pill counts what the

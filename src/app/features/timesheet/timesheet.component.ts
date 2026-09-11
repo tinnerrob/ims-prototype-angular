@@ -1,7 +1,8 @@
-import { ChangeDetectorRef, Component, OnDestroy } from '@angular/core';
+import { ChangeDetectorRef, Component, Inject, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, dISO, hmMin, minHM, periodLabel, snap15 } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
+import { dISO, hmMin, minHM, periodLabel, snap15 } from '../../core/data.service';
 import { Item, Order, Timesheet, TIMESHEET_KIND, TimesheetTarget, WorkOrder } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
@@ -111,7 +112,7 @@ export class TimesheetComponent implements OnDestroy {
   private justDragged = false;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     private readonly cdr: ChangeDetectorRef,
     readonly search: PageSearchService,
   ) {

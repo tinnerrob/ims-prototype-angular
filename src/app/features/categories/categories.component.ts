@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { CatalogType, CategoryOption } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -53,7 +53,7 @@ export class CategoriesComponent {
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: CategoryOption | null = null;
 
-  constructor(readonly data: DataService) {
+  constructor(@Inject(IMS_API) readonly data: ApiAdapter) {
     // Open on a tab this vertical actually has: a warehouse has no serialized tab.
     this.type = this.tabs()[0].key;
   }

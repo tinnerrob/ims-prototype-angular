@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { Order, ORDER_STATUS_LABEL, OrderLine, Party, statusClass } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
@@ -56,7 +56,7 @@ export class OrdersComponent {
   private viewing: Party | null = null;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: it spans both sub-tabs (and

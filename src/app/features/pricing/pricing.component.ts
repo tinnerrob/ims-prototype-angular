@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import {
   CATALOG_TYPE_KEYS,
   CATALOG_TYPES,
@@ -39,14 +39,14 @@ interface CardForm {
 }
 
 /** How a card's standing reads on the grid (see `DataService.cardStatus`). */
-const CARD_STATUS_LABEL: Record<ReturnType<DataService['cardStatus']>, string> = {
+const CARD_STATUS_LABEL: Record<ReturnType<ApiAdapter['cardStatus']>, string> = {
   'in-force': 'In force',
   scheduled: 'Scheduled',
   expired: 'Expired',
   inactive: 'Inactive',
 };
 
-const CARD_STATUS_CLASS: Record<ReturnType<DataService['cardStatus']>, string> = {
+const CARD_STATUS_CLASS: Record<ReturnType<ApiAdapter['cardStatus']>, string> = {
   'in-force': 'st-active',
   scheduled: 'st-onrent',
   expired: 'st-closed',
@@ -110,7 +110,7 @@ export class PricingComponent {
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: { kind: 'overhead' | 'tax' | 'card'; id: string } | null = null;
 
-  constructor(readonly data: DataService) {
+  constructor(@Inject(IMS_API) readonly data: ApiAdapter) {
     this.form = { ...data.pricing, riskPremiums: { ...data.pricing.riskPremiums } };
   }
 

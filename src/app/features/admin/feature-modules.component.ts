@@ -1,6 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { CatalogType, INDUSTRY_MODULES, ModuleKey, TENANT_PLAN_LABEL, VERTICALS } from '../../core/models';
 import { VerticalMetadata } from '../../core/vertical-metadata';
 import { ModulesService } from '../../core/modules.service';
@@ -34,7 +34,7 @@ export class FeatureModulesComponent {
   readonly verticals = VERTICALS;
 
   constructor(
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly mods: ModulesService,
     readonly session: SessionService,
   ) {}

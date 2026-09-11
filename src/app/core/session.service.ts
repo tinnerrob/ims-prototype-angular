@@ -1,6 +1,6 @@
-import { computed, Injectable, Signal } from '@angular/core';
+import { computed, Inject, Injectable, Signal } from '@angular/core';
 
-import { DataService } from './data.service';
+import { ApiAdapter, IMS_API } from './api';
 import { can, Permission, RoleDef, roleDef, SessionTouch, SignInResult, Tenant, User } from './models';
 
 /**
@@ -31,7 +31,7 @@ export class SessionService {
   /** The current user's role definition (label + permission list). */
   readonly role: Signal<RoleDef>;
 
-  constructor(private readonly data: DataService) {
+  constructor(@Inject(IMS_API) private readonly data: ApiAdapter) {
     // Each computed reads `revision()` first, so any persisted write (a sign-in, a
     // sign-out, a module flag, an edit) recomputes it — no second copy of the data.
     this.tenant = computed(() => {

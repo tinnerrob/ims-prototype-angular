@@ -1,7 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, Inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import { ApiAdapter, IMS_API } from '../../core/api';
 import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -37,7 +37,7 @@ export class LogisticsComponent {
   /** Staged (uncommitted) edits from the assignment grid, keyed by dispatch id. */
   private draft: Record<string, { driverId: string; vehicleId: string; status: DispatchStatus }> = {};
 
-  constructor(readonly data: DataService) {}
+  constructor(@Inject(IMS_API) readonly data: ApiAdapter) {}
 
   dispatches(): Dispatch[] {
     return this.data.listDispatches();

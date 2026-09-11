@@ -1,6 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Inject, Injectable } from '@angular/core';
 
-import { DataService } from './data.service';
+import { ApiAdapter, IMS_API } from './api';
 import { Item } from './models';
 
 /** One entry in the geofence alert log (prototype `App.breachAlerts`). */
@@ -53,7 +53,7 @@ export class TelemetryService {
   private timer: ReturnType<typeof setInterval> | null = null;
   private tick = 0;
 
-  constructor(private readonly data: DataService) {
+  constructor(@Inject(IMS_API) private readonly data: ApiAdapter) {
     this.reset();
   }
 

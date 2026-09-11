@@ -1,9 +1,9 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, Inject, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 
-import { DataService } from './core/data.service';
+import { ApiAdapter, IMS_API } from './core/api';
 import { ModulesService } from './core/modules.service';
 import { TENANT_PLAN_LABEL } from './core/models';
 import { PageSearchService } from './core/page-search.service';
@@ -50,7 +50,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly router: Router,
-    readonly data: DataService,
+    @Inject(IMS_API) readonly data: ApiAdapter,
     readonly mods: ModulesService,
     readonly session: SessionService,
     readonly telemetry: TelemetryService,
