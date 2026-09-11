@@ -70,8 +70,8 @@
       </div>
 
       <div class="text-muted2 ts-side-note">
-        Drag a contract or task onto an employee's row to clock them in. Click the
-        <i class="bi bi-stopwatch"></i> on a row to punch (includes Lunch).
+        Drag a contract or task onto an employee's row to clock them in. Click an
+        employee's name on the calendar to punch (includes Lunch).
       </div>
     </div>
   </aside>
@@ -107,7 +107,7 @@
     <div class="ts-hint">
       <i class="bi bi-arrow-down-left-circle"></i>
       Drag a contract or task onto an employee row to clock in · drag a bar to move/resize · click a bar to edit ·
-      clock icon = punch
+      click an employee name to punch · the chevron contracts / expands a day's stacked items
     </div>
 
     <div class="tl-week">
@@ -127,7 +127,6 @@
               </div>
             }
           }
-          <div class="tl-gutter"></div>
         </div>
 
         <!-- employee lanes -->
@@ -140,7 +139,25 @@
             >
               <div class="tl-row-label res lab-lbl">
                 <div class="lab-l-name">
-                  {{ lane.emp.name }}
+                  @if (lane.stacked) {
+                    <button
+                      class="lab-l-chev"
+                      type="button"
+                      [title]="
+                        lane.isExpanded
+                          ? 'Contract the items stacked in this day column'
+                          : 'Expand the items stacked in this day column'
+                      "
+                      (click)="toggleExpand(lane.emp.id)"
+                    >
+                      <i class="bi" [class.bi-chevron-up]="lane.isExpanded" [class.bi-chevron-down]="!lane.isExpanded"></i>
+                    </button>
+                  }
+                  <span
+                    class="lab-l-punch"
+                    [title]="'Punch ' + lane.emp.name + ' — clock in / out, has a lunch break'"
+                    (click)="openPunch(lane.emp.id)"
+                  >{{ lane.emp.name }}</span>
                   @if (lane.open) {
                     <i class="lab-live-dot" [title]="'On ' + segShort(lane.open) + ' since ' + lane.open.clockIn"></i>
                   }
@@ -180,6 +197,13 @@
                     @if (isDay() && !bar.live) {
                       <span class="ts-h ts-h-r" title="Drag to resize" (mousedown)="beginResize($event, bar.ts, 'r')"></span>
                     }
+                    @if (bar.hidden > 0) {
+                      <span
+                        class="ts-block-more"
+                        [title]="bar.hidden + ' more item(s) stacked in this day — click to expand'"
+                        (click)="$event.stopPropagation(); toggleExpand(lane.emp.id)"
+                      >+{{ bar.hidden }}</span>
+                    }
                   </div>
                 } @empty {
                   <span class="text-muted2 lab-empty">No time</span>
@@ -187,17 +211,6 @@
                 @if (isDay()) {
                   <div class="lab-nowline" [style.left.%]="nowLeft()"></div>
                 }
-              </div>
-
-              <div class="lab-row-clock">
-                <button
-                  class="btn btn-ims-outline btn-sm2"
-                  type="button"
-                  [title]="'Punch ' + lane.emp.name"
-                  (click)="$event.stopPropagation(); openPunch(lane.emp.id)"
-                >
-                  <i class="bi bi-stopwatch"></i>
-                </button>
               </div>
             </div>
           }

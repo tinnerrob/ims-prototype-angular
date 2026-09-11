@@ -13,8 +13,6 @@ const DAY_B = 1440;
 const ROWH = 54;
 /** Vertical breathing room inside a row band. */
 const ROWM = Math.max(4, Math.round(ROWH * 0.1));
-/** Right gutter column holding the per-row punch button. */
-const GUT = 40;
 
 type LabView = 'day' | 'week' | 'month';
 
@@ -25,6 +23,8 @@ interface Bar {
   width: number;
   top: number;
   height: number;
+  /** Segments this bar stands in for while its lane is collapsed (the "+N"). */
+  hidden: number;
 }
 
 interface Lane {
@@ -33,6 +33,9 @@ interface Lane {
   trackHeight: number;
   logged: number;
   open: Timesheet | null;
+  /** Some day in view holds more than one segment, so the lane can expand. */
+  stacked: boolean;
+  isExpanded: boolean;
 }
 
 interface DragState {
@@ -66,10 +69,17 @@ export class TimesheetComponent implements OnDestroy {
   readonly kind = TIMESHEET_KIND;
   readonly kinds = Object.keys(TIMESHEET_KIND) as TimesheetTarget[];
   readonly rowH = ROWH;
-  readonly gutter = GUT;
 
   view: LabView = 'week';
   anchor = new Date();
+
+  /**
+   * Employee lanes the user has expanded (chevron / the "+N" chip on a busy
+   * day), mirroring the scheduler's order lanes: a collapsed lane is a single
+   * row tall no matter how many segments a day holds, and expanding it stacks
+   * them — one band per segment.
+   */
+  expanded = new Set<string>();
 
   /** Chip currently being dragged from the left pane. */
   dragging: { type: TimesheetTarget; id: string | null } | null = null;
@@ -144,17 +154,17 @@ export class TimesheetComponent implements OnDestroy {
     return this.isDay() ? DAY_B / 60 : this.days().length;
   }
 
-  /** Sticky label gutter + one column per hour/day + the punch gutter. */
+  /** Sticky label gutter + one column per hour/day. */
   gridTemplate(): string {
-    if (this.isDay()) return `120px repeat(${DAY_B / 60},1fr) ${GUT}px`;
+    if (this.isDay()) return `120px repeat(${DAY_B / 60},1fr)`;
     const min = this.view === 'month' ? 34 : 88;
-    return `120px repeat(${this.colCount()},minmax(${min}px,1fr)) ${GUT}px`;
+    return `120px repeat(${this.colCount()},minmax(${min}px,1fr))`;
   }
 
   /** Minimum pixel width so the grid can scroll horizontally. */
   minWidth(): number {
-    if (this.isDay()) return 120 + GUT + (DAY_B / 60) * 44;
-    return 120 + GUT + this.colCount() * (this.view === 'month' ? 40 : 92);
+    if (this.isDay()) return 120 + (DAY_B / 60) * 44;
+    return 120 + this.colCount() * (this.view === 'month' ? 40 : 92);
   }
 
   hourLabels(): string[] {
@@ -185,6 +195,8 @@ export class TimesheetComponent implements OnDestroy {
 
   setView(v: LabView): void {
     this.view = v;
+    /* a different granularity re-stacks every lane, so start from collapsed */
+    this.expanded.clear();
     const a = new Date(this.anchor);
     if (v === 'month') this.anchor = new Date(a.getFullYear(), a.getMonth(), 1);
     else if (v === 'week') a.setDate(a.getDate() - ((a.getDay() + 6) % 7));
@@ -202,15 +214,24 @@ export class TimesheetComponent implements OnDestroy {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
     return this.employees().map((emp) => {
-      const geo = this.isDay() ? this.laneDay(emp.id, nowMin) : this.laneDays(emp.id);
+      const isExpanded = this.expanded.has(emp.id);
+      const geo = this.isDay() ? this.laneDay(emp.id, nowMin, isExpanded) : this.laneDays(emp.id, isExpanded);
       return {
         emp,
         bars: geo.items,
         trackHeight: geo.laneRows * ROWH,
+        stacked: geo.stacked,
+        isExpanded,
         logged: this.loggedHours(emp.id),
         open: this.data.openSegment(emp.id) ?? null,
       };
     });
+  }
+
+  /** Expand / contract one employee's stacked day-items (scheduler parity). */
+  toggleExpand(empId: string): void {
+    if (this.expanded.has(empId)) this.expanded.delete(empId);
+    else this.expanded.add(empId);
   }
 
   /** Completed hours logged by an employee in the visible window. */
@@ -220,8 +241,14 @@ export class TimesheetComponent implements OnDestroy {
       .reduce((s, t) => s + this.data.segmentHours(t), 0);
   }
 
-  /** Week/month: one stacked slot per segment within each day column. */
-  private laneDays(empId: string): { items: Bar[]; laneRows: number } {
+  /**
+   * Week/month: one stacked slot per segment within each day column.
+   * A contracted lane shows only the day's FIRST segment and records the rest
+   * as `hidden` (rendered as the "+N" chip on that bar), so a busy day cannot
+   * stretch the row: `laneRows` only grows once the lane is expanded. That is
+   * what keeps the employee label and the row band the same height.
+   */
+  private laneDays(empId: string, expanded: boolean): { items: Bar[]; laneRows: number; stacked: boolean } {
     const days = this.days();
     const cols = days.length;
     const cw = 100 / cols;
@@ -237,12 +264,15 @@ export class TimesheetComponent implements OnDestroy {
     }
 
     let laneRows = 1;
+    let stacked = false;
     const items: Bar[] = [];
     for (const [key, arr] of byDay) {
       const sorted = arr.slice(0, 6).sort((x, y) => hmMin(x.clockIn) - hmMin(y.clockIn));
-      laneRows = Math.max(laneRows, sorted.length);
+      stacked = stacked || sorted.length > 1;
+      const shown = expanded ? sorted : sorted.slice(0, 1);
+      laneRows = Math.max(laneRows, shown.length);
       const ci = colIdx.get(key) ?? 0;
-      sorted.forEach((ts, slot) => {
+      shown.forEach((ts, slot) => {
         items.push({
           ts,
           live: !ts.clockOut,
@@ -250,14 +280,15 @@ export class TimesheetComponent implements OnDestroy {
           width: cw - inset,
           top: slot * ROWH + ROWM,
           height: ROWH - 2 * ROWM,
+          hidden: sorted.length - shown.length,
         });
       });
     }
-    return { items, laneRows };
+    return { items, laneRows, stacked };
   }
 
   /** Day view: time-of-day bars across a 24-hour axis; overlaps stack. */
-  private laneDay(empId: string, nowMin: number): { items: Bar[]; laneRows: number } {
+  private laneDay(empId: string, nowMin: number, expanded: boolean): { items: Bar[]; laneRows: number; stacked: boolean } {
     const span = DAY_B - DAY_A;
     const segs = this.data
       .timesheetsFor(empId, this.dayKeys())
@@ -280,15 +311,23 @@ export class TimesheetComponent implements OnDestroy {
       }
       placed.push({ ts, s, e, slot });
     }
+    /* Sequential punches reuse slot 0; only genuine overlaps occupy extra
+       bands. So a day only contracts when something is actually stacked —
+       otherwise every segment stays visible (and the lane is one band anyway). */
+    const stacked = laneEnds.length > 1;
+    const contracted = stacked && !expanded;
+    const shown = contracted ? placed.slice(0, 1) : placed;
     return {
-      laneRows: Math.max(1, laneEnds.length),
-      items: placed.map((p) => ({
+      laneRows: Math.max(1, contracted ? 1 : laneEnds.length),
+      stacked,
+      items: shown.map((p) => ({
         ts: p.ts,
         live: !p.ts.clockOut,
         left: ((p.s - DAY_A) / span) * 100,
         width: Math.max(1.2, ((p.e - p.s) / span) * 100),
         top: p.slot * ROWH + ROWM,
         height: ROWH - 2 * ROWM,
+        hidden: contracted ? placed.length - 1 : 0,
       })),
     };
   }
