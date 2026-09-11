@@ -2,3 +2,9 @@
    prototype CSS. Component styles are scoped, so rules here would out-rank those
    globals — the markup uses the prototype class names directly. The toolbar
    search field's cap is shared (`.filter-input.search`). */
+
+/* The location scope select shares the toolbar with the record count, so it is
+   capped rather than stretched by the flex row. */
+.filter-input.location-scope {
+  max-width: 300px;
+}

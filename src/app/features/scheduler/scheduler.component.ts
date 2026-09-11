@@ -885,7 +885,9 @@ export class SchedulerComponent implements OnDestroy {
       [item.reorderPoint, 'Reorder point', true],
       [item.costPrice, 'Cost price', true],
       [item.retailPrice, 'Retail price', true],
-      [item.bin, 'Bin', true],
+      // The place is an FK now, so show the path it resolves to (the same
+      // read-time resolution the Items grid uses) rather than a stored string.
+      [item.locationId ? this.data.locationPath(item.locationId) : '', 'Location'],
       [item.role, 'Role'],
       [item.hourlyCost, 'Cost / hr', true],
       [item.hourlyBillable, 'Billable / hr', true],
@@ -1004,6 +1006,9 @@ export class SchedulerComponent implements OnDestroy {
       status: f.status,
       qty: Number(f.qty) || 0,
       rateDaily: Number(f.rateDaily) || 0,
+      // Same rule as the Items editor: placement is one FK, and "not placed" is
+      // stored as no value at all.
+      locationId: f.locationId || undefined,
     };
     if (this.poolType === 'serialized') {
       Object.assign(patch, {
@@ -1023,7 +1028,6 @@ export class SchedulerComponent implements OnDestroy {
         reorderPoint: Number(f.reorderPoint) || 0,
         costPrice: Number(f.costPrice) || 0,
         retailPrice: Number(f.retailPrice) || 0,
-        bin: f.bin,
       });
     }
     if (this.poolType === 'labor') {
@@ -1528,7 +1532,7 @@ export class SchedulerComponent implements OnDestroy {
       reorderPoint: 0,
       costPrice: 0,
       retailPrice: 0,
-      bin: '',
+      locationId: '',
       role: '',
       hourlyCost: 0,
       hourlyBillable: 0,

@@ -174,14 +174,26 @@ export interface Item extends AuditFields {
   reorderPoint?: number;
   costPrice?: number;
   retailPrice?: number;
-  bin?: string;
-  locationId?: string;
 
   /* ---- labor / employees (prototype `IMS.labor`) ---- */
   role?: string;
   certs?: string[];
   hourlyCost?: number;
   hourlyBillable?: number;
+
+  /* ---- placement (join key into the location hierarchy) ---- */
+
+  /**
+   * Where the item physically sits — a FK into `settings.locations`, so a yard
+   * zone, a warehouse aisle, a rack or a single bin are all one thing (a node),
+   * and stock can be counted per place.
+   *
+   * This replaces the prototype's free-text `bin` string: a shelf label *is* a
+   * location row here (`LocationType` already includes `Bin`), and keeping both
+   * would be two models of one fact. Absent = not stock (labor) or not yet
+   * placed — never a made-up default.
+   */
+  locationId?: string;
 
   active?: boolean;
 }

@@ -45,20 +45,20 @@ const COLUMNS: Record<string, Col[]> = {
   serialized: [
     ['id', 'Item ID'], ['serial', 'Serial / VIN'], ['name', 'Name / Model'], ['category', 'Category'],
     ['meterHours', 'Meter Hrs', 'num'], ['fuelType', 'Fuel'], ['purchaseValue', 'Purchase Value', 'num'],
-    ['rateDaily', 'Daily', 'num'], ['status', 'Status'],
+    ['rateDaily', 'Daily', 'num'], ['locationId', 'Location'], ['status', 'Status'],
   ],
   bulk: [
     ['id', 'SKU'], ['name', 'Name'], ['category', 'Category'], ['totalOwned', 'Total Owned', 'num'],
-    ['qtyAvailable', 'Available', 'num'], ['qtyOut', 'Out', 'num'], ['rateDaily', 'Daily', 'num'],
-    ['baseMonthly', 'Monthly', 'num'],
+    ['qtyAvailable', 'Available', 'num'], ['qtyOut', 'Out', 'num'], ['locationId', 'Location'],
+    ['rateDaily', 'Daily', 'num'], ['baseMonthly', 'Monthly', 'num'],
   ],
   consumable: [
     ['id', 'SKU'], ['name', 'Name'], ['category', 'Category'], ['qtyOnHand', 'On Hand', 'num'],
     ['reorderPoint', 'Reorder Pt', 'num'], ['costPrice', 'Cost', 'num'], ['retailPrice', 'Retail', 'num'],
-    ['status', 'Status'],
+    ['locationId', 'Location'], ['status', 'Status'],
   ],
   part: [
-    ['id', 'Part ID'], ['name', 'Description'], ['category', 'Category'], ['bin', 'Bin'],
+    ['id', 'Part ID'], ['name', 'Description'], ['category', 'Category'], ['locationId', 'Location'],
     ['qtyOnHand', 'On Hand', 'num'], ['reorderPoint', 'Reorder Pt', 'num'], ['costPrice', 'Cost', 'num'],
     ['status', 'Status'],
   ],
@@ -69,15 +69,21 @@ const COLUMNS: Record<string, Col[]> = {
   ],
   kit: [
     ['id', 'Kit ID'], ['name', 'Name'], ['category', 'Category'], ['qty', 'Qty', 'num'],
-    ['rateDaily', 'Rate', 'num'], ['status', 'Status'],
+    ['rateDaily', 'Rate', 'num'], ['locationId', 'Location'], ['status', 'Status'],
   ],
   attachment: [
     ['id', 'Acc ID'], ['name', 'Name'], ['category', 'Category'], ['qty', 'Qty', 'num'],
-    ['rateDaily', 'Daily', 'num'], ['status', 'Status'],
+    ['rateDaily', 'Daily', 'num'], ['locationId', 'Location'], ['status', 'Status'],
   ],
 };
 
 const MONEY_KEYS = ['purchaseValue', 'rateDaily', 'baseMonthly', 'costPrice', 'retailPrice', 'hourlyCost', 'hourlyBillable'];
+
+/**
+ * Sentinel for the location scope's "not placed yet" choice. A real location id
+ * is never this, so the select's value can be compared directly.
+ */
+const NO_LOCATION = '__none__';
 
 /**
  * Data-free blank editor form. Class field initializers run *before* the
@@ -101,7 +107,7 @@ const BLANK_ITEM_FORM = {
   reorderPoint: 0,
   costPrice: 0,
   retailPrice: 0,
-  bin: '',
+  locationId: '',
   role: '',
   hourlyCost: 0,
   hourlyBillable: 0,
@@ -121,6 +127,9 @@ const BLANK_ITEM_FORM = {
 })
 export class ItemsComponent {
   type: CatalogType = 'serialized';
+
+  /** Location scope for the table: '' = anywhere, `NO_LOCATION` = not placed. */
+  locationFilter = '';
 
   modalOpen = false;
   editingId: string | null = null;
@@ -156,27 +165,63 @@ export class ItemsComponent {
   }
 
   /**
-   * One tab's records, narrowed by the page search. The search spans every tab
-   * on this page: a query typed while "Items (Serialized)" is open also filters
-   * the other types, so the tab counts say where the matches are.
+   * One tab's records, narrowed by the location scope and the page search. The
+   * search spans every tab on this page: a query typed while "Items (Serialized)"
+   * is open also filters the other types, so the tab counts say where the
+   * matches are.
    */
   private tabRows(type: CatalogType): Item[] {
     return this.data
       .listItems(type)
-      .filter((i) =>
-        this.search.matches(
-          i.id,
-          i.name,
-          i.category,
-          i.status,
-          i.serial,
-          i.make,
-          i.model,
-          i.role,
-          i.bin,
-          i.fuelType,
-        ),
+      .filter(
+        (i) =>
+          this.inLocationScope(i) &&
+          this.search.matches(
+            i.id,
+            i.name,
+            i.category,
+            i.status,
+            i.serial,
+            i.make,
+            i.model,
+            i.role,
+            // The whole path, so "Aisle 1" finds the bays' stock as well — and the
+            // raw id, so a location can be pasted in from the Locations grid.
+            this.data.locationPath(i.locationId),
+            i.locationId,
+            i.fuelType,
+          ),
       );
+  }
+
+  /**
+   * Does the row fall inside the location scope? A location choice covers its
+   * whole subtree (filtering by a warehouse shows its aisles' bins), which is
+   * the question a stock count per place has to answer.
+   */
+  private inLocationScope(item: Item): boolean {
+    const f = this.locationFilter;
+    if (!f) return true;
+    if (f === NO_LOCATION) return !item.locationId;
+    return !!item.locationId && this.data.locationSubtreeIds(f).has(item.locationId);
+  }
+
+  /** Location choices for the scope select (indented, hierarchy order). */
+  locationOptions(): { id: string; label: string }[] {
+    return this.data.locationOptions();
+  }
+
+  /** Where the editor's current choice actually sits (the modal's echo line). */
+  placePath(): string {
+    return this.data.locationPath(this.form.locationId);
+  }
+
+  /** The scope select's "not placed" value (a template can't read the const). */
+  readonly noLocation = NO_LOCATION;
+
+  /** How many of the active tab's records are unplaced (the scope select hint). */
+  unplacedCount(): number {
+    return this.data.listItems(this.type).filter((i) => !i.locationId).length;
   }
 
   /** Tab-strip pill: matching records of that type (all of them when idle). */
@@ -202,6 +247,7 @@ export class ItemsComponent {
   /** Cell text for a column (template stays branch-free). */
   cell(item: Item, key: string): string {
     const raw = (item as unknown as Record<string, unknown>)[key];
+    if (key === 'locationId') return this.data.locationLabel(item.locationId);
     if (key === 'spread') {
       return this.data.money((item.hourlyBillable ?? 0) - (item.hourlyCost ?? 0));
     }
@@ -256,7 +302,7 @@ export class ItemsComponent {
           reorderPoint: item.reorderPoint ?? 0,
           costPrice: item.costPrice ?? 0,
           retailPrice: item.retailPrice ?? 0,
-          bin: item.bin ?? '',
+          locationId: item.locationId ?? '',
           role: item.role ?? '',
           hourlyCost: item.hourlyCost ?? 0,
           hourlyBillable: item.hourlyBillable ?? 0,
@@ -275,6 +321,10 @@ export class ItemsComponent {
       status: f.status,
       qty: Number(f.qty) || 0,
       rateDaily: Number(f.rateDaily) || 0,
+      // Placement is written for every type that has a place (labour has none):
+      // an empty choice clears the FK rather than storing an empty-string
+      // location, so "unplaced" is one fact, not two.
+      locationId: f.locationId || undefined,
     };
     if (this.type === 'serialized') {
       Object.assign(patch, {
@@ -286,7 +336,7 @@ export class ItemsComponent {
     if (this.type === 'consumable' || this.type === 'part') {
       Object.assign(patch, {
         qtyOnHand: Number(f.qtyOnHand) || 0, reorderPoint: Number(f.reorderPoint) || 0,
-        costPrice: Number(f.costPrice) || 0, retailPrice: Number(f.retailPrice) || 0, bin: f.bin,
+        costPrice: Number(f.costPrice) || 0, retailPrice: Number(f.retailPrice) || 0,
       });
     }
     if (this.type === 'labor') {
@@ -335,7 +385,9 @@ export class ItemsComponent {
           title: this.activeTab()?.label ?? 'Record',
           fields: this.columns().map((c) => ({
             label: c[1],
-            value: this.cell(item, c[0]),
+            // The viewer has the room the grid doesn't: show the full path
+            // ("Warehouse 1 › Aisle 1 › Bay A-03") so the place is unambiguous.
+            value: c[0] === 'locationId' ? this.data.locationPath(item.locationId) : this.cell(item, c[0]),
             mono: c[0] === 'id',
           })),
         },
@@ -364,10 +416,11 @@ export class ItemsComponent {
 
   /* ------------------------------ tooltips ------------------------------ */
 
-  /** Inventory row: the asset's specs, its stock and its reorder state. */
+  /** Inventory row: the asset's specs, its stock, its place and its reorder state. */
   tipItem(item: Item): Tip {
     return assetTip(this.data, item, [
       { label: 'On hand', value: String(item.qty) },
+      item.locationId ? { label: 'Location', value: this.data.locationPath(item.locationId) } : null,
       item.baseWeekly ? { label: 'Weekly', value: this.data.money(item.baseWeekly) } : null,
       item.purchaseValue ? { label: 'Value', value: this.data.money(item.purchaseValue) } : null,
       this.reorder(item) ? 'Below the reorder point' : null,

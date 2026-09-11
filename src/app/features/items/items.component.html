@@ -21,7 +21,20 @@
   <div class="card-body">
     <!-- The search itself is the shell's topbar box — it spans every tab on this
          page — so this row keeps only the record count in its usual place. -->
-    <div class="d-flex align-items-center justify-content-end flex-wrap mb-3 gap-2">
+    <!-- The location scope is the table's own control (the shell's topbar box is
+         the text search): "what is at this place?" is the question a stock grid
+         is asked most often, and a choice here covers the node's whole subtree. -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <label class="text-12 text-muted2 mb-0" for="inv-location-scope">Location</label>
+        <select id="inv-location-scope" class="filter-input location-scope" [(ngModel)]="locationFilter">
+          <option value="">Everywhere</option>
+          @for (o of locationOptions(); track o.id) {
+            <option [value]="o.id">{{ o.label }}</option>
+          }
+          <option [value]="noLocation">Not placed ({{ unplacedCount() }})</option>
+        </select>
+      </div>
       <span class="text-muted2">{{ rows().length }} record(s)</span>
     </div>
 
@@ -174,10 +187,6 @@
                 <label class="form-label">Retail Price ($)</label>
                 <input class="form-control" type="number" [(ngModel)]="form.retailPrice" />
               </div>
-              <div class="col-md-3 field-group">
-                <label class="form-label">Bin</label>
-                <input class="form-control" [(ngModel)]="form.bin" />
-              </div>
             </div>
           }
 
@@ -205,6 +214,29 @@
             <div class="field-group">
               <label class="form-label">Daily Rate ($)</label>
               <input class="form-control" type="number" [(ngModel)]="form.rateDaily" />
+            </div>
+          }
+
+          @if (type !== 'labor') {
+            <div class="divider"></div>
+            <!-- Placement is one field for every type that *has* a place: a
+                 machine, a pallet, a kit on a shelf. Labour rows are people, so
+                 they get no picker — and no made-up default. -->
+            <div class="strong mb-2">Placement</div>
+            <div class="row g-2">
+              <div class="col-md-6 field-group">
+                <label class="form-label">Location</label>
+                <select class="form-select" [(ngModel)]="form.locationId">
+                  <option value="">— Not placed —</option>
+                  @for (o of locationOptions(); track o.id) {
+                    <option [value]="o.id">{{ o.label }}</option>
+                  }
+                </select>
+              </div>
+              <div class="col-md-6 field-group">
+                <label class="form-label">Place</label>
+                <div class="text-12 text-muted2 pt-2">{{ placePath() }}</div>
+              </div>
             </div>
           }
         </div>

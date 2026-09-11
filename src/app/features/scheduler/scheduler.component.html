@@ -559,10 +559,6 @@
                 <label class="form-label">Retail Price ($)</label>
                 <input class="form-control" type="number" [(ngModel)]="resForm.retailPrice" />
               </div>
-              <div class="col-md-3 field-group">
-                <label class="form-label">Bin</label>
-                <input class="form-control" [(ngModel)]="resForm.bin" />
-              </div>
             </div>
           }
 
@@ -591,6 +587,22 @@
             <div class="field-group">
               <label class="form-label">Daily Rate ($)</label>
               <input class="form-control" type="number" [(ngModel)]="resForm.rateDaily" />
+            </div>
+          }
+
+          @if (poolType !== 'labor') {
+            <div class="divider"></div>
+            <!-- The same placement field the Items &amp; Stock editor writes: one
+                 FK into the location hierarchy, no free-text bin beside it. -->
+            <div class="strong mb-2">Placement</div>
+            <div class="field-group">
+              <label class="form-label">Location</label>
+              <select class="form-select" [(ngModel)]="resForm.locationId">
+                <option value="">— Not placed —</option>
+                @for (o of data.locationOptions(); track o.id) {
+                  <option [value]="o.id">{{ o.label }}</option>
+                }
+              </select>
             </div>
           }
         </div>

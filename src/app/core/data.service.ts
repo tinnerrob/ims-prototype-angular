@@ -131,6 +131,17 @@ const DEMO_OWNER_ID = 'USR-001';
 const AUDIT_KEYS = ['tenantId', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
 
 /**
+ * Seeded placement ids (`settings.locations`) — the fixtures' `locationId`
+ * values. Named because the alternative is eight call sites repeating `'LOC-03'`
+ * and a reader who can't tell a yard from a warehouse without scrolling to the
+ * location seed.
+ */
+const YARD_STAGING = 'LOC-03'; // Yard A — equipment staging (machines, bulk, attachments)
+const WAREHOUSE_1 = 'LOC-05'; // Warehouse 1 (kits, the shop's own stock)
+/** Where a unit that is in the shop sits (vs. staged in the yard). */
+const SHOP_STATUS = 'In Shop';
+
+/**
  * A row's content without its audit columns — the signature `attribute()` diffs
  * against the last persisted copy to decide whether a row was edited.
  */
@@ -150,7 +161,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 5;
+  private readonly VERSION = 6;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -1017,20 +1028,28 @@ export class DataService {
   }
 
   /**
-   * Remove a location. Its children are re-parented to the removed node's own
-   * parent (move up one level) so the hierarchy stays intact and nothing is
-   * orphaned — the adjacency-list equivalent of re-pointing the child rows'
-   * `parent_id` at the deleted node's parent.
+   * Remove a location. Refused (`false`) while stock is stored *at* it: those
+   * items point at this row, and clearing or re-pointing them silently is a data
+   * decision the grid must not take on the user's behalf — the same rule
+   * `removeLocationType` applies while a type is in use. Callers disable the
+   * action or abort on `false`.
+   *
+   * On success its children are re-parented to the removed node's own parent
+   * (move up one level) so the hierarchy stays intact and nothing is orphaned —
+   * the adjacency-list equivalent of re-pointing the child rows' `parent_id` at
+   * the deleted node's parent. Items stored in those children keep a valid FK.
    */
-  removeLocation(id: string): void {
+  removeLocation(id: string): boolean {
     const i = this.db.settings.locations.findIndex((x) => x.id === id);
-    if (i < 0) return;
+    if (i < 0) return false;
+    if (this.locationItemCount(id) > 0) return false;
     const [removed] = this.db.settings.locations.splice(i, 1);
     const up = removed.parentId ?? null;
     for (const child of this.db.settings.locations) {
       if (child.parentId === id) child.parentId = up;
     }
     this.save();
+    return true;
   }
 
   /** True when `candidateId` is `ofId` or sits anywhere beneath it (cycle guard). */
@@ -1061,6 +1080,103 @@ export class DataService {
   /** The id `createLocation` will assign next — for read-only modal previews. */
   previewLocationId(): string {
     return this.nextLocationId();
+  }
+
+  /* --------------------------- placement (items) ------------------------- */
+  /*
+   * An item's place is one FK (`Item.locationId`) into the hierarchy above, so
+   * "where is this?" and "what is here?" are one join — the shape the API needs
+   * (`items.location_id → locations.id`), and the reason the prototype's
+   * free-text `bin` was folded into the tree instead of kept beside it.
+   */
+
+  /** Display name of an item's location, for a table cell ('—' when unplaced). */
+  locationLabel(id: string | null | undefined): string {
+    return id ? this.getLocation(id)?.name ?? id : '—';
+  }
+
+  /**
+   * Full path of a location: `Warehouse 1 › Aisle 1 › Bay A1-03`. Built at read
+   * time from the parent links, so re-parenting a node re-reads correctly and no
+   * row has to store a copy of the path.
+   */
+  locationPath(id: string | null | undefined): string {
+    if (!id) return '—';
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let cur: string | null | undefined = id;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      const loc = this.getLocation(cur);
+      if (!loc) {
+        names.unshift(cur); // FK with no row (should not happen — see the guard)
+        break;
+      }
+      names.unshift(loc.name);
+      cur = loc.parentId ?? null;
+    }
+    return names.join(' › ');
+  }
+
+  /**
+   * The hierarchy flattened depth-first as picker options (indented by depth) —
+   * every location picker in the app reads this one walk, so the editor, the
+   * items page and anything later agree on order and labels.
+   *
+   * `exceptId` drops a node *and its descendants* (cycle guard for the location
+   * editor). Orphaned nodes are surfaced flat rather than hidden.
+   */
+  locationOptions(exceptId?: string | null): { id: string; label: string }[] {
+    const out: { id: string; label: string }[] = [];
+    const visited = new Set<string>();
+    const excluded = (id: string) => !!exceptId && this.isLocationAncestor(id, exceptId);
+    const walk = (parentId: string | null, depth: number): void => {
+      for (const loc of this.locationChildren(parentId)) {
+        if (visited.has(loc.id) || excluded(loc.id)) continue;
+        visited.add(loc.id);
+        out.push({ id: loc.id, label: '— '.repeat(depth) + `${loc.name} (${loc.id})` });
+        walk(loc.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    for (const loc of this.listLocations()) {
+      if (!visited.has(loc.id) && !excluded(loc.id)) out.push({ id: loc.id, label: `${loc.name} (${loc.id})` });
+    }
+    return out;
+  }
+
+  /** A location plus every node beneath it (cycle-guarded). */
+  locationSubtreeIds(id: string): Set<string> {
+    const out = new Set<string>([id]);
+    const walk = (parentId: string): void => {
+      for (const loc of this.locationChildren(parentId)) {
+        if (out.has(loc.id)) continue;
+        out.add(loc.id);
+        walk(loc.id);
+      }
+    };
+    walk(id);
+    return out;
+  }
+
+  /**
+   * Items whose place is this location. Stock is not *at* a site — it is at a
+   * bay under it — so `subtree` is what a location-scoped view asks for, while
+   * the removal guard asks the narrower question below.
+   */
+  itemsAtLocation(locationId: string, subtree = false): Item[] {
+    const ids = subtree ? this.locationSubtreeIds(locationId) : new Set<string>([locationId]);
+    return this.allItems().filter((i) => !!i.locationId && ids.has(i.locationId));
+  }
+
+  /** Items stored *at* this node — the number that blocks its removal. */
+  locationItemCount(id: string): number {
+    return this.itemsAtLocation(id).length;
+  }
+
+  /** Items at this node or anywhere under it (Locations grid and tooltips). */
+  locationSubtreeItemCount(id: string): number {
+    return this.itemsAtLocation(id, true).length;
   }
 
   /* --------------------------- location types --------------------------- */
@@ -2169,22 +2285,24 @@ export class DataService {
   private seedStockItems(): Record<string, Item[]> {
     return {
       consumable: [
-        this.stock('SG-LFT-001', 'consumable', 'Lifting Gloves (pair)', 'Safety', 240, 60, 2.1, 5.5),
-        this.stock('SG-NS-002', 'consumable', 'Nitrile Gloves (box)', 'Safety', 120, 40, 3.4, 8.25),
-        this.stock('FL-HYD-010', 'consumable', 'Hydraulic Fluid 5 gal', 'Fluids', 36, 12, 42, 78),
-        this.stock('FL-DSL-005', 'consumable', 'DEF Fluid 2.5 gal', 'Fluids', 55, 15, 14.5, 26),
-        this.stock('HW-HLM-003', 'consumable', 'Hard Hat', 'Safety', 48, 20, 11, 22),
-        this.stock('VST-VES-001', 'consumable', 'Hi-Vis Safety Vest', 'Safety', 90, 25, 6.2, 14.5),
-        this.stock('BP-ENG-020', 'consumable', 'Engine Oil 15W-40 (gal)', 'Fluids', 44, 16, 16.8, 31),
-        this.stock('GN-GRL-001', 'consumable', 'Grease Cartridge', 'Fluids', 32, 10, 4.9, 9.75),
+        // Safety PPE on one bay, fluids on the next — consumables are shelved
+        // stock, so they carry a bin (a `Bin` node), not just a warehouse.
+        this.stock('SG-LFT-001', 'consumable', 'Lifting Gloves (pair)', 'Safety', 240, 60, 2.1, 5.5, 'LOC-07'),
+        this.stock('SG-NS-002', 'consumable', 'Nitrile Gloves (box)', 'Safety', 120, 40, 3.4, 8.25, 'LOC-07'),
+        this.stock('FL-HYD-010', 'consumable', 'Hydraulic Fluid 5 gal', 'Fluids', 36, 12, 42, 78, 'LOC-08'),
+        this.stock('FL-DSL-005', 'consumable', 'DEF Fluid 2.5 gal', 'Fluids', 55, 15, 14.5, 26, 'LOC-08'),
+        this.stock('HW-HLM-003', 'consumable', 'Hard Hat', 'Safety', 48, 20, 11, 22, 'LOC-07'),
+        this.stock('VST-VES-001', 'consumable', 'Hi-Vis Safety Vest', 'Safety', 90, 25, 6.2, 14.5, 'LOC-07'),
+        this.stock('BP-ENG-020', 'consumable', 'Engine Oil 15W-40 (gal)', 'Fluids', 44, 16, 16.8, 31, 'LOC-08'),
+        this.stock('GN-GRL-001', 'consumable', 'Grease Cartridge', 'Fluids', 32, 10, 4.9, 9.75, 'LOC-08'),
       ],
       part: [
-        this.stock('PRT-001', 'part', 'Hydraulic Filter 40um', 'Filters', 24, 6, 18.5, 0, 'A-03'),
-        this.stock('PRT-002', 'part', 'Air Filter Element', 'Filters', 18, 5, 22, 0, 'A-07'),
-        this.stock('PRT-003', 'part', 'Fuel Filter Assembly', 'Filters', 30, 8, 14.75, 0, 'B-01'),
-        this.stock('PRT-004', 'part', 'Grease Fitting Kit', 'Hardware', 60, 20, 6.4, 0, 'B-12'),
-        this.stock('PRT-005', 'part', 'Hydraulic Hose 1in x 6ft', 'Hoses', 12, 4, 34, 0, 'C-04'),
-        this.stock('PRT-006', 'part', 'Track Pin & Bushing Set', 'Hydraulics', 8, 2, 120, 0, 'D-02'),
+        this.stock('PRT-001', 'part', 'Hydraulic Filter 40um', 'Filters', 24, 6, 18.5, 0, 'LOC-14'),
+        this.stock('PRT-002', 'part', 'Air Filter Element', 'Filters', 18, 5, 22, 0, 'LOC-15'),
+        this.stock('PRT-003', 'part', 'Fuel Filter Assembly', 'Filters', 30, 8, 14.75, 0, 'LOC-16'),
+        this.stock('PRT-004', 'part', 'Grease Fitting Kit', 'Hardware', 60, 20, 6.4, 0, 'LOC-17'),
+        this.stock('PRT-005', 'part', 'Hydraulic Hose 1in x 6ft', 'Hoses', 12, 4, 34, 0, 'LOC-19'),
+        this.stock('PRT-006', 'part', 'Track Pin & Bushing Set', 'Hydraulics', 8, 2, 120, 0, 'LOC-21'),
       ],
       labor: [
         this.emp('EMP-001', 'Marcus Webb', 'Operator', 'Field', ['OSHA 30', 'AWP'], 28, 68),
@@ -2195,16 +2313,16 @@ export class DataService {
         this.emp('EMP-006', 'Rita Gomez', 'Operator', 'Field', ['Forklift'], 24, 58),
       ],
       kit: [
-        { id: 'KT-001', type: 'kit', name: 'Traffic Control Kit', category: 'Traffic Control', status: 'Available', qty: 8, rateDaily: 185, notes: 'AB-201 + cones + sandbags', active: true },
-        { id: 'KT-002', type: 'kit', name: 'Confined Space Entry Kit', category: 'Confined Space', status: 'Available', qty: 4, rateDaily: 260, notes: 'GA-610 + tripod', active: true },
-        { id: 'KT-003', type: 'kit', name: 'Fall Protection Kit', category: 'Fall Protection', status: 'Available', qty: 10, rateDaily: 120, notes: 'Harnesses + lanyards', active: true },
+        { id: 'KT-001', type: 'kit', name: 'Traffic Control Kit', category: 'Traffic Control', status: 'Available', qty: 8, rateDaily: 185, notes: 'AB-201 + cones + sandbags', locationId: WAREHOUSE_1, active: true },
+        { id: 'KT-002', type: 'kit', name: 'Confined Space Entry Kit', category: 'Confined Space', status: 'Available', qty: 4, rateDaily: 260, notes: 'GA-610 + tripod', locationId: WAREHOUSE_1, active: true },
+        { id: 'KT-003', type: 'kit', name: 'Fall Protection Kit', category: 'Fall Protection', status: 'Available', qty: 10, rateDaily: 120, notes: 'Harnesses + lanyards', locationId: WAREHOUSE_1, active: true },
       ],
       attachment: [
-        { id: 'ACC-001', type: 'attachment', name: '24" Digging Bucket', category: 'Bucket', status: 'Available', qty: 6, rateDaily: 45, notes: 'Fits ET-310 / ET-311', active: true },
-        { id: 'ACC-002', type: 'attachment', name: '36" Ditch Bucket', category: 'Bucket', status: 'Available', qty: 3, rateDaily: 55, notes: 'Fits ET-310 / ET-311', active: true },
-        { id: 'ACC-003', type: 'attachment', name: 'Fork Carriage 48 in', category: 'Carriage', status: 'Available', qty: 4, rateDaily: 38, notes: 'Fits TL-605 / FL-401', active: true },
-        { id: 'ACC-004', type: 'attachment', name: 'Work Platform Cage', category: 'Platform', status: 'Available', qty: 5, rateDaily: 60, notes: 'Fits BL-118 / BL-119 / BL-120', active: true },
-        { id: 'ACC-005', type: 'attachment', name: 'Breaker Attachment', category: 'Hydraulic', status: 'Available', qty: 2, rateDaily: 90, notes: 'Fits ET-310', active: true },
+        { id: 'ACC-001', type: 'attachment', name: '24" Digging Bucket', category: 'Bucket', status: 'Available', qty: 6, rateDaily: 45, notes: 'Fits ET-310 / ET-311', locationId: YARD_STAGING, active: true },
+        { id: 'ACC-002', type: 'attachment', name: '36" Ditch Bucket', category: 'Bucket', status: 'Available', qty: 3, rateDaily: 55, notes: 'Fits ET-310 / ET-311', locationId: YARD_STAGING, active: true },
+        { id: 'ACC-003', type: 'attachment', name: 'Fork Carriage 48 in', category: 'Carriage', status: 'Available', qty: 4, rateDaily: 38, notes: 'Fits TL-605 / FL-401', locationId: YARD_STAGING, active: true },
+        { id: 'ACC-004', type: 'attachment', name: 'Work Platform Cage', category: 'Platform', status: 'Available', qty: 5, rateDaily: 60, notes: 'Fits BL-118 / BL-119 / BL-120', locationId: YARD_STAGING, active: true },
+        { id: 'ACC-005', type: 'attachment', name: 'Breaker Attachment', category: 'Hydraulic', status: 'Available', qty: 2, rateDaily: 90, notes: 'Fits ET-310', locationId: YARD_STAGING, active: true },
       ],
     };
   }
@@ -2219,7 +2337,7 @@ export class DataService {
     reorderPoint: number,
     costPrice: number,
     retailPrice: number,
-    bin?: string,
+    locationId?: string,
   ): Item {
     return {
       id,
@@ -2233,7 +2351,7 @@ export class DataService {
       reorderPoint,
       costPrice,
       retailPrice,
-      bin,
+      locationId,
       active: true,
     };
   }
@@ -2304,6 +2422,9 @@ export class DataService {
       battery,
       lastReported: '2026-09-01T08:00:00',
       orderId,
+      // A unit out on rent is with the customer (that is what custody records);
+      // its location is where it lives and returns to — the shop if it is down.
+      locationId: status === SHOP_STATUS ? WAREHOUSE_1 : YARD_STAGING,
       active: true,
     };
   }
@@ -2333,6 +2454,8 @@ export class DataService {
       totalOwned,
       qtyAvailable,
       qtyOut,
+      // Bulk stock is yard stock (staged in the yard zone), not shelf stock.
+      locationId: YARD_STAGING,
       active: true,
     };
   }
@@ -2391,6 +2514,17 @@ export class DataService {
       { id: 'LOC-11', name: 'Dock 4', type: 'Dock', parentId: 'LOC-10', address: '8 Terminal Way, Savannah GA', phone: '', tz: 'America/New_York' },
       { id: 'LOC-12', name: 'Bonded Warehouse', type: 'Warehouse', parentId: 'LOC-10', address: '10 Terminal Way, Savannah GA', phone: '(912) 555-0178', tz: 'America/New_York' },
       { id: 'LOC-13', name: 'Secure Cage C', type: 'Zone', parentId: 'LOC-12', address: '', phone: '', tz: 'America/New_York' },
+      /* The bins the prototype's parts carried as free text (`bin: 'A-03'`, …)
+         now live in the hierarchy they always described — a part's `locationId`
+         points at one of these rows instead of repeating its label. */
+      { id: 'LOC-14', name: 'Bay A-03', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-15', name: 'Bay A-07', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-16', name: 'Bay B-01', type: 'Bin', parentId: 'LOC-09', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-17', name: 'Bay B-12', type: 'Bin', parentId: 'LOC-09', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-18', name: 'Aisle 3', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-19', name: 'Bay C-04', type: 'Bin', parentId: 'LOC-18', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-20', name: 'Aisle 4', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
+      { id: 'LOC-21', name: 'Bay D-02', type: 'Bin', parentId: 'LOC-20', address: '', phone: '', tz: 'America/New_York' },
     ];
   }
 

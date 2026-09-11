@@ -142,6 +142,19 @@ export class LocationsComponent {
     return this.data.locationChildCount(id);
   }
 
+  /**
+   * Items stored *at* this node. This is the number the grid shows and the one
+   * that blocks removal, so the cell and the guard can never disagree.
+   */
+  itemCount(id: string): number {
+    return this.data.locationItemCount(id);
+  }
+
+  /** Items at this node or anywhere beneath it (a site's stock is in its bays). */
+  subtreeItemCount(id: string): number {
+    return this.data.locationSubtreeItemCount(id);
+  }
+
   /** Active location types for the editor (keeps a now-inactive current value). */
   typeOptions(): string[] {
     const active = this.data.activeLocationTypes();
@@ -152,11 +165,11 @@ export class LocationsComponent {
   /**
    * Parent candidates for the editor: every location except the one being
    * edited and its descendants, so the ragged hierarchy can't be made cyclic.
+   * The store owns the walk (one tree walker for the whole app); this page only
+   * asks for it with the cycle guard applied.
    */
   parentOptions(): { id: string; label: string }[] {
-    return this.treeRows()
-      .filter(({ loc }) => !this.editingId || !this.data.isLocationAncestor(loc.id, this.editingId))
-      .map(({ loc, depth }) => ({ id: loc.id, label: '— '.repeat(depth) + `${loc.name} (${loc.id})` }));
+    return this.data.locationOptions(this.editingId);
   }
 
   /* --------------------------- location editor -------------------------- */
@@ -194,6 +207,11 @@ export class LocationsComponent {
     this.closeForm();
   }
 
+  /**
+   * Remove a location. The store refuses while stock is stored at it (the grid
+   * disables the action in that case), and re-parents the node's children so the
+   * hierarchy stays intact.
+   */
   remove(loc: Location): void {
     this.data.removeLocation(loc.id);
   }
@@ -301,6 +319,15 @@ export class LocationsComponent {
             { label: 'Time Zone', value: loc.tz },
           ],
         },
+        {
+          // What the hierarchy is *for*: a place holds stock. Both readings are
+          // shown because a site holds none itself while its bays hold plenty.
+          title: 'Contents',
+          fields: [
+            { label: 'Items Here', value: String(this.itemCount(loc.id)) },
+            { label: 'Items In Subtree', value: String(this.subtreeItemCount(loc.id)) },
+          ],
+        },
       ],
     };
   }
@@ -348,12 +375,14 @@ export class LocationsComponent {
 
   /* ------------------------------ tooltips ------------------------------ */
 
-  /** Location row: where it sits in the tree, and how to reach it. */
+  /** Location row: where it sits in the tree, what it holds, and how to reach it. */
   tipLocation(loc: Location): Tip {
     return tip(`${loc.id} - ${loc.name}`, [
       { label: 'Type', value: loc.type },
       { label: 'Parent', value: this.parentName(loc) },
       { label: 'Children', value: String(this.childCount(loc.id)) },
+      { label: 'Items here', value: String(this.itemCount(loc.id)) },
+      { label: 'Items in subtree', value: String(this.subtreeItemCount(loc.id)) },
       loc.address ? { label: 'Address', value: loc.address } : null,
       loc.phone ? { label: 'Phone', value: loc.phone } : null,
       loc.tz ? { label: 'Time zone', value: loc.tz } : null,

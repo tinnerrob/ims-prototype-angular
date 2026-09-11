@@ -41,6 +41,7 @@
               <th>Type</th>
               <th>Parent</th>
               <th class="num">Children</th>
+              <th class="num">Items</th>
               <th>Address</th>
               <th>Phone</th>
               <th>Time Zone</th>
@@ -61,6 +62,12 @@
                 <td><span class="badge-status loc-type">{{ r.loc.type || '—' }}</span></td>
                 <td class="text-12 text-muted2">{{ parentName(r.loc) }}</td>
                 <td class="num">{{ childCount(r.loc.id) }}</td>
+                <!-- Stock stored *at* this node. The subtree total rides the
+                     cell's tooltip: a site's own count is 0 while its bays hold
+                     the stock, and both numbers are true. -->
+                <td class="num" [title]="subtreeItemCount(r.loc.id) + ' item(s) in this location and below'">
+                  {{ itemCount(r.loc.id) }}
+                </td>
                 <td class="text-12">{{ r.loc.address || '—' }}</td>
                 <td class="text-12">{{ r.loc.phone || '—' }}</td>
                 <td class="text-12">{{ r.loc.tz }}</td>
@@ -72,7 +79,10 @@
                     <i class="bi bi-pencil"></i>
                   </button>
                   <button class="btn btn-ims-outline btn-sm2" type="button"
-                          [title]="childCount(r.loc.id) > 0 ? 'Remove — its children move up one level' : 'Remove'"
+                          [disabled]="itemCount(r.loc.id) > 0"
+                          [title]="itemCount(r.loc.id) > 0
+                            ? 'Remove — blocked: ' + itemCount(r.loc.id) + ' item(s) stored here'
+                            : (childCount(r.loc.id) > 0 ? 'Remove — its children move up one level' : 'Remove')"
                           (click)="remove(r.loc)">
                     <i class="bi bi-x-lg"></i>
                   </button>
@@ -80,7 +90,7 @@
               </tr>
             } @empty {
               <tr>
-                <td colspan="8" class="text-center text-muted2 py-4">No locations match.</td>
+                <td colspan="9" class="text-center text-muted2 py-4">No locations match.</td>
               </tr>
             }
           </tbody>
