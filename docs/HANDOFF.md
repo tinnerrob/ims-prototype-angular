@@ -733,7 +733,8 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    and a rule that had lived in both the form and the store now lives in the store
    alone). `check20` (37 checks) drives all 33 refusals, proves each names its reason and
    persisted nothing, and walks the sources for a call site that drops the answer.
-   **C3 is next** (the request context becomes the seam's argument). Still open on the
+   **C3 is next** (the request context becomes the seam's argument — detailed in PLAN as
+   C3a the writer, C3b the derived reads, C3c the contract's `context()`). Still open on the
    *auth* seam, and
    named in DATA-MODEL's "not in the model yet": **revocation** — nothing cuts a session
    short before it is given up, and no other client is told one ended (the API's job: a

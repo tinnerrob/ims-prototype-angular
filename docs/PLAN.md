@@ -475,7 +475,9 @@ Tenant administration is **E**'s.
 | C1b | The screens depend on the contract: every component, service and helper takes `IMS_API` (typed `ApiAdapter`) instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ✅ `3439270` |
 | C2a | One shape for a refusal (`CommandResult<T, R>` in `models.ts`, generalising B1's `SignInResult`), and the ten commands whose refusal a screen can observe answer with it instead of `null`/`false` | ✅ `949a26c` |
 | C2b | The screens print it: each refusing call site says why where the action was, the way the sign-in form already prints `SignInFailure` | ✅ `a8ced67` |
-| C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
+| C3a | The request context is *named* and the writer takes it: one `RequestContext` (`tenantId`, `userId`, `at`) replacing the store's private `actor()` shape, and `save()`/`attributeWrites()` stamped from what the caller hands over instead of reading `db.session` themselves | ⏳ |
+| C3b | The derived reads go through the same context: `activeUser`, `activeTenant` and `listUsers()`'s default tenant stop reading the persisted session, so `db.session` is read in exactly one place (the seam) plus the session's own lifecycle | ⏳ |
+| C3c | The contract states it: `ApiAdapter.context()` is a member of the surface, so an implementation answers "who is asking" the same way whether that is a session in the store or a token on a request — and `check21` proves a write is stamped from the caller's context, not from the blob | ⏳ |
 | C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
 
 **C1 — the contract, before the transport.** The interface is written from the call
@@ -609,11 +611,51 @@ a sentinel), and a compile-time assertion in `api.ts` fails the build if any
 `ApiCommandName` starts answering a `boolean` or a nullable type — the two sentinels,
 named as one rule, checked where the contract is defined.
 
-**C3 — the context, not the session.** A server derives the tenant and the user from
-the request; the client currently derives them from `db.session`, which is also *in*
-the persisted blob. C moves the read behind the seam so the two implementations
-differ by where the value comes from, and the store keeps its single writer for the
-audit stamps it writes.
+**C3 — the context, not the session.** A server derives the tenant and the user from the
+request; the client currently derives them from `db.session`, which is also *in* the
+persisted blob. C moves the read behind the seam so the two implementations differ by where
+the value comes from, and the store keeps its single writer for the audit stamps it writes.
+
+What the store says today, read before deciding anything: identity is read in exactly four
+kinds of place — the writer (`save()` → `attributeWrites()` → `actor()`, which is where every
+`tenantId`/`createdBy`/`updatedBy` comes from), three derived reads (`activeUser`,
+`activeTenant`, and `listUsers()`'s default tenant), the session's own lifecycle
+(`signIn`/`signOut`/`touchSession`), and **two commands that already take it as data**:
+`receiveAgainst({ byUserId, at })` and `moveStock`/`adjustStock`'s `byUserId ?? sessionUserId()`
+— the seed passes both so a fixture doesn't move with the clock or with whoever is signed in.
+No *screen* reads `sessionUserId()` or `sessionTenantId()` at all; the shell asks
+`SessionService`, which asks the store's `activeUser` / `activeTenant`.
+
+That last fact is what makes C3 a seam change rather than a screen sweep, and it is the
+design decision worth stating: **the context is a value the seam hands to the writer, not a
+parameter every screen passes**. An HTTP implementation derives it from the token it already
+has; a screen cannot know it and should not be asked to invent it. So the shape is
+`RequestContext` (`tenantId`, `userId`, `at` — the type `actor()` already builds privately),
+the writer takes it from its caller instead of reading its own persisted blob, and the
+*contract* gains `context()` so "who is asking" is answerable through the seam rather than
+through a field of the data. The commands that already accept a context keep the argument —
+that is the pattern the seed relies on — and simply default it to the seam's answer.
+
+**C3a — the writer takes the context.** One `RequestContext` in `models.ts`; `save(ctx)` and
+`attributeWrites(ctx)` stamped from it; the store's `context()` is the one reader of the
+session, which is what the seam will answer with. Behaviour is identical — this is a rename
+of where the value comes from, held by `check10`'s attribution checks unchanged (they already
+prove *who* a write is stamped by, which is the point of moving the read).
+
+**C3b — the derived reads follow.** `activeUser`, `activeTenant` and `listUsers()`'s default
+tenant ask the context instead of the blob. B3's rule does **not** move: a lapsed context is
+still nobody (`sessionIsLive()` stays the enforcement point where identity is read), because
+what C3 relocates is *where the value comes from*, not whether it is honoured.
+
+**C3c — the contract states it.** `context()` joins `ApiQueries` in `api.ts`, and `check21`
+drives a write *through the seam* with a context the caller supplied and proves the stored
+row carries that tenant and author rather than whatever the blob's session says — the
+"one implementation only" failure that C1's `check19` cannot catch by itself.
+
+**Deliberately not C3.** Whether a session's identity should live in the persisted blob *at
+all* is D's question (the snapshot as a cache), and making the tenant a first-class filter on
+every query is E's (tenant administration). C3 changes who answers "who is asking"; it does
+not decide what a client keeps.
 
 **C4 — a read that may not be there yet.** `check9`'s reverse rule (a mapped table
 with no writer) has a mirror on the screen side: a list that renders an empty state
