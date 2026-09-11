@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 
 import {
   CatalogType,
@@ -6,6 +6,7 @@ import {
   CategoryOption,
   Dispatch,
   DispatchStatus,
+  INDUSTRY_MODULES,
   Inspection,
   InspectionCheckKey,
   Invoice,
@@ -14,6 +15,7 @@ import {
   Item,
   Location,
   LocationType,
+  ModuleKey,
   Movement,
   MovementKind,
   Order,
@@ -23,9 +25,13 @@ import {
   PricingSettings,
   RentalSub,
   TaxSchedule,
+  Tenant,
   Timesheet,
   TIMESHEET_KIND,
+  User,
   Vehicle,
+  VERTICAL_KEYS,
+  VerticalKey,
   WorkOrder,
   WorkOrderCost,
   WorkOrderPart,
@@ -114,6 +120,10 @@ function countWeekdays(a: string, b: string): number {
   return Math.max(1, n);
 }
 
+/** The seeded demo workspace + the person the session starts as. */
+const DEMO_TENANT_ID = 'TNT-NORTHLINE';
+const DEMO_USER_ID = 'USR-003';
+
 /**
  * IMS — DataService (the JSON store / API seam).
  *
@@ -126,7 +136,17 @@ function countWeekdays(a: string, b: string): number {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 4;
+  private readonly VERSION = 5;
+
+  /* `rev` is bumped on every persisted write, so a service can derive reactive
+     state (the session, the tenant's module flags) from this one store instead
+     of keeping a second copy of the data. */
+  private readonly rev = signal(0);
+  readonly revision = this.rev.asReadonly();
+
+  /** True when a stored snapshot was from an older schema and the seed replaced
+   *  it. The shell says so, rather than swapping the user's data out silently. */
+  reseeded = false;
 
   private db: {
     settings: {
@@ -138,8 +158,15 @@ export class DataService {
       overheads: Overhead[];
       pricing: PricingSettings;
       categories: Record<string, CategoryOption[]>;
-      /** Active industry vertical (drives the catalog tabs on Items & Stock). */
-      vertical: string;
+    };
+    /** Customer workspaces — the tenancy root (one today, many via the API). */
+    tenants: Tenant[];
+    /** People who may sign in, scoped to a tenant. */
+    users: User[];
+    /** Who the current session is acting as. */
+    session: {
+      tenantId: string;
+      userId: string;
     };
     yard: Yard;
     parties: Party[];
@@ -161,8 +188,10 @@ export class DataService {
       overheads: this.seedOverheads(),
       pricing: this.seedPricing(),
       categories: this.seedCategories(),
-      vertical: 'HeavyEquipment',
     },
+    tenants: this.seedTenants(),
+    users: this.seedUsers(),
+    session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID },
     yard: { name: 'Main Yard — Buckhead Hub', lat: 33.749, lng: -84.388 },
     parties: this.seedParties(),
     orders: this.seedOrders(),
@@ -187,30 +216,65 @@ export class DataService {
   private hydrate(): void {
     try {
       const raw = localStorage.getItem(this.KEY);
-      if (!raw) return;
-      const snap = JSON.parse(raw);
-      if (!snap || snap._v !== this.VERSION) return; // stale/incompatible -> reseed
-      if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
-      if (Array.isArray(snap.settings?.locations)) this.db.settings.locations = snap.settings.locations;
-      if (Array.isArray(snap.settings?.locationTypes)) this.db.settings.locationTypes = snap.settings.locationTypes;
-      if (snap.settings?.taxSchedules) this.db.settings.taxSchedules = snap.settings.taxSchedules;
-      if (snap.settings?.overheads) this.db.settings.overheads = snap.settings.overheads;
-      if (snap.settings?.pricing) this.db.settings.pricing = snap.settings.pricing;
-      if (snap.settings?.vertical) this.db.settings.vertical = snap.settings.vertical;
-      if (snap.yard) this.db.yard = snap.yard;
-      if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
-      if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
-      if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
-      if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
-      if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
-      if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
-      if (Array.isArray(snap.timesheets)) this.db.timesheets = snap.timesheets;
-      if (Array.isArray(snap.rentals)) this.db.rentals = snap.rentals;
-      if (Array.isArray(snap.vehicles)) this.db.vehicles = snap.vehicles;
-      if (Array.isArray(snap.dispatches)) this.db.dispatches = snap.dispatches;
-      if (Array.isArray(snap.invoices)) this.db.invoices = snap.invoices;
+      const snap = raw ? JSON.parse(raw) : null;
+      if (snap && snap._v === this.VERSION) {
+        if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
+        if (Array.isArray(snap.settings?.locations)) this.db.settings.locations = snap.settings.locations;
+        if (Array.isArray(snap.settings?.locationTypes)) this.db.settings.locationTypes = snap.settings.locationTypes;
+        if (snap.settings?.taxSchedules) this.db.settings.taxSchedules = snap.settings.taxSchedules;
+        if (snap.settings?.overheads) this.db.settings.overheads = snap.settings.overheads;
+        if (snap.settings?.pricing) this.db.settings.pricing = snap.settings.pricing;
+        if (snap.yard) this.db.yard = snap.yard;
+        if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
+        if (Array.isArray(snap.orders)) this.db.orders = snap.orders;
+        if (snap.items && typeof snap.items === 'object') this.db.items = snap.items;
+        if (Array.isArray(snap.movements)) this.db.movements = snap.movements;
+        if (Array.isArray(snap.inspections)) this.db.inspections = snap.inspections;
+        if (Array.isArray(snap.workOrders)) this.db.workOrders = snap.workOrders;
+        if (Array.isArray(snap.timesheets)) this.db.timesheets = snap.timesheets;
+        if (Array.isArray(snap.rentals)) this.db.rentals = snap.rentals;
+        if (Array.isArray(snap.vehicles)) this.db.vehicles = snap.vehicles;
+        if (Array.isArray(snap.dispatches)) this.db.dispatches = snap.dispatches;
+        if (Array.isArray(snap.invoices)) this.db.invoices = snap.invoices;
+        if (Array.isArray(snap.tenants) && snap.tenants.length) this.db.tenants = snap.tenants;
+        if (Array.isArray(snap.users) && snap.users.length) this.db.users = snap.users;
+        if (snap.session?.userId) this.db.session = snap.session;
+      } else if (snap) {
+        // Older schema: the seed replaces the snapshot. Flagged so the shell can
+        // say so — a version bump must never look like data that vanished.
+        this.reseeded = true;
+      }
+      this.adoptLegacyModuleFlags();
     } catch {
       /* corrupted storage -> keep seed */
+    }
+  }
+
+  /**
+   * One-time upgrade: fold the pre-tenancy `ims-web.modules` browser preference
+   * into the demo tenant's licence flags, then drop the legacy key so module
+   * enablement has exactly one home (the tenant — which is where the API will
+   * keep it once licences are server-side).
+   */
+  private adoptLegacyModuleFlags(): void {
+    const LEGACY = 'ims-web.modules';
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(LEGACY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    try {
+      const flags: Record<string, boolean> = JSON.parse(raw);
+      const tenant = this.db.tenants[0];
+      if (tenant) {
+        tenant.disabledModules = INDUSTRY_MODULES.filter((m) => flags[m.key] === false).map((m) => m.key);
+        this.save();
+      }
+      localStorage.removeItem(LEGACY);
+    } catch {
+      /* ignore */
     }
   }
 
@@ -222,6 +286,9 @@ export class DataService {
         JSON.stringify({
           _v: this.VERSION,
           settings: this.db.settings,
+          tenants: this.db.tenants,
+          users: this.db.users,
+          session: this.db.session,
           yard: this.db.yard,
           parties: this.db.parties,
           orders: this.db.orders,
@@ -239,6 +306,9 @@ export class DataService {
     } catch {
       /* storage unavailable (private mode / quota) -> in-memory only */
     }
+    // The store changed either way, so anything derived from it (session,
+    // module flags) recomputes even when persistence is unavailable.
+    this.rev.update((n) => n + 1);
   }
 
   /* ------------------------------- format ------------------------------- */
@@ -1544,15 +1614,101 @@ export class DataService {
   }
 
 
+  /* ------------------------- identity & tenancy -------------------------- */
+
+  listTenants(): Tenant[] {
+    return [...this.db.tenants];
+  }
+
+  getTenant(id: string): Tenant | undefined {
+    return this.db.tenants.find((t) => t.id === id);
+  }
+
+  /** The workspace the current session acts as (tenancy is always seeded). */
+  get activeTenant(): Tenant {
+    return this.getTenant(this.db.session.tenantId) ?? this.db.tenants[0];
+  }
+
+  /** Users in a tenant (defaults to the active one). */
+  listUsers(tenantId?: string): User[] {
+    const id = tenantId ?? this.db.session.tenantId;
+    return this.db.users.filter((u) => u.tenantId === id);
+  }
+
+  getUser(id: string): User | undefined {
+    return this.db.users.find((u) => u.id === id);
+  }
+
+  /** The person the session is acting as. */
+  get activeUser(): User | undefined {
+    return this.getUser(this.db.session.userId) ?? this.listUsers()[0];
+  }
+
+  sessionUserId(): string {
+    return this.db.session.userId;
+  }
+
+  sessionTenantId(): string {
+    return this.db.session.tenantId;
+  }
+
+  /**
+   * Switch who the session is acting as — the shell's user switcher, which
+   * stands in for sign-in until the API owns it. Follows the user's tenant.
+   */
+  setSessionUser(userId: string): void {
+    const u = this.getUser(userId);
+    if (!u) return;
+    this.db.session.userId = u.id;
+    this.db.session.tenantId = u.tenantId;
+    this.save();
+  }
+
+  setSessionTenant(tenantId: string): void {
+    if (!this.getTenant(tenantId)) return;
+    this.db.session.tenantId = tenantId;
+    const first = this.listUsers(tenantId)[0];
+    if (first) this.db.session.userId = first.id;
+    this.save();
+  }
+
+  /**
+   * Licence flags for a tenant: a module absent from `disabledModules` is ON,
+   * so the default for a new workspace is "everything the plan includes".
+   */
+  moduleFlags(tenantId?: string): Record<string, boolean> {
+    const t = tenantId ? this.getTenant(tenantId) : this.activeTenant;
+    const off = t?.disabledModules ?? [];
+    const flags: Record<string, boolean> = {};
+    for (const m of INDUSTRY_MODULES) flags[m.key] = !off.includes(m.key);
+    return flags;
+  }
+
+  setTenantModule(key: ModuleKey, on: boolean): void {
+    const t = this.activeTenant;
+    if (!t) return;
+    const off = t.disabledModules ?? [];
+    t.disabledModules = on
+      ? off.filter((k) => k !== key)
+      : Array.from(new Set<ModuleKey>([...off, key]));
+    this.save();
+  }
+
   /* --------------------------- policies / pricing ------------------------ */
 
-  /** Active industry vertical (prototype `IMS.metadata.vertical()`). */
+  /**
+   * Active industry vertical. This is tenant configuration (it drives the
+   * catalog tabs and, from here on, the per-vertical field sets) — not a
+   * browser preference, so it lives with the workspace.
+   */
   get vertical(): string {
-    return this.db.settings.vertical;
+    return this.activeTenant?.vertical ?? 'HeavyEquipment';
   }
 
   setVertical(v: string): void {
-    this.db.settings.vertical = v;
+    const t = this.activeTenant;
+    if (!t || !VERTICAL_KEYS.includes(v as VerticalKey)) return;
+    t.vertical = v as VerticalKey;
     this.save();
   }
 
@@ -2296,6 +2452,42 @@ export class DataService {
       { id: 'INV-001', orderId: 'CT-2024-001', cycle: 1, cycleStart: '2026-08-20', cycleEnd: '2026-08-27', envFeePct: 5, damageWaiver: false, fuelCharge: 120, taxRate: 0.08, status: 'invoiced' },
       { id: 'INV-002', orderId: 'CT-2024-002', cycle: 1, cycleStart: '2026-09-01', cycleEnd: '2026-09-15', envFeePct: 5, damageWaiver: true, fuelCharge: 0, taxRate: 0.07, status: 'pending' },
       { id: 'INV-003', orderId: 'CT-2024-003', cycle: 1, cycleStart: '2026-09-02', cycleEnd: '2026-09-30', envFeePct: 7, damageWaiver: true, fuelCharge: 210, taxRate: 0.07, status: 'paid' },
+    ];
+  }
+
+  /* ----------------------- identity & tenancy seeds ---------------------- */
+
+  /**
+   * The customer workspaces. One is seeded because the UI runs against a single
+   * browser today; the shape is what matters — the API resolves a tenant from
+   * the signed-in user and every query is scoped to it.
+   */
+  private seedTenants(): Tenant[] {
+    return [
+      {
+        id: DEMO_TENANT_ID,
+        name: 'Northline Equipment Co.',
+        slug: 'northline',
+        plan: 'professional',
+        vertical: 'HeavyEquipment',
+        disabledModules: [],
+        createdAt: '2024-01-08',
+      },
+    ];
+  }
+
+  /**
+   * Seeded people — one per role, so the shell's user switcher can demonstrate
+   * exactly what each permission set can and cannot do.
+   */
+  private seedUsers(): User[] {
+    return [
+      { id: 'USR-001', tenantId: DEMO_TENANT_ID, name: 'Marcus Alvarez', email: 'marcus@northline.example', role: 'owner', title: 'Managing Director', initials: 'MA', active: true },
+      { id: 'USR-002', tenantId: DEMO_TENANT_ID, name: 'Priya Raman', email: 'priya@northline.example', role: 'admin', title: 'Operations Administrator', initials: 'PR', active: true },
+      { id: 'USR-003', tenantId: DEMO_TENANT_ID, name: 'Dana Reynolds', email: 'dana@northline.example', role: 'manager', title: 'Dispatch Manager', initials: 'DR', active: true },
+      { id: 'USR-004', tenantId: DEMO_TENANT_ID, name: 'Ray Chen', email: 'ray@northline.example', role: 'warehouse', title: 'Warehouse Lead', initials: 'RC', active: true },
+      { id: 'USR-005', tenantId: DEMO_TENANT_ID, name: 'Tunde Okafor', email: 'tunde@northline.example', role: 'field', title: 'Field Technician', initials: 'TO', active: true },
+      { id: 'USR-006', tenantId: DEMO_TENANT_ID, name: 'Sandra Patel', email: 'sandra@northline.example', role: 'viewer', title: 'Accountant', initials: 'SP', active: true },
     ];
   }
 }

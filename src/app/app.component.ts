@@ -1,10 +1,13 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs';
 
+import { DataService } from './core/data.service';
 import { ModulesService } from './core/modules.service';
+import { User, TENANT_PLAN_LABEL, roleLabel } from './core/models';
 import { PageSearchService } from './core/page-search.service';
+import { SessionService } from './core/session.service';
 import { TelemetryService } from './core/telemetry.service';
 import { NAV_GROUPS, ViewDef, viewFor } from './core/views';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
@@ -35,6 +38,9 @@ export class AppComponent implements OnInit, OnDestroy {
   /** Active view (drives the topbar title, subtitle and page search). */
   view: ViewDef | undefined;
 
+  /** Open state of the sidebar user switcher (the demo's stand-in for sign-in). */
+  userMenuOpen = false;
+
   readonly today = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -44,7 +50,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   constructor(
     private readonly router: Router,
+    readonly data: DataService,
     readonly mods: ModulesService,
+    readonly session: SessionService,
     readonly telemetry: TelemetryService,
     readonly search: PageSearchService,
   ) {
@@ -107,6 +115,57 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleSidebar(): void {
     document.querySelector('.sidebar')?.classList.toggle('open');
+  }
+
+  /* ---------------------- session (who we're acting as) ------------------ */
+
+  toggleUserMenu(): void {
+    this.userMenuOpen = !this.userMenuOpen;
+  }
+
+  closeUserMenu(): void {
+    this.userMenuOpen = false;
+  }
+
+  /** Escape closes the switcher, wherever focus sits. */
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closeUserMenu();
+  }
+
+  /** A click outside the chip and its panel closes the switcher. */
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (!this.userMenuOpen) return;
+    const el = event.target as HTMLElement | null;
+    if (el?.closest('.user-menu, .user-chip')) return;
+    this.closeUserMenu();
+  }
+
+  /** Act as another seeded user — the roles exist to be demonstrable. */
+  switchUser(userId: string): void {
+    this.session.switchUser(userId);
+    this.closeUserMenu();
+  }
+
+  /** Role label for a row in the switcher. */
+  roleName(user: User): string {
+    return roleLabel(user.role);
+  }
+
+  /** Plan the workspace is on (switcher header). */
+  planLabel(): string {
+    const t = this.session.tenant();
+    return t ? TENANT_PLAN_LABEL[t.plan] : '';
+  }
+
+  /** True when a schema change replaced a stored snapshot (shell notice). */
+  reseeded(): boolean {
+    return this.data.reseeded;
+  }
+
+  dismissNotice(): void {
+    this.data.reseeded = false;
   }
 
   /** The view a URL belongs to ('' and unknown paths fall back to Dashboard). */

@@ -354,6 +354,193 @@ export const INDUSTRY_MODULES: IndustryModuleDef[] = [
   { key: 'billing', label: 'Billing & Invoicing', desc: 'Invoice generation derived from priced orders.' },
 ];
 
+/* ------------------------- identity & tenancy -------------------------- */
+/*
+ * The SaaS boundary. Every record in the store belongs to a `Tenant`, and every
+ * write is attributed to a `User`. Roles are permission bundles, so a screen
+ * never asks "is this an admin?" — it asks `can(user, 'stock.adjust')`.
+ *
+ * This is the spec for the tables the API will own:
+ *   tenants(id, name, slug, plan, vertical, created_at)
+ *   tenant_modules(tenant_id, module_key, enabled)   -- the licence flags
+ *   users(id, tenant_id, name, email, role, title, initials, active)
+ */
+
+export type RoleKey = 'owner' | 'admin' | 'manager' | 'warehouse' | 'field' | 'viewer';
+
+/** A capability a role may hold. Screens gate on these, never on the role. */
+export type Permission =
+  | 'items.view'
+  | 'items.edit'
+  | 'items.delete'
+  | 'stock.view'
+  | 'stock.move'
+  | 'stock.adjust'
+  | 'locations.view'
+  | 'locations.manage'
+  | 'parties.view'
+  | 'parties.edit'
+  | 'orders.view'
+  | 'orders.edit'
+  | 'costs.view'
+  | 'settings.manage'
+  | 'modules.manage'
+  | 'users.manage';
+
+export const ALL_PERMISSIONS: Permission[] = [
+  'items.view',
+  'items.edit',
+  'items.delete',
+  'stock.view',
+  'stock.move',
+  'stock.adjust',
+  'locations.view',
+  'locations.manage',
+  'parties.view',
+  'parties.edit',
+  'orders.view',
+  'orders.edit',
+  'costs.view',
+  'settings.manage',
+  'modules.manage',
+  'users.manage',
+];
+
+/** Read-only baseline every role inherits. */
+const VIEW_BASELINE: Permission[] = [
+  'items.view',
+  'stock.view',
+  'locations.view',
+  'parties.view',
+  'orders.view',
+];
+
+export interface RoleDef {
+  key: RoleKey;
+  label: string;
+  desc: string;
+  permissions: Permission[];
+}
+
+export const ROLES: RoleDef[] = [
+  {
+    key: 'owner',
+    label: 'Owner',
+    desc: 'The account holder — every capability, including billing and the tenant itself.',
+    permissions: [...ALL_PERMISSIONS],
+  },
+  {
+    key: 'admin',
+    label: 'Administrator',
+    desc: 'Runs the workspace: catalog, locations, modules and users.',
+    permissions: [...ALL_PERMISSIONS],
+  },
+  {
+    key: 'manager',
+    label: 'Manager',
+    desc: 'Full inventory and order authority, including cost and margin visibility.',
+    permissions: [
+      ...VIEW_BASELINE,
+      'items.edit',
+      'items.delete',
+      'stock.move',
+      'stock.adjust',
+      'locations.manage',
+      'parties.edit',
+      'orders.edit',
+      'costs.view',
+      'settings.manage',
+    ],
+  },
+  {
+    key: 'warehouse',
+    label: 'Warehouse',
+    desc: 'Moves and counts stock; no pricing, cost or delete rights.',
+    permissions: [...VIEW_BASELINE, 'items.edit', 'stock.move', 'stock.adjust'],
+  },
+  {
+    key: 'field',
+    label: 'Field',
+    desc: 'Issues and returns stock from the field, against a read-only catalog.',
+    permissions: [...VIEW_BASELINE, 'stock.move'],
+  },
+  {
+    key: 'viewer',
+    label: 'Viewer',
+    desc: 'Read-only — for accountants, auditors and stakeholders.',
+    permissions: [...VIEW_BASELINE],
+  },
+];
+
+export const ROLE_KEYS: RoleKey[] = ROLES.map((r) => r.key);
+
+/** The role definition for a key (falls back to the least-privileged role). */
+export function roleDef(key: RoleKey): RoleDef {
+  return ROLES.find((r) => r.key === key) ?? ROLES[ROLES.length - 1];
+}
+
+export function roleLabel(key: RoleKey): string {
+  return roleDef(key).label;
+}
+
+export type TenantPlan = 'starter' | 'professional' | 'enterprise';
+
+export const TENANT_PLANS: TenantPlan[] = ['starter', 'professional', 'enterprise'];
+
+export const TENANT_PLAN_LABEL: Record<TenantPlan, string> = {
+  starter: 'Starter',
+  professional: 'Professional',
+  enterprise: 'Enterprise',
+};
+
+/** A customer workspace — the top of the tenancy tree. */
+export interface Tenant {
+  id: string;
+  name: string;
+  slug: string;
+  plan: TenantPlan;
+  /** Active industry vertical (drives catalog tabs + per-vertical field sets). */
+  vertical: VerticalKey;
+  /** Licence flags: a module absent from this list is enabled (default on). */
+  disabledModules: ModuleKey[];
+  createdAt: string;
+}
+
+/** A person who may sign in. `role` is the permission bundle; `title` is their job. */
+export interface User {
+  id: string;
+  tenantId: string;
+  name: string;
+  email: string;
+  role: RoleKey;
+  title: string;
+  /** Avatar initials for the shell chip. */
+  initials: string;
+  active: boolean;
+}
+
+/** True when the user's role holds the capability. Null/undefined → no rights. */
+export function can(user: Pick<User, 'role'> | null | undefined, perm: Permission): boolean {
+  return !!user && roleDef(user.role).permissions.includes(perm);
+}
+
+export type VerticalKey = 'HeavyEquipment' | 'Rental' | 'Healthcare' | 'Lumberyard' | 'Warehouse';
+
+/** Vertical options (prototype `IMS.metadata.verticals`). */
+export const VERTICALS: { key: VerticalKey; label: string }[] = [
+  { key: 'HeavyEquipment', label: 'Heavy Equipment Rental' },
+  { key: 'Rental', label: 'General Rental' },
+  { key: 'Healthcare', label: 'Healthcare' },
+  { key: 'Lumberyard', label: 'Lumberyard' },
+  { key: 'Warehouse', label: 'Warehouse / 3PL' },
+];
+
+export const VERTICAL_KEYS: VerticalKey[] = VERTICALS.map((v) => v.key);
+
+export function verticalLabel(key: string): string {
+  return VERTICALS.find((v) => v.key === key)?.label ?? key;
+}
+
 export type WorkOrderStatus = 'In Progress' | 'Completed' | 'Pending' | 'Scheduled';
 
 export const WORK_ORDER_STATUSES: WorkOrderStatus[] = ['In Progress', 'Completed', 'Pending', 'Scheduled'];

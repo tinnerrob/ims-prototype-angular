@@ -9,8 +9,8 @@
       <div class="col-md-6 field-group mb-0">
         <label class="form-label">Active vertical</label>
         <select class="form-select" [value]="data.vertical" (change)="setVertical($any($event.target).value)">
-          @for (k of verticalKeys; track k) {
-            <option [value]="k">{{ verticals[k] }}</option>
+          @for (v of verticals; track v.key) {
+            <option [value]="v.key">{{ v.label }}</option>
           }
         </select>
       </div>
@@ -36,7 +36,10 @@
       Industry modules sit on an always-on inventory core. Turning a module off hides its entry
       points; the core never depends on a module, so nothing else breaks.
     </p>
-
+    <p class="text-muted2 small mb-3">
+      Licensed to <strong>{{ tenantName() }}</strong> on the {{ planLabel() }} plan — the flags
+      belong to the workspace, not to this browser.
+    </p>
     <div class="strong mb-2">Core · always on</div>
     <div class="d-flex flex-wrap gap-1 mb-3">
       @for (c of core; track c) {

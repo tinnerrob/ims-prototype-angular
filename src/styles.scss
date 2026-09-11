@@ -2236,6 +2236,84 @@ a { color: var(--brand); }
 .user-role { color: var(--sidebar-ink-dim); }
 .avatar { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); }
 
+/* ---- 1b. Account chip + user switcher (who the app acts as) ------------- */
+/* The chip is a button now that it opens the switcher, so it needs the reset a
+   UA button does not give it — the rules above still paint the surface, these
+   just stop the browser restyling it as a control. */
+button.user-chip {
+  width: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Anchored to the footer rather than the viewport, so the panel rises out of
+   the chip it belongs to. */
+.sidebar-footer { position: relative; }
+.user-menu {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(100% + 6px);
+  z-index: 60;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--sidebar-bg-2);
+  border: 1px solid var(--sidebar-line);
+  box-shadow: var(--shadow-lg);
+}
+.user-menu-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--sidebar-line);
+  color: var(--sidebar-ink-strong);
+}
+.user-menu-head .text-muted2 { color: var(--sidebar-ink-dim); }
+.user-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--sidebar-ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+.user-menu-row:hover { background: var(--sidebar-hover); color: var(--sidebar-ink-strong); }
+/* The acting user wears a ring rather than a tick — it has to survive the row
+   being the one you are about to leave. */
+.user-menu-row.current {
+  background: rgba(99, 102, 241, .18);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, .5);
+  color: var(--sidebar-ink-strong);
+}
+.user-menu-meta { display: flex; flex-direction: column; line-height: 1.2; flex: 1; min-width: 0; }
+.user-menu-meta .text-muted2 { color: var(--sidebar-ink-dim); }
+.role-tag {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 6px;
+  color: var(--sidebar-ink-dim);
+  border: 1px solid var(--sidebar-line);
+}
+.user-menu-row.current .role-tag { color: #c7d2fe; border-color: rgba(199, 210, 254, .35); }
+.user-menu-foot { padding: 8px 8px 4px; border-top: 1px solid var(--sidebar-line); color: var(--sidebar-ink-dim); }
+.avatar-sm { width: 22px; height: 22px; border-radius: 50%; font-size: 9.5px; }
+
 /* ---- 2. Shell: topbar, search, content --------------------------------- */
 .topbar {
   background: rgba(255, 255, 255, .84);
@@ -2271,6 +2349,26 @@ a { color: var(--brand); }
 .topbar-date { background: #fff; border-color: rgba(15, 23, 42, .08); }
 .icon-btn { border-radius: 10px; }
 .icon-btn:hover { background: rgba(79, 70, 229, .09); }
+
+/* A schema bump replaces the stored snapshot with the seed, so the shell says so
+   rather than letting the user's data appear to vanish. Sits inside `.content`
+   (the scroll container) and gives up its height to the page below it. */
+.shell-notice {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  color: #92400e;
+  background: var(--warning-soft);
+  border: 1px solid rgba(217, 119, 6, .28);
+}
+.shell-notice > i { flex: none; color: var(--warning); }
+.shell-notice > span { flex: 1; min-width: 0; }
+.shell-notice > .btn { flex: none; }
 
 /* ---- 3. Surfaces: one radius + shadow scale ---------------------------- */
 .card,

@@ -1,17 +1,9 @@
 import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
-import { INDUSTRY_MODULES, ModuleKey } from '../../core/models';
+import { INDUSTRY_MODULES, ModuleKey, TENANT_PLAN_LABEL, VERTICALS } from '../../core/models';
 import { ModulesService } from '../../core/modules.service';
-
-/** Vertical options (prototype `IMS.metadata.verticals`). */
-const VERTICALS: Record<string, string> = {
-  HeavyEquipment: 'Heavy Equipment Rental',
-  Rental: 'General Rental',
-  Healthcare: 'Healthcare',
-  Lumberyard: 'Lumberyard',
-  Warehouse: 'Warehouse / 3PL',
-};
+import { SessionService } from '../../core/session.service';
 
 /** Core (always-on) modules listed on the admin page (prototype `CORE_MODULES`). */
 const CORE_MODULES = [
@@ -39,12 +31,22 @@ export class FeatureModulesComponent {
   readonly modules = INDUSTRY_MODULES;
   readonly core = CORE_MODULES;
   readonly verticals = VERTICALS;
-  readonly verticalKeys = Object.keys(VERTICALS);
 
   constructor(
     readonly data: DataService,
     readonly mods: ModulesService,
+    readonly session: SessionService,
   ) {}
+
+  /** Workspace the licence flags belong to (they are tenant data, not a pref). */
+  tenantName(): string {
+    return this.session.tenant()?.name ?? '';
+  }
+
+  planLabel(): string {
+    const t = this.session.tenant();
+    return t ? TENANT_PLAN_LABEL[t.plan] : '';
+  }
 
   on(key: ModuleKey): boolean {
     return this.mods.isEnabled(key);

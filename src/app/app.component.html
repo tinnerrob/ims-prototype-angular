@@ -31,14 +31,55 @@
     </nav>
     <div class="sidebar-footer">
       <div class="sim-status"><span class="pulse-dot"></span> GPS Link LIVE</div>
-      <div class="user-chip">
-        <div class="avatar">DR</div>
-        <div class="user-meta">
-          <span class="user-name">D. Reynolds</span>
-          <span class="user-role">Dispatch Manager</span>
+
+      <!-- Who the app is acting as. Switching stands in for sign-in until the API
+           owns authentication, and it is the honest way to demo a role model:
+           the permission set — not the screen — decides what each person may do. -->
+      @if (session.user(); as user) {
+        <button
+          class="user-chip"
+          type="button"
+          aria-haspopup="true"
+          [attr.aria-expanded]="userMenuOpen"
+          title="Switch user"
+          (click)="toggleUserMenu()"
+        >
+          <span class="avatar">{{ user.initials }}</span>
+          <span class="user-meta">
+            <span class="user-name">{{ user.name }}</span>
+            <span class="user-role">{{ user.title }}</span>
+          </span>
+          <i class="bi bi-three-dots"></i>
+        </button>
+      }
+
+      @if (userMenuOpen) {
+        <div class="user-menu" role="menu" aria-label="Switch user">
+          <div class="user-menu-head">
+            <span class="strong">{{ session.tenant()?.name }}</span>
+            <span class="text-muted2 small">{{ planLabel() }} · {{ session.role().label }}</span>
+          </div>
+          @for (u of session.users(); track u.id) {
+            <button
+              class="user-menu-row"
+              type="button"
+              role="menuitem"
+              [class.current]="session.isCurrent(u.id)"
+              (click)="switchUser(u.id)"
+            >
+              <span class="avatar avatar-sm">{{ u.initials }}</span>
+              <span class="user-menu-meta">
+                <span class="strong">{{ u.name }}</span>
+                <span class="text-muted2 small">{{ u.title }}</span>
+              </span>
+              <span class="role-tag">{{ roleName(u) }}</span>
+            </button>
+          }
+          <div class="user-menu-foot text-muted2 small">
+            Roles gate what each person can do — no screen decides it for itself.
+          </div>
         </div>
-        <i class="bi bi-three-dots"></i>
-      </div>
+      }
     </div>
   </aside>
 
@@ -91,6 +132,20 @@
     </header>
 
     <div class="content">
+      <!-- A schema bump replaces the stored snapshot with the seed. Say so: data
+           that disappears without explanation is the fastest way to lose trust. -->
+      @if (reseeded()) {
+        <div class="shell-notice" role="status">
+          <i class="bi bi-arrow-repeat"></i>
+          <span>
+            Saved demo data was written by an older version of the schema, so the seed has replaced
+            it. Everything below is the seeded dataset.
+          </span>
+          <button class="btn btn-ims-outline btn-sm2" type="button" (click)="dismissNotice()">
+            Dismiss
+          </button>
+        </div>
+      }
       <router-outlet />
     </div>
   </main>
