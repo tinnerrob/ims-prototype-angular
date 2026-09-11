@@ -2432,3 +2432,189 @@ a { color: var(--brand); }
 .table tbody tr.row-open { cursor: pointer; }
 .table tbody tr.row-open:hover { background: rgba(37, 99, 235, .05); }
 
+/* =========================================================================
+   Visual refresh — additive layer, deliberately loaded LAST.
+
+   Everything above is ported from the prototype verbatim; this block is the
+   Angular port's own polish pass and only ever overrides tokens or restates a
+   rule with the same selectors, so the ported layers stay intact and this is
+   easy to read, tune or drop as one unit. No layout/geometry changes: the
+   fixed-height shell (100vh, per-page `.card` + `.table-wrap` scrolling) and
+   every media query above are untouched.
+
+   Goals:
+     1. Sidebar        — solid dark blue-grey, no translucency or colour glow.
+     2. Shell          — calmer topbar, tighter type, softer layered shadows.
+     3. Surfaces       — cards/tables/modals share one radius + shadow scale.
+     4. Detail         — tabular numerals, consistent focus rings, scrollbars.
+   ========================================================================= */
+
+/* ---- 1. Sidebar: solid dark blue-grey ---------------------------------- */
+:root {
+  --sidebar-bg: #1c2434;                              /* solid, not rgba    */
+  --sidebar-bg-2: #151b28;                            /* deepens toward foot */
+  --sidebar-ink: #c6d0e0;
+  --sidebar-ink-strong: #fff;
+  --sidebar-ink-dim: #8695ad;
+  --sidebar-line: rgba(255, 255, 255, .075);
+  --sidebar-hover: rgba(255, 255, 255, .055);
+  --sidebar-icon-chip: rgba(255, 255, 255, .06);
+  --sidebar-edge: rgba(8, 12, 20, .55);
+}
+
+.sidebar {
+  /* Flat two-stop ramp instead of the translucent glass + indigo radial. */
+  background: linear-gradient(180deg, var(--sidebar-bg), var(--sidebar-bg-2));
+  border-right: 1px solid var(--sidebar-edge);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, .035), 12px 0 32px -24px var(--sidebar-edge);
+}
+/* The prototype's glossy ::after sheen fights a solid panel — drop it. */
+.sidebar::after { display: none; }
+
+.brand { border-bottom: 1px solid var(--sidebar-line); }
+/* Keep the brand mark as the one saturated accent in the rail, but lose the
+   wide halo so it reads as a logo rather than a glow. */
+.brand-mark { box-shadow: 0 6px 16px -9px rgba(79, 70, 229, .6); }
+.brand-sub { color: var(--sidebar-ink-dim); }
+
+.side-nav::-webkit-scrollbar-thumb {
+  border-color: transparent; background: rgba(255, 255, 255, .14);
+}
+.side-nav::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, .22); }
+
+/* Group headings become real separators, so the rail scans as sections. */
+.nav-section { color: var(--sidebar-ink-dim); }
+.nav-section:not(:first-child) {
+  border-top: 1px solid var(--sidebar-line);
+  margin-top: 6px;
+}
+
+.nav-item { color: var(--sidebar-ink); gap: 10px; padding: 5px 10px; min-height: 34px; }
+/* Icon sits in its own tonal chip — gives hover/active a second signal
+   beyond the row fill, and lines the rail up with the topbar icon buttons.
+   Row height is pinned above so the 24px chip cannot inflate the rail: 34px
+   is ~4px TIGHTER than the pre-refresh desktop row (~38px), so all 14 items
+   still fit without scrolling, and it is within 1px of the compact (≤991px)
+   33px row. */
+.nav-item i {
+  width: 24px; height: 24px; border-radius: 7px;
+  display: grid; place-items: center; font-size: 14px;
+  background: transparent; color: inherit;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.nav-item:hover { background: var(--sidebar-hover); color: var(--sidebar-ink-strong); }
+/* Replaces the old "nudge the glyph right" feedback, which the chip makes
+   redundant (and which read as a wiggle inside a fixed-size box). */
+.nav-item:hover i { background: var(--sidebar-icon-chip); transform: none; }
+.nav-item.active {
+  /* Slightly more opaque than the original so the fill reads as a solid
+     selected state over the now-solid rail, not a wash over glass. */
+  background: linear-gradient(90deg, rgba(99, 102, 241, .36), rgba(99, 102, 241, .12));
+  color: var(--sidebar-ink-strong); font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, .26);
+}
+.nav-item.active i { background: rgba(255, 255, 255, .14); color: var(--sidebar-ink-strong); }
+.nav-item.active::before {
+  width: 3px; top: 6px; bottom: 6px;
+  background: linear-gradient(180deg, #a5b4fc, #6366f1);
+}
+.nav-mod-tag { color: var(--sidebar-ink-dim); border-color: rgba(255, 255, 255, .14); }
+.user-chip .bi-three-dots { color: var(--sidebar-ink-dim); }
+
+.sidebar-footer { border-top: 1px solid var(--sidebar-line); }
+/* Status reads as a solid pill rather than loose green text. */
+.sim-status {
+  color: #8ef0b2; background: rgba(34, 197, 94, .10);
+  border: 1px solid rgba(34, 197, 94, .22); border-radius: 9px;
+  padding: 6px 9px; margin-bottom: 8px;
+}
+.sim-status:empty { display: none; }
+.user-chip {
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(255, 255, 255, .06);
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.user-chip:hover { background: rgba(255, 255, 255, .10); border-color: rgba(255, 255, 255, .14); }
+.user-role { color: var(--sidebar-ink-dim); }
+.avatar { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .14); }
+
+/* ---- 2. Shell: topbar, search, content --------------------------------- */
+.topbar {
+  background: rgba(255, 255, 255, .84);
+  border-bottom: 1px solid rgba(15, 23, 42, .075);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .5), 0 10px 26px -24px rgba(15, 23, 42, .5);
+}
+/* The gradient-filled h1 was the loudest element on every page. Solid ink with
+   tight tracking reads as a title instead of a text effect — and survives the
+   narrower compact breakpoints, where the gradient was clipping anyway. */
+.topbar h1 {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--ink);
+  letter-spacing: -.35px;
+}
+.global-search { border-radius: 10px; }
+.topbar-date { background: #fff; border-color: rgba(15, 23, 42, .08); }
+.icon-btn { border-radius: 10px; }
+.icon-btn:hover { background: rgba(79, 70, 229, .09); }
+
+/* ---- 3. Surfaces: one radius + shadow scale ---------------------------- */
+.card,
+.kpi {
+  border-radius: 14px;
+  border-color: rgba(15, 23, 42, .075);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .045), 0 12px 28px -26px rgba(16, 24, 40, .45);
+}
+.card-header { border-bottom-color: rgba(15, 23, 42, .07); }
+.card-title { letter-spacing: -.1px; }
+
+/* Table headers: replaces the flat #e6eaf2 slab with a cooler, lighter wash
+   that still separates the head from banded rows. */
+.table thead th,
+.table th {
+  background: linear-gradient(180deg, #f2f5fa, #eaeef6);
+  color: #4b5563;
+  border-bottom: 1px solid rgba(15, 23, 42, .10);
+}
+/* Numerals line up column-to-column in every table in the app. */
+.table td,
+.table th { font-variant-numeric: tabular-nums; }
+.table tbody tr:hover { background: rgba(79, 70, 229, .05); }
+
+/* Segmented tab tray, a shade cooler so it sits with the new table heads. */
+.subtabs { background: #e9edf5; border-color: rgba(15, 23, 42, .07); }
+.subtab .count-pill { font-variant-numeric: tabular-nums; }
+
+/* Modals stay glassy, just sit higher off the page. */
+.modal-content {
+  box-shadow: 0 26px 64px -28px rgba(15, 23, 42, .5), 0 2px 8px rgba(15, 23, 42, .08);
+}
+.modal-header {
+  background: linear-gradient(180deg, rgba(241, 245, 252, .9), rgba(241, 245, 252, 0));
+}
+
+/* Controls take the smaller radius so they never read as mini-cards. */
+.btn-ims,
+.btn-ims-outline { border-radius: 9px; }
+.btn-ims { box-shadow: 0 6px 16px -10px rgba(79, 70, 229, .75); }
+.btn-ims-outline { border-color: rgba(15, 23, 42, .11); }
+.form-control,
+.form-select { border-radius: 9px; border-color: rgba(15, 23, 42, .12); }
+.badge-status,
+.kpi-value,
+.count-pill { font-variant-numeric: tabular-nums; }
+
+/* ---- 4. Detail: focus + selection -------------------------------------- */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible { outline: 2px solid rgba(79, 70, 229, .55); outline-offset: 2px; }
+::selection { background: rgba(79, 70, 229, .18); }
+
+/* ---- 5. Finishing touches ---------------------------------------------- */
+/* The active tab keeps the white "lifted chip" look but picks up the brand
+   hue in its hairline + count pill, so it reads as selected at a glance. */
+.subtab.active { box-shadow: 0 1px 2px rgba(16, 24, 40, .10), 0 0 0 1px rgba(79, 70, 229, .14); }
+.subtab.active .count-pill { background: rgba(99, 102, 241, .16); color: var(--brand-deep); }
+/* Same idea for the record-viewer / card headers that use a plain icon. */
+.card-title i { opacity: .9; }
+
