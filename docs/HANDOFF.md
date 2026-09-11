@@ -277,11 +277,18 @@ detail right**, with orders as the top rows.
   Item registry, Movement, Location, Inspection, WorkOrder, Timesheet, RentalSub,
   Vehicle/Dispatch, Invoice, module + status enums/labels, `AuditFields`).
   `docs/DATA-MODEL.md` is the same thing as *tables* — the schema the API
-  implements, and the document `check9` keeps in step with this file.
+  implements, and the document `check9` keeps in step with this file. It also carries
+  the seam's **answer vocabulary** (C2): one `CommandResult<T, R>` — `{ ok: true }` or
+  `{ ok: true, value }` when a command produced a row, `{ ok: false, reason }` when it
+  refused — with a named refusal union per family (`RemovalRefusal`, `ReceiptRefusal`,
+  `StockMoveRefusal`, …). `SignInResult` (B1) is that shape with a named payload, so
+  sign-in and every command refuse in the same words: the store owns the *reason*, the
+  screen owns the sentence.
 - `src/app/core/api.ts` — **the API seam** (C1): the store's whole public surface as
   a contract, split into `ApiQueries` (reads) and `ApiCommands` (writes), `Pick`ed from
-  `DataService` so no signature is copied, with two compile-time assertions that fail
-  the build if a member is unclassified or the store does not satisfy it. `IMS_API` is
+  `DataService` so no signature is copied, with three compile-time assertions that fail
+  the build if a member is unclassified, the store does not satisfy the contract, or a
+  command answers a *sentinel* (`boolean` / `null`) instead of a reason (C2). `IMS_API` is
   the token every screen injects (C1b: all 22 injection sites, typed `ApiAdapter`) and
   `provideImsApi()` decides who answers it (`useExisting` — the store, as the same
   instance). `check17` re-derives the split, `check18` keeps the sweep swept.
@@ -717,8 +724,13 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    (`core/api.ts` — the store's surface split into queries and commands, held by two
    compile-time assertions and `check17`) and C1b moved every screen onto it (all 22
    injection sites take `IMS_API`, held by `check18`), so swapping the implementation is
-   a provider change. **C2 is next** (a command's refusal becomes one typed result
-   instead of `null`/`false`). Still open on the *auth* seam, and
+   a provider change. **C2a is done** — a command's refusal is one typed `CommandResult`
+   (`models.ts`) with a named reason per answerable branch, replacing `null`/`false` for
+   every command whose refusal a screen can observe (ten of them, including two —
+   `moveStock`, `adjustStock` — that the third compile-time assertion found after a
+   hand-written list missed them); `check20` drives all 33 refusals and proves each one
+   names its reason *and* persisted nothing. **C2b is next** (the screens print the
+   reason where the action was). Still open on the *auth* seam, and
    named in DATA-MODEL's "not in the model yet": **revocation** — nothing cuts a session
    short before it is given up, and no other client is told one ended (the API's job: a
    `sessions` row or a token version).

@@ -473,7 +473,8 @@ Tenant administration is **E**'s.
 |---|---|---|
 | C1a | The contract as a file of *names* (`api.ts`): the store's whole public surface split into queries and commands, taken from the implementation (`Pick<DataService, …>`) and held by two compile-time assertions plus a harness that re-derives the split from the store | ✅ `2ffca74` |
 | C1b | The screens depend on the contract: every component, service and helper takes `IMS_API` (typed `ApiAdapter`) instead of the `DataService` class, so which implementation answers is a provider change and nothing else | ✅ `3439270` |
-| C2 | Commands answer in one shape: a typed result (value or `reason`) replacing the `null`/`false` sentinels, so a screen renders a refusal instead of guessing what `null` meant | ⏳ |
+| C2a | One shape for a refusal (`CommandResult<T, R>` in `models.ts`, generalising B1's `SignInResult`), and the eight commands whose refusal a screen can already observe answer with it instead of `null`/`false` | ⏳ |
+| C2b | The screens print it: each refusing call site says why where the action was, the way the sign-in form already prints `SignInFailure` | ⏳ |
 | C3 | The request context is a parameter: `sessionUserId()` / `sessionTenantId()` become what the seam's caller supplies (an HTTP client derives them from a token), and the store stops reading `db.session` for who is writing | ⏳ |
 | C4 | Reads may be remote: a loading/error state beside each list's signals, so a screen that is waiting cannot look like a screen that is empty | ⏳ |
 
@@ -541,6 +542,60 @@ its button can print different reasons for one rule (`partyRemovalBlockers()` is
 pattern that fixed that by hand). A command result carrying a reason makes the seam's
 refusal speakable, serialisable and testable, and it is the shape an HTTP adapter
 returns anyway.
+
+**C2a — the store answers a result.** One generic shape in `models.ts`, beside the
+result it generalises:
+
+```ts
+export type CommandResult<T = void, R extends string = string> =
+  | (T extends void ? { ok: true } : { ok: true; value: T })
+  | { ok: false; reason: R };
+```
+
+`signIn()`'s `SignInResult` (B1) already *is* that shape with a named payload, so C2a
+folds it in (`SignInResult = CommandResult<User, SignInFailure>`) rather than leave two
+vocabularies for one answer. The conditional is deliberate: a removal has nothing to
+hand back, and forcing `value: undefined` on every call site is noise — while a command
+that *creates* a row still returns it, so `raiseReorder`, `receiveAgainst` and
+`createRental` answer `CommandResult<PurchaseOrder, …>` and the caller keeps the row.
+
+**Which commands carry it** is decided by observability, not tidiness: the ten whose
+refusal a screen can already see — `removeParty`, `removeLocation`, `removeLocationType`,
+`removePurchaseOrder`, `updatePurchaseOrder`, `raiseReorder`, `receiveAgainst`,
+`createRental`, `moveStock`, `adjustStock` — which are exactly the ones answering
+`null`/`false` today. Removals that cannot fail in the UI (`removeRental`,
+`removeTimesheet`, …) keep `void`: their refusal is unobservable, and inventing an answer
+nothing asks for is how a contract drifts from its call sites. A command joins the shape
+the day a screen can observe its refusal.
+
+That list was written by hand, and it was wrong twice over: `moveStock()` and
+`adjustStock()` answer `Movement | null` across **eight** and **five** distinct branches,
+and their signatures span several lines, so a grep for one-line `null` returns passed over
+both. The compile-time assertion below found them the moment it was written — which is
+the argument for having it, and the reason the count is ten rather than eight. `check20`
+holds the same rule from the runtime side.
+
+The reasons are named unions, **one member per answerable refusal** — the rule
+`SignInFailure` set: `RemovalRefusal = 'missing' | 'in-use'`; `ReceiptRefusal` separates
+a draft order from a cancelled one because a person reading the sentence needs to know
+which; and so on. The store owns the reason, the screen owns the wording, which is the
+point of doing this twice the same way. The store's *normalisations* are not refusals
+and stay silent: `updatePurchaseOrder` re-adds a delivered line and ignores a cancel
+because the receipts are the record, and that is a rule holding rather than a request
+being denied.
+
+**C2b — the screens print it.** Each refusing call site says why where the action
+happened, the way the sign-in form prints a refusal: a signal holding the store's
+reason, a `Record<Reason, string>` of sentences, one `role="alert"` line. The refusals
+the grids already warn about by tooltip (`partyRemovalBlockers()`) keep that tooltip and
+gain the printed reason for the click that gets past it — which is what the person who
+clicked needs, and what "a refusal reaches the screen as a reason it prints" means.
+
+**C2 is held twice, like C1.** A harness drives each refusal through the real store and
+checks the reason *and* that nothing was written (a refusal that half-wrote is worse than
+a sentinel), and a compile-time assertion in `api.ts` fails the build if any
+`ApiCommandName` starts answering a `boolean` or a nullable type — the two sentinels,
+named as one rule, checked where the contract is defined.
 
 **C3 — the context, not the session.** A server derives the tenant and the user from
 the request; the client currently derives them from `db.session`, which is also *in*
@@ -985,6 +1040,18 @@ hand-roll `localStorage` and assert on the store's own output:
   the class (`useExisting`, not a second workspace); and B1 still works through the seam
   — a fresh fixture acts as nobody, a credential signs somebody in, `signOut()` ends it.
 
+- `check20.mjs` — **C2, 36 checks:** the runtime half of "a command says *why*". One case
+  per answerable refusal — all 33 of them across the ten commands (missing rows,
+  `'in-use'` removals, a draft and a cancelled order, an over-receipt, a person treated as
+  stock, half a kit, a count that matched) — each asserting the **reason by name** and that
+  the persisted snapshot is byte-for-byte unchanged, because a command that half-wrote and
+  then said no would be worse than the sentinel it replaced. Then the other branch: a
+  command that succeeds answers `{ ok: true }` and hands back the row it made
+  (`raiseReorder`'s draft, `receiveAgainst`'s receipt), a removal hands nothing back, and
+  `signIn()` answers the same shape. `assert.ok(result)` would pass on a `{ok, reason}`
+  object exactly the way the screens passed on a truthy sentinel — which is why the reason
+  is asserted by name and not by truthiness.
+
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
 
@@ -1009,6 +1076,13 @@ the cheapest way to prove an invariant still holds.
   neither union is a **compile error** (`NothingOutsideTheContract`), and putting it on
   the wrong side fails `check17`: a command is a method that persists, directly or
   through another command it calls.
+- A command that can refuse answers a `CommandResult` with a *named* reason (C2), never a
+  sentinel: returning `boolean` or anything carrying `null` is a **compile error**
+  (`NoCommandAnswersASentinel`), and the reason must be a member of the family's declared
+  union (so a new branch is a new member, and the screen that prints it is told which one).
+  A screen that ignores the answer is a bug the old `false` could hide — `check20` drives
+  every refusal and fails if the reason is not the one that branch owes, or if the refusal
+  wrote anything.
 - A new view injects `IMS_API` and types it `ApiAdapter`, never `DataService` (C1b).
   The compiler will not stop you — the class is still injectable — so `check18` walks
   `src/app` and fails, which is the only reason the seam stays a seam.

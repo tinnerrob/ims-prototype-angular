@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -202,8 +204,7 @@ check('a supplier picked after the lines still reaches them — the reorder draf
   d.adjustStock('part', 'PRT-001', at, 4, 'down to the last four');
   d.adjustStock('part', 'PRT-001', 'LOC-15', 0, 'bin emptied');
 
-  const draft = d.raiseReorder('part', 'PRT-001');
-  assert.ok(draft, 'the warning raises a document');
+  const draft = persisted(d.raiseReorder('part', 'PRT-001'));
   const line = d.listPurchaseOrders().find((p) => p.id === draft.id).lines[0];
   assert.equal(draft.supplierId, '', 'the draft names no supplier yet');
   assert.equal(line.unitCost, 18.5, 'so its line costs the catalog figure');
@@ -222,7 +223,7 @@ check('a supplier picked after the lines still reaches them — the reorder draf
   assert.equal(d.poLineCostFor('PTY-007', 'part', 'PRT-005'), silent.costPrice, 'the catalog cost where the card says nothing');
   assert.notEqual(silent.costPrice, 16.1, 'which is not the price the card carries for another part');
 
-  assert.equal(d.removePurchaseOrder(draft.id), true, 'the probe cleans up after itself');
+  persisted(d.removePurchaseOrder(draft.id)); // the probe cleans up after itself
   d.adjustStock('part', 'PRT-001', at, 24, 'put back');
   d.adjustStock('part', 'PRT-001', 'LOC-15', 6, 'bin back');
 });
@@ -279,12 +280,12 @@ check('a rate card is a row that names its party, so it blocks removal too', () 
     lines: [{ type: 'serialized', refId: 'BL-120', rateDaily: 470 }],
   });
   assert.deepEqual(d.partyRemovalBlockers(p.id), ['1 rate card(s)'], 'the card is the only thing naming it');
-  assert.equal(d.removeParty(p.id), false, 'so the party stays');
+  refuses(d.removeParty(p.id), 'in-use'); // so the party stays
   assert.ok(d.getParty(p.id), 'still there');
 
   d.removePriceCard(card.id);
   assert.deepEqual(d.partyRemovalBlockers(p.id), [], 'the card goes first');
-  assert.equal(d.removeParty(p.id), true, 'then the party removes');
+  persisted(d.removeParty(p.id)); // then the party removes
 });
 
 /* ========== A11.2: the invoice bills whole units, and the cycles add up ==========

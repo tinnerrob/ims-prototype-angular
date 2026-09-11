@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -93,8 +95,7 @@ check('placements() answers for a unit row too, and for labour not at all', () =
 check('a move takes a quantity out of one place and leaves the rest', () => {
   const part = d.getItem('part', 'PRT-001');
   const ledger = d.listMovements().length;
-  const rec = d.moveStock('part', 'PRT-001', 'LOC-14', 'LOC-19', 20, 'picked for CT-2024-001');
-  assert.ok(rec, 'the move was logged');
+  const rec = persisted(d.moveStock('part', 'PRT-001', 'LOC-14', 'LOC-19', 20, 'picked for CT-2024-001'));
   assert.equal(rec.kind, 'transfer');
   assert.equal(rec.qty, 20, 'the quantity it moved, not the whole row');
   assert.equal(rec.locationId, 'LOC-19', 'logged at the destination');
@@ -106,7 +107,7 @@ check('a move takes a quantity out of one place and leaves the rest', () => {
   assert.equal(d.listMovements().length, ledger + 1, 'one movement, not three');
 
   // Emptying a place *removes* its row: a level exists only while it holds stock.
-  assert.ok(d.moveStock('part', 'PRT-001', 'LOC-14', 'LOC-15', 4));
+  persisted(d.moveStock('part', 'PRT-001', 'LOC-14', 'LOC-15', 4));
   assert.equal(d.listStockLevels('PRT-001', 'LOC-14').length, 0, 'the emptied bin left the table');
   assert.equal(d.stockAt(part, 'LOC-15'), 10);
   assert.equal(part.qtyOnHand, 30);
@@ -114,8 +115,8 @@ check('a move takes a quantity out of one place and leaves the rest', () => {
 
 check('a move into a place that already holds the row adds to it', () => {
   const part = d.getItem('part', 'PRT-003'); // 30 @ LOC-16
-  assert.ok(d.moveStock('part', 'PRT-003', 'LOC-16', 'LOC-17', 30));
-  assert.ok(d.moveStock('part', 'PRT-003', 'LOC-17', 'LOC-16', 12), 'and back again');
+  persisted(d.moveStock('part', 'PRT-003', 'LOC-16', 'LOC-17', 30));
+  persisted(d.moveStock('part', 'PRT-003', 'LOC-17', 'LOC-16', 12)); // and back again
   assert.equal(d.stockAt(part, 'LOC-16'), 12);
   assert.equal(d.stockAt(part, 'LOC-17'), 18);
   assert.equal(d.listStockLevels('PRT-003').length, 2, 'two places, not two rows for one place');
@@ -130,8 +131,7 @@ check('a receipt lands as a level: a second place for the same SKU', () => {
   const po = d.listPurchaseOrders().find((p) => p.status === 'ordered' && p.lines.some((l) => l.type === 'part'));
   const line = po.lines.find((l) => l.type === 'part' && l.refId);
   const before = d.listStockLevels(line.refId).length;
-  const rec = d.receiveAgainst({ poId: po.id, locationId: 'LOC-12', qty: { [line.id]: 1 } });
-  assert.ok(rec, 'the delivery posted');
+  const rec = persisted(d.receiveAgainst({ poId: po.id, locationId: 'LOC-12', qty: { [line.id]: 1 } }));
   const row = d.getItem(line.type, line.refId);
   assert.equal(d.listStockLevels(row.id).length > before, true, 'the delivery added a place');
   assert.equal(d.stockAt(row, 'LOC-12') > 0, true, 'and the new place holds what landed');
@@ -165,14 +165,14 @@ check('the place readers join the shelves, not the row', () => {
 check('a place holding only counted stock cannot be removed until it is emptied', () => {
   // LOC-21 holds PRT-006's level row (8 units) and has no history yet: the stock
   // points at it, so the guard blocks the removal.
-  assert.equal(d.removeLocation('LOC-21'), false, 'the level row is stock: the bin holds units');
+  refuses(d.removeLocation('LOC-21'), 'in-use'); // the level row is stock: the bin holds units
   // Moving it out logs the movement at the *destination*, so this bin ends up
   // empty with nothing at all pointing at it — and then it can go.
   const part = d.getItem('part', 'PRT-006'); // 8 @ LOC-21
-  assert.ok(d.moveStock('part', 'PRT-006', 'LOC-21', 'LOC-19', 8, 'rack consolidated'));
+  persisted(d.moveStock('part', 'PRT-006', 'LOC-21', 'LOC-19', 8, 'rack consolidated'));
   assert.equal(d.listStockLevels(undefined, 'LOC-21').length, 0, 'the emptied bin left the table');
   assert.equal(part.qtyOnHand, 8, 'the units are elsewhere, not gone');
-  assert.equal(d.removeLocation('LOC-21'), true, 'so the node can go');
+  persisted(d.removeLocation('LOC-21'));
 });
 
 check('emptying a place by counting it leaves history that still blocks it', () => {
@@ -189,10 +189,10 @@ check('emptying a place by counting it leaves history that still blocks it', () 
     rateDaily: 0,
     locationId: bin.id,
   });
-  assert.equal(d.removeLocation(bin.id), false, 'the stock blocks it');
-  assert.ok(d.adjustStock('part', rec.id, bin.id, 0, 'bin emptied'));
+  refuses(d.removeLocation(bin.id), 'in-use'); // the stock blocks it
+  persisted(d.adjustStock('part', rec.id, bin.id, 0, 'bin emptied'));
   assert.deepEqual(d.placements(rec), [], 'the shelf is clear');
-  assert.equal(d.removeLocation(bin.id), false, 'the ledger still mentions the place');
+  refuses(d.removeLocation(bin.id), 'in-use'); // the ledger still mentions the place
   assert.deepEqual(d.locationRemovalBlockers(bin.id), ['1 movement(s) logged here']);
 });
 

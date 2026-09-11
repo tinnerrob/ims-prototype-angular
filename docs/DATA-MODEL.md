@@ -1054,19 +1054,19 @@ end will not be the only writer.
 | rule | the store's behaviour | the API |
 |---|---|---|
 | a level never holds nothing | an emptied place loses its row | `CHECK (qty > 0)` |
-| a count is never negative | `adjustStock()` returns null | validate input, then the level check |
-| a move needs a source holding that much | `held <= 0 \|\| n > held` → null | conditional `UPDATE … WHERE qty >= n` in one transaction |
-| a move is never to the same place | `from === to` → null | service validation |
-| a unit moves whole | a partial move of a unit → null | service validation (a unit is one row) |
+| a count is never negative | `adjustStock()` answers `'bad-quantity'` | validate input, then the level check |
+| a move needs a source holding that much | `moveStock()` answers `'not-held'` | conditional `UPDATE … WHERE qty >= n` in one transaction |
+| a move is never to the same place | `'same-place'` | service validation |
+| a unit moves whole | a partial move of a unit answers `'partial-unit'` | service validation (a unit is one row) |
 | counted stock is not patched directly | `updateItem()` strips the five derived keys | ignore or `409` on those columns |
-| a draft or cancelled PO cannot be received | `receiveAgainst()` returns null | service validation |
-| a receipt never over-receives a line | `qty > outstanding` → null | sum receipts inside the transaction |
+| a draft or cancelled PO cannot be received | `receiveAgainst()` answers `'draft'` / `'cancelled'` | service validation |
+| a receipt never over-receives a line | `'over-receipt'` | sum receipts inside the transaction |
 | a delivered PO line cannot shrink or vanish | the store re-adds or raises it | service validation |
 | a cancelled PO with arrivals stays cancelled | the status change is ignored | service validation |
 | a PO with a receipt cannot be deleted | `purchaseOrderRemovalBlockers()` | `ON DELETE RESTRICT` |
 | a receipt is immutable | nothing edits or deletes it | no `UPDATE`/`DELETE` grant |
 | a location with stock or history cannot be deleted | `locationRemovalBlockers()` | `ON DELETE RESTRICT` on both FKs |
-| a location type in use cannot be deleted | `removeLocationType()` returns false | `ON DELETE RESTRICT` |
+| a location type in use cannot be deleted | `removeLocationType()` answers `'in-use'` | `ON DELETE RESTRICT` |
 | a party with rows naming it cannot be deleted | `partyRemovalBlockers()` (orders, POs, receipts, sub-rentals, rate cards) | `ON DELETE RESTRICT` |
 | an item's negotiated prices go with it | a card line for a removed item never matches | `ON DELETE CASCADE` on `price_card_lines` |
 | a category in use cannot be deleted | `removeCategory()` refuses | `ON DELETE RESTRICT` |
@@ -1076,6 +1076,33 @@ end will not be the only writer.
 | a credential is never the password | only a salt and a digest are stored; `signIn()` compares digests | store a KDF digest (argon2id/bcrypt), never a reversible column, never a log line |
 | an unknown address and a wrong password are one refusal | `{ ok: false, reason: 'invalid' }` for both | the same `401` (and the same timing) for both, so the endpoint cannot enumerate accounts |
 | a credential belongs to a person | `user_credentials` is looked up by `user_id` | `PRIMARY KEY (user_id)` + `ON DELETE CASCADE` from `users` |
+
+**A refusal is data (C2).** The middle column above used to read "returns `null`" or
+"returns `false`", and which of the two it was meant nothing: a screen that ignored the
+answer could not tell a row that had gone from a rule that had held, so it closed the
+dialog over an edit the store had refused. Every command whose refusal a screen can
+observe now answers one `CommandResult` — `{ ok: true }` (or `{ ok: true, value }` when
+it produced a row) or `{ ok: false, reason }` — and the reason is a member of a **named
+union**, so the store owns the reason and the screen owns the sentence:
+
+| command | refusal union | the reasons |
+|---|---|---|
+| `removeParty`, `removeLocation`, `removeLocationType`, `removePurchaseOrder` | `RemovalRefusal` | `'missing'` (the API's 404), `'in-use'` (its `ON DELETE RESTRICT`) |
+| `updatePurchaseOrder` | `PurchaseOrderRefusal` | `'missing'` |
+| `raiseReorder` | `ReorderRefusal` | `'missing'`, `'not-purchasable'` |
+| `receiveAgainst` | `ReceiptRefusal` | `'missing'`, `'draft'`, `'cancelled'`, `'unknown-place'`, `'over-receipt'`, `'nothing-to-receive'` |
+| `createRental` | `RentalRefusal` | `'no-vendor'`, `'unknown-vendor'` |
+| `moveStock` | `StockMoveRefusal` | `'missing'`, `'not-stock'`, `'unknown-place'`, `'same-place'`, `'out-on-rent'`, `'bad-quantity'`, `'not-held'`, `'partial-unit'` |
+| `adjustStock` | `StockCountRefusal` | `'missing'`, `'not-counted'`, `'unknown-place'`, `'bad-quantity'`, `'no-change'` |
+| `signIn` | `SignInFailure` (B1) | `'invalid'`, `'inactive'` |
+
+One member per *answerable* refusal, which is why `ReceiptRefusal` separates a draft
+from a cancelled order (a person reading the sentence needs to know which) and why a
+count that matches is `'no-change'` rather than a silent success. The service's answer
+is the same shape: a `409`/`422` whose body carries the reason, or the same
+`{ ok: false, reason }` a client-side adapter builds from a transport failure. A
+refusal is not an error to log and swallow — it is a message the person who asked is
+owed, and `check20` drives each one to prove it is named *and* that it wrote nothing.
 
 The store's own schema bump is the last rule worth copying: the persisted
 snapshot carries `_v`, and a version the client does not know is discarded and

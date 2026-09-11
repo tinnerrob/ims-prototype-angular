@@ -850,6 +850,115 @@ export interface Credential {
 }
 
 /**
+ * What a **command** answers (C2): it persisted, or it did not and here is the one
+ * reason a screen may print.
+ *
+ * A command used to say no with a sentinel — `null` for "no such row", `false` for a
+ * refused removal — and every screen then invented its own reading of it, or (more
+ * often) ignored it and closed the dialog as though it had worked. This is the shape
+ * that replaced both: `ok` is the branch, `value` is what the command produced (nothing,
+ * for a removal — see the conditional below), and `reason` is a member of a *named*
+ * union, so the store owns the reason and the screen owns the wording.
+ *
+ * It is one generic type rather than one per command because the question is the same
+ * every time, and because it is the shape the seam returns once the transport exists (a
+ * 4xx the adapter read a reason out of). `signIn()`'s result (B1) was already this shape;
+ * C2 named it once instead of leaving two vocabularies for one answer.
+ */
+export type CommandResult<T = void, R extends string = string> =
+  | (T extends void ? { ok: true } : { ok: true; value: T })
+  | { ok: false; reason: R };
+
+/**
+ * Why a row could not be removed (C2) — the two answers a guarded removal has.
+ *
+ * `'missing'` is the API's 404: the id names nothing, which on a screen means the row
+ * went away underneath it (another tab, a stale grid). `'in-use'` is its
+ * `ON DELETE RESTRICT`: something still names the row, which is why `partyRemovalBlockers()`
+ * and its siblings exist — the screen prints *which* records from the same list the
+ * disabled button warns with, and this reason says the removal itself was refused.
+ */
+export type RemovalRefusal = 'missing' | 'in-use';
+
+/**
+ * Why a reorder could not be raised (C2). `'missing'` is a catalogue row that is gone;
+ * `'not-purchasable'` is the honest one — labour, kits and attachments are not bought
+ * from a supplier, so a reorder warning pointing at one is refused rather than filed as
+ * a purchase order for something nobody stocks.
+ */
+export type ReorderRefusal = 'missing' | 'not-purchasable';
+
+/**
+ * Why a receipt was refused (C2). Each member is a different thing to tell a person:
+ * a draft order has not been sent yet (`'draft'`), a cancelled one is dead
+ * (`'cancelled'`), the place is wrong (`'unknown-place'`), the quantity asks for more
+ * than is still outstanding (`'over-receipt'`, which is the *order* capping the
+ * delivery, not a validation message), or there was nothing to post at all
+ * (`'nothing-to-receive'`).
+ */
+export type ReceiptRefusal =
+  | 'missing'
+  | 'draft'
+  | 'cancelled'
+  | 'unknown-place'
+  | 'over-receipt'
+  | 'nothing-to-receive';
+
+/** Why a purchase-order edit was refused (C2): the row is gone. Its *normalisations*
+ * (a delivered line cannot be dropped, a delivered order cannot be cancelled) are the
+ * receipts holding the line rather than a refused request, and stay silent. */
+export type PurchaseOrderRefusal = 'missing';
+
+/** Why a sub-rental was refused (C2): no vendor named, or one the workspace has never
+ * heard of — the cost side of the ledger has to point at a partner row. */
+export type RentalRefusal = 'no-vendor' | 'unknown-vendor';
+
+/**
+ * Why a stock move was refused (C2). `moveStock()` answered all of these with a bare
+ * `null`, and they are not the same sentence to a person:
+ *
+ * `'missing'`       — no such catalogue row.
+ * `'not-stock'`     — labour is a person, and a person has no shelf to move from.
+ * `'unknown-place'` — the source or the destination is not a location.
+ * `'same-place'`    — a move to where it already is records nothing, so it is refused
+ *                     rather than logged as a movement nobody made.
+ * `'out-on-rent'`   — a unit that is out on a job is not on a shelf; its place changes
+ *                     when it comes back, and a transfer now would record a lie.
+ * `'bad-quantity'`  — not a positive whole number.
+ * `'not-held'`      — the source holds none of it, or fewer than were asked for: you can
+ *                     move what is there, never invent it.
+ * `'partial-unit'`  — a unit-held row (kit, attachment, serialized) sits in one place
+ *                     with one count, so it moves whole or not at all.
+ */
+export type StockMoveRefusal =
+  | 'missing'
+  | 'not-stock'
+  | 'unknown-place'
+  | 'same-place'
+  | 'out-on-rent'
+  | 'bad-quantity'
+  | 'not-held'
+  | 'partial-unit';
+
+/**
+ * Why a count was refused (C2):
+ *
+ * `'missing'`       — no such catalogue row.
+ * `'not-counted'`   — a unit-held row is counted by its own row, not per place, so there
+ *                     is no level to correct here.
+ * `'unknown-place'` — counting at a place that isn't one.
+ * `'bad-quantity'`  — not a whole number, or negative.
+ * `'no-change'`     — the count matched, so there is nothing to record (a correction
+ *                     with a zero delta would be a movement that says nothing).
+ */
+export type StockCountRefusal =
+  | 'missing'
+  | 'not-counted'
+  | 'unknown-place'
+  | 'bad-quantity'
+  | 'no-change';
+
+/**
  * Why a sign-in was refused (B1) — one member per *answerable* refusal. An unknown
  * address and a wrong password are the same `'invalid'`, so the form cannot be used
  * to discover who works here; `'inactive'` is told only to somebody who has already
@@ -860,7 +969,7 @@ export interface Credential {
 export type SignInFailure = 'invalid' | 'inactive';
 
 /** What `signIn()` answers: the person, or the one reason a screen may print. */
-export type SignInResult = { ok: true; user: User } | { ok: false; reason: SignInFailure };
+export type SignInResult = CommandResult<User, SignInFailure>;
 
 /**
  * What the store says when a session is *asked to continue* (B3) — the guard's one

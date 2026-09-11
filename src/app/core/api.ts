@@ -23,6 +23,12 @@ import { DataService } from './data.service';
  * implementation, so what this file states is *membership* and *direction* — exactly
  * the part a second implementation has to agree with, and exactly the part a
  * hand-copied signature would let drift.
+ *
+ * What a command *answers* is the third thing this file states, and C2 is where it
+ * stops being implicit: a command returns a `CommandResult`, so "no" travels as a named
+ * reason rather than a sentinel (`null`, `false`) that a screen reads however it likes.
+ * The signatures still come from the store — the *shape* of a refusal is what the
+ * contract names, and the third assertion below keeps a command from drifting back.
  */
 
 /** Every name a screen may *read* through the seam. */
@@ -100,10 +106,11 @@ export type ApiCommands = Pick<DataService, ApiCommandName>;
 export type ApiAdapter = ApiQueries & ApiCommands;
 
 /*
- * Two compile-time assertions, because this is the half a runtime check cannot hold.
+ * Three compile-time assertions, because this is the half a runtime check cannot hold.
  * Adding a public method to the store without classifying it fails the first; a name in
- * either union that the store no longer has fails the second. They read as prose on
- * purpose — the failure message is the documentation.
+ * either union that the store no longer has fails the second; and a command that answers
+ * a sentinel instead of a reason fails the third (C2). They read as prose on purpose —
+ * the failure message is the documentation.
  */
 type Assert<T extends true> = T;
 
@@ -114,6 +121,32 @@ export type NothingOutsideTheContract = Assert<
 
 /** And the store satisfies the contract it is the first implementation of. */
 export type TheStoreIsAnApi = Assert<DataService extends ApiAdapter ? true : false>;
+
+/**
+ * No command answers a **sentinel** (C2). `null` (no such row) and `boolean` (a
+ * removal that didn't happen) were how a command said no before there was a shape for
+ * saying it, and both read as an answer to whoever ignored them — which is how a
+ * screen ends up closing a dialog over an edit the store refused. A command's result
+ * is a `CommandResult`, whose refusal is a *named* reason, so a return type that is a
+ * `boolean` or that carries a `null` is a refusal a screen would have to guess at
+ * again. This fails the build before it can be written.
+ */
+type SentinelMember<T> = T extends boolean | null ? (T extends null ? 'null' : 'boolean') : never;
+
+/**
+ * The detection has to go through `SentinelMember` for a union to be *split*: a
+ * conditional distributes over a naked type parameter only, and `ReturnType<…>` is not
+ * one — so `PurchaseOrder | null` tested directly against `boolean | null` is false
+ * (the union as a whole is neither) and the `null` would go unseen. Instantiated inside
+ * the helper, `T` *is* naked, so each member is tested on its own.
+ */
+type SentinelAnsweringCommands = {
+  [K in ApiCommandName]: [SentinelMember<ReturnType<DataService[K]>>] extends [never] ? never : K;
+}[ApiCommandName];
+
+export type NoCommandAnswersASentinel = Assert<
+  SentinelAnsweringCommands extends never ? true : false
+>;
 
 /**
  * What a screen injects (C1). The contract, not the class: a caller that asks for
@@ -130,9 +163,9 @@ export const IMS_API = new InjectionToken<ApiAdapter>('ims-api');
  * changes — which is the only proof that a seam is one.
  *
  * The store is the first implementation: today the answer to every query *is* the
- * database it holds. The features still inject `DataService` directly and move onto
- * `IMS_API` next (C1b), which is also what keeps this file in the build: an unimported
- * module is not type-checked, and the assertions above are the point of it.
+ * database it holds. Every feature reaches it through `IMS_API` (C1b), which is also
+ * what keeps this file in the build: an unimported module is not type-checked, and the
+ * assertions above are the point of it.
  */
 export function provideImsApi(): EnvironmentProviders {
   return makeEnvironmentProviders([{ provide: IMS_API, useExisting: DataService }]);

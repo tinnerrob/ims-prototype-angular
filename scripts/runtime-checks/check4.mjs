@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -156,7 +158,7 @@ check('a place the ledger mentions cannot be removed (history is append-only)', 
   });
   d.logMovement({ type: 'part', refId: 'PRT-002', kind: 'transfer', qty: 1, locationId: 'LOC-22' });
   assert.deepEqual(d.locationRemovalBlockers('LOC-22'), ['1 movement(s) logged here']);
-  assert.equal(d.removeLocation('LOC-22'), false, 'refused while the log points at it');
+  refuses(d.removeLocation('LOC-22'), 'in-use'); // the log points at it
   assert.ok(d.getLocation('LOC-22'), 'and it is still there');
 });
 
@@ -171,7 +173,7 @@ check('an empty, unreferenced node still removes (the guard is not a blanket ref
     tz: 'America/New_York',
   });
   assert.deepEqual(d.locationRemovalBlockers('LOC-23'), []);
-  assert.equal(d.removeLocation('LOC-23'), true);
+  persisted(d.removeLocation('LOC-23'));
   assert.equal(d.getLocation('LOC-23'), undefined);
 });
 
@@ -183,7 +185,7 @@ check('both blockers come from the one guard the grid and the button share', () 
     '29 item(s) stored here',
     '9 movement(s) logged here',
   ]);
-  assert.equal(d.removeLocation('LOC-03'), false);
+  refuses(d.removeLocation('LOC-03'), 'in-use');
   assert.equal(d.getItem('serialized', 'BL-119').locationId, 'LOC-03', 'stock stays put');
 });
 

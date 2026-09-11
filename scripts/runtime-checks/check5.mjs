@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -157,13 +159,12 @@ check('a receipt logs one movement per landed row, carrying the receipt id', () 
 
 check('receiving the rest of a partial PO is a second receipt', () => {
   const before = d.listReceipts().length;
-  const rec = d.receiveAgainst({
+  const rec = persisted(d.receiveAgainst({
     poId: 'PO-2026-003',
     locationId: 'LOC-19',
     qty: { 'PO-2026-003-2': 8 },
     note: 'Balance of the hose order.',
-  });
-  assert.ok(rec, 'posted');
+  }));
   assert.equal(d.listReceipts().length, before + 1);
   assert.equal(rec.id.startsWith('RC-'), true, 'a receipt id from the store');
   assert.equal(d.poLineOutstanding(poOf('PO-2026-003').lines[1]), 0, 'that line is complete');
@@ -180,9 +181,9 @@ check('a delivery cannot exceed what was ordered (and writes nothing when it tri
   const receipts = d.listReceipts().length;
   const hose = d.getItem('part', 'PRT-005').qtyOnHand;
   // PO-2026-001 is untouched: ask for more filters than were ordered.
-  assert.equal(
+  refuses(
     d.receiveAgainst({ poId: 'PO-2026-001', locationId: 'LOC-14', qty: { 'PO-2026-001-1': 13 } }),
-    null,
+    'over-receipt',
   );
   assert.equal(d.listReceipts().length, receipts, 'no receipt was written');
   assert.equal(d.poLineReceived('PO-2026-001-1'), 0, 'and no stock moved');
@@ -199,15 +200,15 @@ check('a draft, cancelled, unknown or mis-located receipt is refused', () => {
     lines: [{ id: '', type: 'consumable', refId: 'SG-LFT-001', description: '', qty: 6, unitCost: 2.1 }],
   });
   const line = draft.lines[0].id;
-  assert.equal(d.receiveAgainst({ poId: draft.id, locationId: 'LOC-07', qty: { [line]: 6 } }), null);
+  refuses(d.receiveAgainst({ poId: draft.id, locationId: 'LOC-07', qty: { [line]: 6 } }), 'draft');
   d.updatePurchaseOrder(draft.id, { status: 'cancelled' });
-  assert.equal(d.receiveAgainst({ poId: draft.id, locationId: 'LOC-07', qty: { [line]: 6 } }), null);
+  refuses(d.receiveAgainst({ poId: draft.id, locationId: 'LOC-07', qty: { [line]: 6 } }), 'cancelled');
   const live = poOf('PO-2026-001');
   const ordered = live.lines[0].id;
-  assert.equal(d.receiveAgainst({ poId: live.id, locationId: 'LOC-99', qty: { [ordered]: 1 } }), null);
-  assert.equal(d.receiveAgainst({ poId: 'PO-9999-999', locationId: 'LOC-07', qty: { [ordered]: 1 } }), null);
-  assert.equal(d.receiveAgainst({ poId: live.id, locationId: 'LOC-14', qty: { [ordered]: 0 } }), null);
-  assert.equal(d.receiveAgainst({ poId: live.id, locationId: 'LOC-14', qty: {} }), null);
+  refuses(d.receiveAgainst({ poId: live.id, locationId: 'LOC-99', qty: { [ordered]: 1 } }), 'unknown-place');
+  refuses(d.receiveAgainst({ poId: 'PO-9999-999', locationId: 'LOC-07', qty: { [ordered]: 1 } }), 'missing');
+  refuses(d.receiveAgainst({ poId: live.id, locationId: 'LOC-14', qty: { [ordered]: 0 } }), 'nothing-to-receive');
+  refuses(d.receiveAgainst({ poId: live.id, locationId: 'LOC-14', qty: {} }), 'nothing-to-receive');
   assert.equal(d.listReceipts().length, before, 'nothing was posted by any of them');
 });
 
@@ -228,7 +229,7 @@ check('an edit cannot contradict stock that already arrived', () => {
 
 check('a PO with receipts cannot be removed; one without can', () => {
   assert.deepEqual(d.purchaseOrderRemovalBlockers('PO-2026-002'), ['1 receipt(s) posted against it']);
-  assert.equal(d.removePurchaseOrder('PO-2026-002'), false);
+  refuses(d.removePurchaseOrder('PO-2026-002'), 'in-use');
   assert.ok(d.getPurchaseOrder('PO-2026-002'), 'still there');
   assert.deepEqual(d.purchaseOrderRemovalBlockers('PO-2026-001'), []);
   const spare = d.createPurchaseOrder({
@@ -239,7 +240,7 @@ check('a PO with receipts cannot be removed; one without can', () => {
     lines: [{ id: '', type: 'consumable', refId: 'SG-LFT-001', description: '', qty: 2, unitCost: 2.1 }],
   });
   assert.equal(d.previewPurchaseOrderId().startsWith(`${spare.id.slice(0, 3)}`), true, 'ids come from a sequence');
-  assert.equal(d.removePurchaseOrder(spare.id), true);
+  persisted(d.removePurchaseOrder(spare.id));
   assert.equal(d.getPurchaseOrder(spare.id), undefined);
 });
 

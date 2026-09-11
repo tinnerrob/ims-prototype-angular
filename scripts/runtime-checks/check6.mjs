@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -66,8 +68,7 @@ check('a move re-places the stock and logs one transfer at the destination', () 
   const part = d.getItem('part', 'PRT-004'); // Grease Fitting Kit, 60 shelved at LOC-17
   const from = part.locationId;
   const before = moveCount();
-  const rec = d.moveStock('part', 'PRT-004', from, 'LOC-03', 60, 'kiosk restock for the shop');
-  assert.ok(rec, 'the move was logged');
+  const rec = persisted(d.moveStock('part', 'PRT-004', from, 'LOC-03', 60, 'kiosk restock for the shop'));
   assert.equal(rec.kind, 'transfer', 'a transfer, not an edit');
   assert.equal(rec.qty, 60, 'the count it moved');
   assert.equal(rec.locationId, 'LOC-03', 'logged at the destination');
@@ -91,8 +92,7 @@ check('a move with no note says where the stock came from', () => {
   const kit = d.getItem('kit', 'KT-002'); // a unit-held row, shelved at Warehouse 1
   const from = kit.locationId;
   const fromPath = d.locationPath(from);
-  const rec = d.moveStock('kit', 'KT-002', from, 'LOC-03', kit.qty);
-  assert.ok(rec);
+  const rec = persisted(d.moveStock('kit', 'KT-002', from, 'LOC-03', kit.qty));
   assert.equal(rec.note, `Moved from ${fromPath}`, 'the old place is the default note');
   assert.equal(kit.locationId, 'LOC-03');
 });
@@ -104,7 +104,7 @@ check('moving an unplaced row places it, and says so', () => {
   const unit = d.getItem('attachment', 'ACC-005'); // 2 @ Yard A staging
   d.updateItem('attachment', 'ACC-005', { locationId: undefined });
   assert.deepEqual(d.placements(unit), [], 'it holds nothing anywhere');
-  assert.equal(d.moveStock('attachment', 'ACC-005', 'LOC-03', 'LOC-01', 2), null, 'nowhere to move it from');
+  refuses(d.moveStock('attachment', 'ACC-005', 'LOC-03', 'LOC-01', 2), 'not-held'); // nowhere to move it from
   d.updateItem('attachment', 'ACC-005', { locationId: 'LOC-21' });
   assert.equal(unit.locationId, 'LOC-21', 'the edit places it');
   assert.equal(d.stockAt(unit, 'LOC-21'), 2, 'and the place holds its count');
@@ -117,11 +117,10 @@ check('stock found where none was recorded is a count, not a transfer', () => {
   const part = d.getItem('part', 'PRT-006'); // 8 @ LOC-21
   d.adjustStock('part', 'PRT-006', 'LOC-21', 0, 'rack emptied');
   assert.deepEqual(d.placements(part), [], 'the row now holds nothing, anywhere');
-  assert.equal(d.moveStock('part', 'PRT-006', 'LOC-21', 'LOC-19', 8), null, 'so there is nothing to move');
+  refuses(d.moveStock('part', 'PRT-006', 'LOC-21', 'LOC-19', 8), 'not-held'); // nothing to move
 
   const ledger = moveCount();
-  const rec = d.adjustStock('part', 'PRT-006', 'LOC-19', 5, 'found behind the hose rack');
-  assert.ok(rec, 'the count is what puts stock on a shelf');
+  const rec = persisted(d.adjustStock('part', 'PRT-006', 'LOC-19', 5, 'found behind the hose rack'));
   assert.equal(rec.kind, 'adjust');
   assert.equal(rec.qty, 5, 'the whole quantity is the difference from zero');
   assert.equal(rec.locationId, 'LOC-19', 'logged where it was found');
@@ -137,8 +136,7 @@ check('a physical count corrects the place it was taken at, and says so', () => 
   const at = part.locationId; // the bin it is shelved in
   const before = d.stockAt(part, at);
   const ledger = moveCount();
-  const rec = d.adjustStock('part', 'PRT-005', at, before - 3);
-  assert.ok(rec);
+  const rec = persisted(d.adjustStock('part', 'PRT-005', at, before - 3));
   assert.equal(rec.kind, 'adjust');
   assert.equal(rec.qty, -3, 'the difference, signed');
   assert.equal(rec.note, `Count corrected ${before} → ${before - 3} at ${d.locationPath(at)}`);
@@ -160,8 +158,7 @@ check('counting one place leaves the same stock in another alone', () => {
   assert.equal(part.qtyOnHand, 30, 'and its total is their sum');
   assert.equal(part.locationId, 'LOC-14', 'its home is the busiest place');
 
-  const rec = d.adjustStock('part', 'PRT-001', 'LOC-15', 9, 'cycle count');
-  assert.ok(rec);
+  const rec = persisted(d.adjustStock('part', 'PRT-001', 'LOC-15', 9, 'cycle count'));
   assert.equal(rec.qty, 3, 'the *difference at that place* — 6 → 9');
   assert.equal(d.stockAt(part, 'LOC-15'), 9);
   assert.equal(d.stockAt(part, 'LOC-14'), 24, 'the other bin is untouched');
@@ -203,23 +200,23 @@ check('what a move or a count refuses, it refuses without writing', () => {
   const gloves = d.getItem('consumable', 'SG-LFT-001');
   const at = gloves.locationId;
   const onHand = d.stockAt(gloves, at);
-  assert.equal(d.adjustStock('consumable', 'SG-LFT-001', at, onHand), null, 'a count that matches');
-  assert.equal(d.adjustStock('consumable', 'SG-LFT-001', at, -1), null, 'a negative count');
-  assert.equal(d.adjustStock('consumable', 'SG-LFT-001', 'LOC-999', 5), null, 'no such place to count');
-  assert.equal(d.adjustStock('consumable', 'NOPE-001', at, 5), null, 'an unknown row');
-  assert.equal(d.adjustStock('serialized', 'FL-402', at, 3), null, 'a unit is not counted, it is a row');
-  assert.equal(d.adjustStock('kit', 'KT-001', at, 2), null, 'nor is a kit (an owned count)');
+  refuses(d.adjustStock('consumable', 'SG-LFT-001', at, onHand), 'no-change'); // a count that matches
+  refuses(d.adjustStock('consumable', 'SG-LFT-001', at, -1), 'bad-quantity'); // a negative count
+  refuses(d.adjustStock('consumable', 'SG-LFT-001', 'LOC-999', 5), 'unknown-place');
+  refuses(d.adjustStock('consumable', 'NOPE-001', at, 5), 'missing'); // an unknown row
+  refuses(d.adjustStock('serialized', 'FL-402', at, 3), 'not-counted'); // a unit is a row
+  refuses(d.adjustStock('kit', 'KT-001', at, 2), 'not-counted'); // nor is a kit (an owned count)
   const moved = d.getItem('part', 'PRT-004'); // 60 @ LOC-03 since the first check
-  assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-03', 60), null, 'moving it where it already is');
-  assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-999', 60), null, 'no such destination');
-  assert.equal(d.moveStock('part', 'PRT-004', 'LOC-999', 'LOC-03', 60), null, 'no such source');
-  assert.equal(d.moveStock('part', 'NOPE-001', 'LOC-03', 'LOC-01', 5), null, 'no such row');
-  assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-01', 0), null, 'a zero move');
-  assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-01', 61), null, 'more than the place holds');
-  assert.equal(d.moveStock('part', 'PRT-004', 'LOC-18', 'LOC-01', 1), null, 'from a place holding none of it');
-  assert.equal(d.moveStock('kit', 'KT-002', 'LOC-03', 'LOC-01', 2), null, 'half a unit-held row is not a thing');
-  assert.equal(d.moveStock('labor', 'EMP-001', 'LOC-03', 'LOC-01', 1), null, 'a person is not stock');
-  assert.equal(d.moveStock('serialized', 'BL-119', 'LOC-03', 'LOC-01', 1), null, 'a unit that is out is not on a shelf');
+  refuses(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-03', 60), 'same-place');
+  refuses(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-999', 60), 'unknown-place');
+  refuses(d.moveStock('part', 'PRT-004', 'LOC-999', 'LOC-03', 60), 'unknown-place');
+  refuses(d.moveStock('part', 'NOPE-001', 'LOC-03', 'LOC-01', 5), 'missing');
+  refuses(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-01', 0), 'bad-quantity');
+  refuses(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-01', 61), 'not-held'); // more than it holds
+  refuses(d.moveStock('part', 'PRT-004', 'LOC-18', 'LOC-01', 1), 'not-held'); // the place holds none
+  refuses(d.moveStock('kit', 'KT-002', 'LOC-03', 'LOC-01', 2), 'partial-unit'); // half a kit
+  refuses(d.moveStock('labor', 'EMP-001', 'LOC-03', 'LOC-01', 1), 'not-stock'); // a person
+  refuses(d.moveStock('serialized', 'BL-119', 'LOC-03', 'LOC-01', 1), 'out-on-rent');
   assert.equal(d.stockAt(gloves, at), onHand);
   assert.equal(gloves.status, 'In Stock');
   assert.equal(d.stockAt(moved, 'LOC-03'), 60, 'and the row it aimed at is where it was');
@@ -238,8 +235,7 @@ check('a reorder raises a draft document, and moves no stock', () => {
   assert.ok(row, 'the row now reads as low (no fixture row was low before)');
   const before = onHandOf(row.type, row.ref);
   const pos = d.listPurchaseOrders().length;
-  raised = d.raiseReorder(row.type, row.ref);
-  assert.ok(raised, 'the reorder was raised');
+  raised = persisted(d.raiseReorder(row.type, row.ref));
   assert.equal(d.listPurchaseOrders().length, pos + 1, 'it is a new row, not a quantity edit');
   assert.equal(raised.status, 'draft', 'a draft for the buyer to finish');
   assert.equal(raised.supplierId, '', 'no supplier is invented for us');
@@ -252,22 +248,20 @@ check('a reorder raises a draft document, and moves no stock', () => {
   assert.equal(onHandOf(row.type, row.ref), before, 'THE POINT: on-hand did not move');
   assert.equal(d.poLineReceived(raised.lines[0].id), 0, 'and nothing has arrived');
   assert.equal(d.reorders().some((r) => r.ref === row.ref), true, 'so the row is still low');
-  assert.equal(d.raiseReorder('consumable', 'NOPE-001'), null, 'an unknown row raises nothing');
+  refuses(d.raiseReorder('consumable', 'NOPE-001'), 'missing'); // an unknown row raises nothing
 });
 
 check('a draft buys nothing — a supplier and a receipt land the stock', () => {
   const line = raised.lines[0];
   const place = d.getItem(line.type, line.refId).locationId;
   const before = onHandOf(line.type, line.refId);
-  assert.equal(
+  refuses(
     d.receiveAgainst({ poId: raised.id, locationId: place, qty: { [line.id]: 1 } }),
-    null,
-    'a draft is not receivable',
-  );
+    'draft',
+  ); // a draft is not receivable
   const supplier = d.supplierParties()[0];
-  assert.equal(d.updatePurchaseOrder(raised.id, { supplierId: supplier.id, status: 'ordered' }), true);
-  const receipt = d.receiveAgainst({ poId: raised.id, locationId: place, qty: { [line.id]: line.qty } });
-  assert.ok(receipt, 'the ordered stock arrives');
+  persisted(d.updatePurchaseOrder(raised.id, { supplierId: supplier.id, status: 'ordered' }));
+  const receipt = persisted(d.receiveAgainst({ poId: raised.id, locationId: place, qty: { [line.id]: line.qty } }));
   assert.equal(receipt.supplierId, supplier.id, 'against the supplier the buyer chose');
   assert.equal(onHandOf(line.type, line.refId), before + line.qty, 'and only the receipt moved it');
   const logged = d.listMovements().filter((m) => m.receiptId === receipt.id);
@@ -300,11 +294,10 @@ check('every sub-rental names a supplier party, not a typed vendor', () => {
 check('a sub-rental with no partner is refused outright', () => {
   const before = d.listRentals().length;
   const base = { itemId: null, assetName: 'Test Roller 3T', orderId: null, vendorCost: 100, retailRate: 210, qty: 1 };
-  assert.equal(d.createRental({ ...base, supplierId: '' }), null, 'no vendor');
-  assert.equal(d.createRental({ ...base, supplierId: 'PTY-999' }), null, 'an unknown vendor');
+  refuses(d.createRental({ ...base, supplierId: '' }), 'no-vendor');
+  refuses(d.createRental({ ...base, supplierId: 'PTY-999' }), 'unknown-vendor');
   assert.equal(d.listRentals().length, before, 'nothing was written');
-  const rec = d.createRental({ ...base, supplierId: 'PTY-012' });
-  assert.ok(rec, 'a real vendor is accepted');
+  const rec = persisted(d.createRental({ ...base, supplierId: 'PTY-012' }));
   assert.equal(d.listRentals().length, before + 1);
   assert.equal(d.rentalsFromSupplier('PTY-012').some((r) => r.id === rec.id), true);
   assert.equal(d.rentalSpread(rec), 110, '(210 - 100) x 1');

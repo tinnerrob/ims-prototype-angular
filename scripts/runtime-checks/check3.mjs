@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -107,12 +109,12 @@ check('itemsAtLocation answers for a node and for its subtree', () => {
 });
 
 check('the removal guard blocks a node that holds stock', () => {
-  assert.equal(d.removeLocation('LOC-07'), false, 'the safety bay holds items');
+  refuses(d.removeLocation('LOC-07'), 'in-use'); // the safety bay holds items
   assert.ok(d.getLocation('LOC-07'), 'and it is still there');
-  assert.equal(d.removeLocation('LOC-99'), false, 'an unknown id removes nothing');
+  refuses(d.removeLocation('LOC-99'), 'missing'); // an unknown id removes nothing
   // LOC-18 (Aisle 3) is empty, and its child LOC-19 (Bay C-04) holds PRT-005:
   // removing the rack moves the bay up, so the item keeps a valid FK.
-  assert.equal(d.removeLocation('LOC-18'), true, 'an empty rack can go');
+  persisted(d.removeLocation('LOC-18')); // an empty rack can go
   assert.equal(d.getLocation('LOC-19').parentId, 'LOC-05', 'its child moved up one level');
   assert.equal(
     d.locationPath(d.getItem('part', 'PRT-005').locationId),

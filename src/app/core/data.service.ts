@@ -5,6 +5,7 @@ import {
   CatalogType,
   CATALOG_TYPE_KEYS,
   CategoryOption,
+  CommandResult,
   Credential,
   DemoAccount,
   Dispatch,
@@ -34,14 +35,21 @@ import {
   PricingSettings,
   PurchaseOrder,
   PurchaseOrderLine,
+  PurchaseOrderRefusal,
   PurchaseOrderStatus,
   PurchaseProgress,
   Receipt,
   ReceiptLine,
+  ReceiptRefusal,
+  RemovalRefusal,
   RentalSub,
+  RentalRefusal,
+  ReorderRefusal,
   SignInResult,
   SessionTouch,
+  StockCountRefusal,
   StockLevel,
+  StockMoveRefusal,
   TaxSchedule,
   Tenant,
   Timesheet,
@@ -893,17 +901,22 @@ export class DataService {
   }
 
   /**
-   * Remove a party. Refused (`false`) while a document names it — the rows that
-   * point at the party would keep a dangling FK, and since the order screens
-   * derive the customer's name from `party_id`, the gap would show. Deactivate
-   * instead (`togglePartyActive`) if the trade has ended.
+   * Remove a party. Refused (C2) while a document names it — the rows that point at
+   * the party would keep a dangling FK, and since the order screens derive the
+   * customer's name from `party_id`, the gap would show. Deactivate instead
+   * (`togglePartyActive`) if the trade has ended.
+   *
+   * The reason tells the two cases apart: `'in-use'` is a rule holding (the screen
+   * prints which records from `partyRemovalBlockers()`, the same list its disabled
+   * button warns with), and `'missing'` is a row that went away underneath the screen.
    */
-  removeParty(id: string): boolean {
+  removeParty(id: string): CommandResult<void, RemovalRefusal> {
     const i = this.db.parties.findIndex((x) => x.id === id);
-    if (i < 0 || this.partyRemovalBlockers(id).length > 0) return false;
+    if (i < 0) return { ok: false, reason: 'missing' };
+    if (this.partyRemovalBlockers(id).length > 0) return { ok: false, reason: 'in-use' };
     this.db.parties.splice(i, 1);
     this.save();
-    return true;
+    return { ok: true };
   }
 
   /**
@@ -1561,14 +1574,19 @@ export class DataService {
    * and the Purchasing page's editor refuses to save a PO without one. Stock still
    * arrives only through `receiveAgainst()` on that order, so the one-click path
    * and the ledger agree.
+   *
+   * Answers the draft it raised (C2), so the caller keeps the row rather than
+   * re-reading it, or the reason it could not: `'missing'` for a catalogue row that
+   * is gone, `'not-purchasable'` for one nobody stocks.
    */
-  raiseReorder(type: CatalogType, ref: string): PurchaseOrder | null {
+  raiseReorder(type: CatalogType, ref: string): CommandResult<PurchaseOrder, ReorderRefusal> {
     const it = this.getItem(type, ref);
-    if (!it || !isPurchasable(type)) return null;
+    if (!it) return { ok: false, reason: 'missing' };
+    if (!isPurchasable(type)) return { ok: false, reason: 'not-purchasable' };
     const target = Math.max((it.reorderPoint ?? 0) * 2, 1);
     const shortfall = Math.max(target - this.countedQty(it), 1);
     const today = dISO(new Date());
-    return this.createPurchaseOrder({
+    const raised = this.createPurchaseOrder({
       supplierId: '',
       status: 'draft',
       orderedAt: today,
@@ -1586,6 +1604,7 @@ export class DataService {
         },
       ],
     });
+    return { ok: true, value: raised };
   }
 
   private static readonly ID_PREFIX: Record<CatalogType, string> = {
@@ -1742,29 +1761,29 @@ export class DataService {
   }
 
   /**
-   * Remove a location. Refused (`false`) while stock is stored *at* it or the
-   * ledger records a movement there: those rows point at this row, and clearing
-   * or re-pointing them silently is a data decision the grid must not take on
-   * the user's behalf — the same rule `removeLocationType` applies while a type
-   * is in use. Callers disable the action (see `locationRemovalBlockers`) or
-   * abort on `false`.
+   * Remove a location. Refused (C2) while stock is stored *at* it or the ledger
+   * records a movement there: those rows point at this row, and clearing or
+   * re-pointing them silently is a data decision the grid must not take on the
+   * user's behalf — the same rule `removeLocationType` applies while a type is in
+   * use. The reason says which of the two it was (`'in-use'`, with the records
+   * named by `locationRemovalBlockers`, or `'missing'` for a row that is gone).
    *
    * On success its children are re-parented to the removed node's own parent
    * (move up one level) so the hierarchy stays intact and nothing is orphaned —
    * the adjacency-list equivalent of re-pointing the child rows' `parent_id` at
    * the deleted node's parent. Items stored in those children keep a valid FK.
    */
-  removeLocation(id: string): boolean {
+  removeLocation(id: string): CommandResult<void, RemovalRefusal> {
     const i = this.db.settings.locations.findIndex((x) => x.id === id);
-    if (i < 0) return false;
-    if (this.locationRemovalBlockers(id).length > 0) return false;
+    if (i < 0) return { ok: false, reason: 'missing' };
+    if (this.locationRemovalBlockers(id).length > 0) return { ok: false, reason: 'in-use' };
     const [removed] = this.db.settings.locations.splice(i, 1);
     const up = removed.parentId ?? null;
     for (const child of this.db.settings.locations) {
       if (child.parentId === id) child.parentId = up;
     }
     this.save();
-    return true;
+    return { ok: true };
   }
 
   /** True when `candidateId` is `ofId` or sits anywhere beneath it (cycle guard). */
@@ -2089,14 +2108,18 @@ export class DataService {
     this.save();
   }
 
-  /** Remove a type when no location uses it. Returns false while still in use. */
-  removeLocationType(name: string): boolean {
-    if (this.locationTypeCount(name) > 0) return false;
+  /**
+   * Remove a type when no location uses it. Refused (C2) while still in use
+   * (`'in-use'`), and for a name nothing holds (`'missing'`) — the same two answers
+   * every guarded removal gives.
+   */
+  removeLocationType(name: string): CommandResult<void, RemovalRefusal> {
+    if (this.locationTypeCount(name) > 0) return { ok: false, reason: 'in-use' };
     const i = this.db.settings.locationTypes.findIndex((t) => t.name === name);
-    if (i < 0) return false;
+    if (i < 0) return { ok: false, reason: 'missing' };
     this.db.settings.locationTypes.splice(i, 1);
     this.save();
-    return true;
+    return { ok: true };
   }
 
   /* ----------------------------- movements ------------------------------ */
@@ -2217,6 +2240,10 @@ export class DataService {
    * A unit-held row (serialized, kit, attachment) sits in one place with one
    * count, so its `qty` must be exactly the whole row: moving a kit's stock
    * *partly* would leave half a kit somewhere, which the model can't express.
+   *
+   * Every refusal above has its own reason (C2) and each is a different sentence on
+   * screen, which is why they are not one `'refused'` — the move form can be filled in
+   * against a shelf somebody else just emptied.
    */
   moveStock(
     type: CatalogType,
@@ -2225,17 +2252,20 @@ export class DataService {
     toLocationId: string,
     qty: number,
     note = '',
-  ): Movement | null {
+  ): CommandResult<Movement, StockMoveRefusal> {
     const item = this.getItem(type, id);
-    if (!item || !isPurchasable(type)) return null;
-    if (!this.getLocation(fromLocationId) || !this.getLocation(toLocationId)) return null;
-    if (fromLocationId === toLocationId) return null;
-    if (type === 'serialized' && this.isOut(id)) return null;
+    if (!item) return { ok: false, reason: 'missing' };
+    if (!isPurchasable(type)) return { ok: false, reason: 'not-stock' };
+    if (!this.getLocation(fromLocationId) || !this.getLocation(toLocationId)) {
+      return { ok: false, reason: 'unknown-place' };
+    }
+    if (fromLocationId === toLocationId) return { ok: false, reason: 'same-place' };
+    if (type === 'serialized' && this.isOut(id)) return { ok: false, reason: 'out-on-rent' };
     const n = Math.floor(Number(qty));
-    if (!Number.isFinite(n) || n <= 0) return null;
+    if (!Number.isFinite(n) || n <= 0) return { ok: false, reason: 'bad-quantity' };
 
     const held = this.stockAt(item, fromLocationId);
-    if (held <= 0 || n > held) return null;
+    if (held <= 0 || n > held) return { ok: false, reason: 'not-held' };
 
     if (isCountedStock(type)) {
       // The two level writes, then the totals they imply: the source keeps what
@@ -2247,7 +2277,7 @@ export class DataService {
     } else {
       // One place, one count: only the whole row can move, and the FK *is* the
       // placement — there is no level row to move.
-      if (n !== held) return null;
+      if (n !== held) return { ok: false, reason: 'partial-unit' };
       item.locationId = toLocationId;
     }
 
@@ -2264,7 +2294,7 @@ export class DataService {
       note: note || `Moved from ${this.locationPath(fromLocationId)}`,
     });
     this.save();
-    return rec;
+    return { ok: true, value: rec };
   }
 
   /**
@@ -2284,6 +2314,10 @@ export class DataService {
    * edit that overwrote the old number. Status follows the count through
    * `refreshStockStatus()`, so a row can fall to `Low` (or climb out of it) the
    * moment someone counts the shelf rather than only when a receipt arrives.
+   *
+   * Refused (C2) with a reason for each of those branches: a count that *matches*
+   * is `'no-change'` rather than a silent success, because a person who counted a
+   * shelf is owed an answer either way.
    */
   adjustStock(
     type: CatalogType,
@@ -2291,16 +2325,17 @@ export class DataService {
     locationId: string,
     countedQty: number,
     note = '',
-  ): Movement | null {
+  ): CommandResult<Movement, StockCountRefusal> {
     const item = this.getItem(type, id);
-    if (!item || !isCountedStock(type)) return null;
-    if (!this.getLocation(locationId)) return null;
+    if (!item) return { ok: false, reason: 'missing' };
+    if (!isCountedStock(type)) return { ok: false, reason: 'not-counted' };
+    if (!this.getLocation(locationId)) return { ok: false, reason: 'unknown-place' };
     const counted = Math.floor(Number(countedQty));
-    if (!Number.isFinite(counted) || counted < 0) return null;
+    if (!Number.isFinite(counted) || counted < 0) return { ok: false, reason: 'bad-quantity' };
 
     const before = this.stockAt(item, locationId);
     const delta = counted - before;
-    if (delta === 0) return null;
+    if (delta === 0) return { ok: false, reason: 'no-change' };
 
     this.writeLevel(type, id, locationId, counted);
     this.syncStockTotals(item);
@@ -2314,7 +2349,7 @@ export class DataService {
       note: note || `Count corrected ${before} → ${counted} at ${this.locationPath(locationId)}`,
     });
     this.save();
-    return rec;
+    return { ok: true, value: rec };
   }
 
   /** Quantity a stock row holds in total, whichever field its type keeps it in. */
@@ -2398,10 +2433,15 @@ export class DataService {
    * receipt, not the order, is the record of that stock), and a PO that has
    * delivered cannot be cancelled. The order's *lifecycle* status stays the
    * chooser's; progress is always derived (see `poProgress`).
+   *
+   * Those are the store's rules holding, not a refused request, so they are not a
+   * `reason` — the edit is applied with them honoured. The one honest refusal is
+   * `'missing'` (C2): an editor whose order went away would otherwise drop the
+   * person's edits silently.
    */
-  updatePurchaseOrder(id: string, patch: Partial<PurchaseOrder>): boolean {
+  updatePurchaseOrder(id: string, patch: Partial<PurchaseOrder>): CommandResult<void, PurchaseOrderRefusal> {
     const po = this.getPurchaseOrder(id);
-    if (!po) return false;
+    if (!po) return { ok: false, reason: 'missing' };
     const next = this.normalizePurchaseOrder({ ...po, ...patch, id: po.id });
     if (patch.lines) {
       const arrived = new Map(next.lines.map((l) => [l.id, this.poLineReceived(l.id)]));
@@ -2415,7 +2455,7 @@ export class DataService {
     if (patch.status === 'cancelled' && this.poProgress(po) !== 'none') next.status = po.status;
     Object.assign(po, next);
     this.save();
-    return true;
+    return { ok: true };
   }
 
   /** Why a PO can't be removed right now (empty when it can) — grid tooltip. */
@@ -2424,13 +2464,18 @@ export class DataService {
     return receipts > 0 ? [`${receipts} receipt(s) posted against it`] : [];
   }
 
-  /** Remove a PO. Refused while a receipt points at it (append-only history). */
-  removePurchaseOrder(id: string): boolean {
+  /**
+   * Remove a PO. Refused (C2) while a receipt points at it — history is
+   * append-only, so the order a delivery was posted against stays (cancel it
+   * instead); `'missing'` for an id nothing holds.
+   */
+  removePurchaseOrder(id: string): CommandResult<void, RemovalRefusal> {
     const i = this.db.purchaseOrders.findIndex((p) => p.id === id);
-    if (i < 0 || this.purchaseOrderRemovalBlockers(id).length > 0) return false;
+    if (i < 0) return { ok: false, reason: 'missing' };
+    if (this.purchaseOrderRemovalBlockers(id).length > 0) return { ok: false, reason: 'in-use' };
     this.db.purchaseOrders.splice(i, 1);
     this.save();
-    return true;
+    return { ok: true };
   }
 
   /** Ordered value of a PO (what the paperwork says it will cost). */
@@ -2527,11 +2572,13 @@ export class DataService {
   /**
    * Post a goods receipt — the operation that makes stock exist.
    *
-   * Refused (returns `null`, writing nothing) when the order is a draft or
-   * cancelled, the destination isn't a real location, nothing positive was asked
-   * for, or a line would receive more than is outstanding: an order can't
-   * deliver more than it ordered, and a half-applied receipt would be worse than
-   * none.
+   * Refused (C2, writing nothing) when the order is missing, a draft or cancelled,
+   * the destination isn't a real location, nothing positive was asked for, or a line
+   * would receive more than is outstanding: an order can't deliver more than it
+   * ordered, and a half-applied receipt would be worse than none. The reason names
+   * which of those it was, so the screen can say it — this is the one command whose
+   * refusals a person is most likely to meet, since the editor is filled in against
+   * an order somebody else may have changed.
    *
    * On success it writes, in one persisted save:
    *   - the receipt row (one line per landed *row* — see `landStock`);
@@ -2542,18 +2589,20 @@ export class DataService {
    * `at` / `byUserId` are the API's request context; the seed passes both so a
    * fixture doesn't move with the clock or with whoever is signed in.
    */
-  receiveAgainst(input: ReceiveInput): Receipt | null {
+  receiveAgainst(input: ReceiveInput): CommandResult<Receipt, ReceiptRefusal> {
     const po = this.getPurchaseOrder(input.poId);
-    if (!po || po.status === 'draft' || po.status === 'cancelled') return null;
-    if (!this.getLocation(input.locationId)) return null;
+    if (!po) return { ok: false, reason: 'missing' };
+    if (po.status === 'draft') return { ok: false, reason: 'draft' };
+    if (po.status === 'cancelled') return { ok: false, reason: 'cancelled' };
+    if (!this.getLocation(input.locationId)) return { ok: false, reason: 'unknown-place' };
     const wanted: { line: PurchaseOrderLine; qty: number }[] = [];
     for (const line of po.lines) {
       const qty = Math.floor(Number(input.qty[line.id] ?? 0));
       if (qty <= 0) continue;
-      if (qty > this.poLineOutstanding(line)) return null;
+      if (qty > this.poLineOutstanding(line)) return { ok: false, reason: 'over-receipt' };
       wanted.push({ line, qty });
     }
-    if (!wanted.length) return null;
+    if (!wanted.length) return { ok: false, reason: 'nothing-to-receive' };
 
     const rec: Receipt = {
       id: this.nextReceiptId(),
@@ -2591,7 +2640,7 @@ export class DataService {
       }
     }
     this.save();
-    return rec;
+    return { ok: true, value: rec };
   }
 
   /**
@@ -2992,14 +3041,16 @@ export class DataService {
    * Record a sub-rental. The supplier is required and must be a partner we
    * know: a sub-rental with no vendor is an asset from nowhere, and the
    * wholesale cost side of the ledger has to point at a row (`supplierParties()`
-   * feeds the picker).
+   * feeds the picker). Refused (C2) with `'no-vendor'` when none was named and
+   * `'unknown-vendor'` when the id names nobody.
    */
-  createRental(data: Omit<RentalSub, 'id'>): RentalSub | null {
-    if (!data.supplierId || !this.getParty(data.supplierId)) return null;
+  createRental(data: Omit<RentalSub, 'id'>): CommandResult<RentalSub, RentalRefusal> {
+    if (!data.supplierId) return { ok: false, reason: 'no-vendor' };
+    if (!this.getParty(data.supplierId)) return { ok: false, reason: 'unknown-vendor' };
     const rec: RentalSub = { ...data, id: this.nextRentalId() };
     this.db.rentals.push(rec);
     this.save();
-    return rec;
+    return { ok: true, value: rec };
   }
 
   removeRental(id: string): void {
@@ -3404,11 +3455,12 @@ export class DataService {
    * `POST /api/sessions`.
    *
    * The *answer* is the shape the API returns (the person, or one refusal a screen
-   * may print), and the digest comparison behind it is the only part the server
-   * replaces. An unknown address and a wrong password answer the same `'invalid'`,
-   * so the form cannot be used to discover who works here; `'inactive'` is told only
-   * to somebody who has already proved the credential, because they already knew the
-   * account exists. Nothing here returns, logs or keeps what was typed.
+   * may print) — one `CommandResult` for the whole store (C2), which is the same shape
+   * every other command refuses in. The digest comparison behind it is the only part
+   * the server replaces. An unknown address and a wrong password answer the same
+   * `'invalid'`, so the form cannot be used to discover who works here; `'inactive'` is
+   * told only to somebody who has already proved the credential, because they already
+   * knew the account exists. Nothing here returns, logs or keeps what was typed.
    */
   async signIn(email: string, password: string): Promise<SignInResult> {
     const wanted = email.trim().toLowerCase();
@@ -3426,7 +3478,7 @@ export class DataService {
       expiresAt: expiryFrom(SESSION_MINUTES),
     };
     this.save();
-    return { ok: true, user };
+    return { ok: true, value: user };
   }
 
   /**
@@ -4388,9 +4440,13 @@ export class DataService {
    * can't describe stock the store doesn't have. By the time the app renders,
    * PO-2026-002 is delivered, PO-2026-003 is partial, and the units those
    * receipts landed are real rows in the catalog.
+   *
+   * C2 made the refusal answerable, so the fixture now *checks* its own claim: a
+   * posting that was refused would leave the demo showing a delivered order with
+   * nothing behind it, which is worse than a loud failure here.
    */
   private seedReceipts(): void {
-    this.receiveAgainst({
+    const delivered = this.receiveAgainst({
       poId: 'PO-2026-002',
       locationId: YARD_STAGING,
       qty: { 'PO-2026-002-1': 2, 'PO-2026-002-2': 2 },
@@ -4398,7 +4454,7 @@ export class DataService {
       at: '2026-08-28T09:20:00',
       byUserId: DEMO_OWNER_ID,
     });
-    this.receiveAgainst({
+    const partial = this.receiveAgainst({
       poId: 'PO-2026-003',
       locationId: 'LOC-19', // Bay C-04: the bin the hose stock already lives in
       qty: { 'PO-2026-003-2': 4 }, // 4 of 12 — the excavator hasn't landed
@@ -4406,6 +4462,8 @@ export class DataService {
       at: '2026-09-08T14:05:00',
       byUserId: DEMO_OWNER_ID,
     });
+    if (!delivered.ok) throw new Error(`seed: PO-2026-002 was not received (${delivered.reason})`);
+    if (!partial.ok) throw new Error(`seed: PO-2026-003 was not received (${partial.reason})`);
   }
 
   /**

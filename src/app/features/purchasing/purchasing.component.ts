@@ -584,15 +584,15 @@ export class PurchasingComponent {
       const n = Math.floor(Number(this.receiveQty[line.id]) || 0);
       if (n > 0) qty[line.id] = n;
     }
-    const rec = this.data.receiveAgainst({
+    const posted = this.data.receiveAgainst({
       poId: po.id,
       locationId: this.receiveLocationId,
       qty,
       note: this.receiveNote.trim(),
     });
-    if (rec) {
+    if (posted.ok) {
       this.closeReceive();
-      this.showReceipt(rec);
+      this.showReceipt(posted.value);
     }
   }
 

@@ -89,7 +89,7 @@ export class DashboardComponent {
    * it, receive it — and the receipt is what moves the quantity.
    */
   raiseReorder(type: CatalogType, ref: string): void {
-    if (this.data.raiseReorder(type, ref)) this.router.navigate(['/purchasing']);
+    if (this.data.raiseReorder(type, ref).ok) this.router.navigate(['/purchasing']);
   }
 
   openView(id: string): void {

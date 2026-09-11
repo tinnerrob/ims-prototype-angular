@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { persisted, refuses } from './command-result.mjs';
+
 const mem = new Map();
 globalThis.localStorage = {
   getItem: (k) => (mem.has(k) ? mem.get(k) : null),
@@ -84,24 +86,24 @@ check('a party a document names cannot be removed', () => {
   for (const o of orders) {
     const blockers = d.partyRemovalBlockers(o.partyId);
     assert.ok(blockers.some((b) => b.includes('order(s)')), `${o.partyId}: ${blockers.join(', ')}`);
-    assert.equal(d.removeParty(o.partyId), false, `${o.partyId} is refused`);
+    refuses(d.removeParty(o.partyId), 'in-use');
     assert.ok(d.getParty(o.partyId), `${o.partyId} is still there`);
   }
 });
 
 check('the guard reads the buying side and the sub-rentals too', () => {
   const po = d.listPurchaseOrders()[0];
-  assert.equal(d.removeParty(po.supplierId), false, 'a supplier with a PO is refused');
+  refuses(d.removeParty(po.supplierId), 'in-use'); // a supplier with a PO is refused
   assert.ok(
     d.partyRemovalBlockers(po.supplierId).some((b) => b.includes('purchase order(s)')),
     'and says why',
   );
   const receipts = d.listReceipts();
   assert.ok(receipts.length > 0);
-  for (const r of receipts) assert.equal(d.removeParty(r.supplierId), false, `${r.id}'s supplier stays`);
+  for (const r of receipts) refuses(d.removeParty(r.supplierId), 'in-use'); // its supplier stays
   const sub = d.listRentals()[0];
   assert.ok(d.partyRemovalBlockers(sub.supplierId).some((b) => b.includes('sub-rental(s)')), 'a sub-rental vendor too');
-  assert.equal(d.removeParty(sub.supplierId), false);
+  refuses(d.removeParty(sub.supplierId), 'in-use');
 });
 
 check('a party nothing points at still removes', () => {
@@ -109,7 +111,7 @@ check('a party nothing points at still removes', () => {
   // mistake must still be removable, or the only way out of a typo is a reseed.
   const rec = d.createParty({ name: 'Transient Partner', kinds: ['customer'], contact: '', phone: '', email: '', billingAddress: '', billingCycle: 'net-30', notes: '' });
   assert.equal(d.partyRemovalBlockers(rec.id).length, 0, 'nothing names it');
-  assert.equal(d.removeParty(rec.id), true, 'so it removes');
+  persisted(d.removeParty(rec.id)); // so it removes
   assert.equal(d.getParty(rec.id), undefined, 'and it is gone');
 });
 

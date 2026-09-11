@@ -16,10 +16,14 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
 cd "$ROOT"
+# The same sources the app builds, with the same strictness: the CLI default is
+# `--strict false`, and a loose compile *changes what TypeScript can prove* — it
+# cannot narrow a discriminated union by `if (!result.ok)` without strictNullChecks,
+# so a harness that compiled loosely would reject code `ng build` accepts (C2).
 npx tsc src/app/core/data.service.ts src/app/core/session.service.ts src/app/core/modules.service.ts \
   src/app/core/vertical-metadata.ts \
   --outDir "$OUT" --module es2022 --target es2022 --moduleResolution bundler \
-  --experimentalDecorators --skipLibCheck --strict false
+  --experimentalDecorators --skipLibCheck --strict true
 
 # TypeScript leaves the relative imports extensionless (the Angular bundler
 # resolves them); Node's ESM loader needs the real file name.
@@ -44,4 +48,4 @@ cp src/app/core/api.ts src/app/app.config.ts "$OUT/"
 mkdir -p "$OUT/src" && cp -r src/app "$OUT/src/app"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs && node check20.mjs
