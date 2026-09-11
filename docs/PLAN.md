@@ -43,6 +43,7 @@ This file is the plan. `HANDOFF.md` is the current state. When they disagree,
 | A9 | Every table is a tenant's: the configuration rows (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`, `yard`) join `auditedRows()`, and a rename keeps the row's history | ✅ `c1812bf` |
 | A10 | The last hole A8 named: `orders.party` (a stored copy of the counterparty's name) leaves the model — the screens read the join — and `partyRemovalBlockers()` keeps the FK from dangling | ✅ `99653e1` |
 | A11 | Negotiated rates per party: `price_cards` + `price_card_lines` hang off `parties`, an order bills at the card in force on the day its booking starts (`cardRateFor()`), a supplier's card is the PO editor's cost default (one rule, re-applied when the supplier changes), and the Pricing page edits them | ✅ `13f8f5b` |
+| A11.2 | The invoice bills what the Gross prints: whole weeks/months per period (`wholeUnitsBilled()`), on the line's own days, at the party's own cadence (`partyCycleDays()` — the only reader `parties.billing_cycle` ever had), with "Run Next Cycle" (`runNextCycle()`) advancing every active order, so a booking's cycles tile it and add up to its `lineTotal()` | ✅ |
 
 ### Acceptance criteria per increment
 
@@ -217,7 +218,10 @@ counterparty, resolved through the FK rather than written down twice. So
 `cardRateFor(partyId, item, onDate)` — which means a repriced card moves every
 order it covers at once and the order row is never written. The catalog keeps its
 own list prices (`items.rate_daily` is the fallback, not the override), so the
-"printed rate" and the "Gross above it" cannot drift: they are the same call.
+"printed rate" and the "Gross above it" cannot drift: they are the same call. The
+line's own risk premium is the one factor the *amount* applies and the printed rate
+does not (A11.2, and the prototype's own split), so the figure a row shows stays the
+figure a counterparty agreed.
 
 The card carries a **window**, and that is what makes the join safe rather than
 retroactive: an order prices at the card in force on the day its *booking* starts
@@ -243,6 +247,39 @@ table, two readers, each reading its own half. The counterparty is a row in
 A5 made a customer and a supplier the same row, so a partner that is both has one
 card, not two that drift. That FK joins the party guard, so a party whose only row
 is a card cannot be removed either — the card has to go first.
+
+**A11.2 — the invoice bills what the Gross prints.** A11 made the *rate* a join;
+auditing the money it produces found the invoicing engine disagreeing with it, and
+disagreeing worse than the gap list admitted: `lineAmountForPeriod()` multiplied the
+rate `rateBasis()` returns — which can be the *weekly* or *monthly* one — by the day
+count of the cycle, so a 21-day boom lift invoiced `2325 x 21` where Order Details
+prints three weeks, and a rental on an expired card could not agree with itself
+either (the printed rate came from one day count, the amount from another). The
+prototype's rule is the one the increment rests on: a rental on the weekly or monthly
+basis bills in **whole units** (`wholeUnitsBilled()`), each unit going to the cycle
+that holds the majority of its days, so every unit lands in exactly one cycle and a
+booking's cycles add up to its `lineTotal()`. The cuts that make that true are one
+reader each: the basis steps on the **line's own days** (`lineDays()` — a three-day
+line inside a 21-day order is a daily booking, and the invoice bills the same three
+days), the basis *prints* the agreed rate while the *amount* applies the line's risk
+premium once (the prototype's split, and the only way `rate x units x (1 + premium)`
+reconciles), and the period length is the **party's cadence** (`partyCycleDays()`
+reads `parties.billing_cycle` — a stored column with no reader until now; the
+fixture's three customers bill weekly, bi-weekly and monthly, and their three cycle
+shapes are what proves the read).
+
+"Run Next Cycle" is part of the same repair: it was wired to a store method that only
+raised cycle 1 for orders that had none, so no second cycle could exist and the rest
+of every booking was unreachable — the button's own comment described the behaviour
+the store did not have. `runNextCycle()` now raises the period that follows each
+active order's last one, at that party's cadence, and raises **nothing** when the
+period bills no base: the prototype rolls every unpaid invoice forever, which
+collects `$0` cycles still carrying a fuel charge, and stops the clock entirely the
+moment a customer settles one. `check13` holds the invariant directly — the
+fixture's cycles tile the booking and their bases sum to the Gross, to the cent —
+and the same reconciliation caught the fee chain's one wrong constant: the damage
+waiver is 3% of the base (the prototype's `invoiceCompute`), not the 5% the port had
+carried unremarked since its first commit.
 
 
 ## Open decisions (need the owner's call)
@@ -284,7 +321,7 @@ is a card cannot be removed either — the card has to go first.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 135 runtime checks against the real store, no browser
+npm run check:store    # 140 runtime checks against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -412,7 +449,8 @@ hand-roll `localStorage` and assert on the store's own output:
   list (a PO's supplier, every receipt's supplier, a sub-rental vendor), and a
   party nothing points at still removes — the guard is a guard, not a freeze.
 
-- `check13.mjs` — **A11, 9 checks:** a negotiated rate is a join like the name is.
+- `check13.mjs` — **A11 + A11.2, 14 checks:** a negotiated rate is a join like the name
+  is, and the invoice bills it whole.
   Every card in the fixture names a real party and carries its stamps; one order
   bills at its customer's card (the weekly basis prints the *card's* `baseWeekly`,
   the one-time types its `unitPrice`, and the Gross is the sum of them); and the
@@ -431,6 +469,19 @@ hand-roll `localStorage` and assert on the store's own output:
   joins the party guard: a party whose only row is a rate card cannot be removed
   either (the card has to go first), which is what keeps `price_cards.party_id`
   from dangling the way a removed `orders.party_id` would have.
+
+  A11.2's five checks take that rate through the invoice. A fixture cycle bills **whole
+  weeks** (2325 for the boom lift's week — explicitly not `2325 x 8`, the day-multiplied
+  figure it replaced) and a monthly party's 28 days one monthly unit, premium applied
+  once; the fee chain is asserted against the *period's* base rather than the order's
+  Gross (env fee from the invoice's snapshot, the waiver 3% as the prototype computes it,
+  tax on the lot); the cycle length is the **party's** (7, 14 and 28 days, each matching
+  its fixture cycle, with a cadence the store doesn't know falling back to
+  `pricing.cycleDays`); a booking's cycles **tile it and sum to the Gross** — asserted
+  per line and on the bases, with a settled cycle still rolling and no `$0` cycle raised
+  once the days run out; and the basis steps on the **line's own days** (a three-day
+  line inside a 24-day order bills the daily rate, and the invoice agrees), which is the
+  second day-source bug the same audit found.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
@@ -453,6 +504,12 @@ the cheapest way to prove an invariant still holds.
   document *states* (a PO line's `unitCost`) is the document's own fact. A default
   is one rule too (`poLineCostFor()`), never an inline `??` chain in a form —
   anywhere the same figure is filled twice, the two copies will drift.
+- A rental bills in **whole units** of its basis (A11.2), never `rate x days`: a week
+  is a week and a month is a month, and each unit belongs to exactly one billing
+  period, so a booking's cycles add up to its Gross and none of them double-bills.
+  The *period* length is a counterparty term as well (`partyCycleDays()` reads
+  `parties.billing_cycle`) — when a figure is per-party, the schedule that repeats it
+  is read from the same party, not copied onto the document.
 - A movement's place is *derived*, not asked for: the store resolves it from the
   unit (`logMovement`), so a hand-off can't be logged somewhere the machine never
   was. Only a `return` re-homes a unit — the shelf follows the ledger, and the

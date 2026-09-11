@@ -36,6 +36,10 @@
        Invoicing"); the ledger is its only pane. -->
   <div class="card-header controls-only">
     <div class="d-flex align-items-center gap-2">
+      <!-- The cycle length is a counterparty term (`partyCycleDays()` reads
+           `parties.billing_cycle`), so the ledger's periods are spaced per party
+           — the prototype's own header hint says the same. -->
+      <span class="text-muted2 text-12">Cadence set per party</span>
       <select class="form-select form-select-sm w-auto" [value]="filter" (change)="filter = $any($event.target).value">
         <option value="all">All</option>
         <option value="pending">Pending</option>

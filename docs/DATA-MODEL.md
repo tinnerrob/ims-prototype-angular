@@ -259,7 +259,8 @@ pricing(
 ```
 
 The pricing-rules engine as data: the shortest billable day, the weekly hours
-roll-up, the billing-cycle length, the default weekend policy and the
+roll-up, the **default** billing-cycle length (a party's own cadence wins — see
+`parties.billing_cycle` and `partyCycleDays()`), the default weekend policy and the
 environmental fee. `risk_premiums` is a `Record<RiskPremiumKey, number>` — three
 named multipliers — kept as `jsonb` because it is a small closed map a pricing
 engine reads whole; a schema that prefers columns can widen it to
@@ -506,6 +507,13 @@ Removal is refused while an order, a purchase order, a receipt, a sub-rental or 
 the store by `partyRemovalBlockers()` (one list the guard and the grids' disabled
 buttons share), because those rows carry the FK that is now the only name the
 screens have. Leaving the trade is `active = false`.
+
+`billing_cycle` is a counterparty term the billing engine **reads**: `partyCycleDays()`
+turns it into the length of one invoice cycle (`daily` / `weekly` / `bi-weekly` /
+`monthly` / `quarterly`), falling back to `pricing.cycle_days` for a value it does not
+know (a supplier's `net-30` payment terms, an empty field). Nothing copies the length
+onto an order, so a customer who moves to monthly billing has every *future* cycle
+follow from one edit here.
 
 ### `price_cards` — `PriceCard`
 
@@ -922,13 +930,29 @@ invoices(
 )
 ```
 
-**Keys/rules.** One billing period of one order (`cycle` counts from 1).
-`env_fee_pct`, `damage_waiver` and `tax_rate` are **snapshots taken when the
-document was written**, deliberately copied from the pricing settings: an invoice
-must keep stating the rate it was raised at even after a setting changes. Its
-totals (`InvoiceTotals`: base, env fee, waiver, fuel, tax, total) are derived at
-read time from the order's lines, the period and those rates — never stored, so
-an invoice cannot disagree with what it bills.
+**Keys/rules.** One billing period of one order (`cycle` counts from 1). A period is
+`[cycle_start, cycle_end)` — the day `cycle_end` names is the next period's first, which
+is how the fixture's cycles are spaced — and its length comes from the *customer's*
+cadence (`partyCycleDays()` → `parties.billing_cycle`), never from a cycle length copied
+onto the order. `env_fee_pct`, `damage_waiver` and `tax_rate` are **snapshots taken when
+the document was written**, deliberately copied from the pricing settings (or, for a
+later cycle, from the order's previous invoice): an invoice must keep stating the rate
+it was raised at even after a setting changes. Its totals (`InvoiceTotals`: base, env
+fee, waiver, fuel, tax, total) are derived at read time from the order's lines, the
+period and those rates — never stored, so an invoice cannot disagree with what it bills.
+The chain itself is fixed (the prototype's `invoiceCompute`): the environmental fee is
+`env_fee_pct` of the base, the damage waiver a flat **3%** of it when the invoice carries
+one, and tax the invoice's own `tax_rate` on the lot.
+
+That derivation is also where the billing *rules* live, and they are the same ones the
+Gross obeys: `lineAmountForPeriod()` bills the one-time types once (in the period
+holding the rental start) and a weekly / monthly rental in **whole units**, each unit
+going to the period that holds the majority of its days (`wholeUnitsBilled()`). Every
+unit therefore lands in exactly one period, the periods of a booking tile it, and
+summing them never double-bills and always adds up to the order's `lineTotal()`. A
+period that would bill no base at all is not raised — an invoice for nothing is not a
+document worth keeping — and a period with days left is raised whether or not the
+previous one has been paid (billing follows the calendar, not the cheque).
 
 ## Derived at read time (never a column)
 
@@ -946,9 +970,9 @@ two copies drift. Each has a single reader in the store:
 | a location's label and its path | the `locations` tree walked up `parent_id` | `locationLabel()`, `locationPath()` |
 | a stock row's `Low` / `In Stock` status | `qty_on_hand` vs `reorder_point` | `needsReorder()`, `refreshStockStatus()` |
 | what an item can commit at once | `total_owned` (bulk), `qty_on_hand` (stock), `qty` (kit/attachment), else 1 | `capacity()` |
-| an order's days, line totals, gross, margin | the order window, the line windows, `pricing`, the customer's price card, `items.rate_daily` | `orderDays()`, `billableDays()`, `lineTotal()`, `orderAmount()`, `activeOrderTotals()` |
+| an order's days, line totals, gross, margin | the order window, the line windows, `pricing`, the customer's price card, `items.rate_daily` | `orderDays()`, `lineDays()`, `billableDays()`, `lineTotal()`, `orderAmount()`, `activeOrderTotals()` |
 | the rate a booking bills at | the card in force on the day the booking starts, else the catalog | `cardRateFor()`, `rateBasis()` |
-| an invoice's cycles and totals | the order, the cycle window, the module rates | `lineAmountForPeriod()`, `invoiceTotals()` |
+| an invoice's cycles and totals | the order, the party's cadence, the cycle window, the module rates | `partyCycleDays()`, `runNextCycle()`, `lineAmountForPeriod()`, `invoiceTotals()` |
 | a work order's cost | `work_order_parts` and the shop labour rate | `workOrderCost()` |
 | a timesheet segment's hours, bill, cost | `clock_in`/`clock_out` and the employee's rates | `segmentHours()`, `segmentBill()`, `segmentCost()` |
 | the reorder list, page row counts, KPIs | the rows themselves | `reorders()`, `PageSearchService`, `fleetKpis()` |

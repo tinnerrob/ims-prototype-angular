@@ -36,6 +36,11 @@ const check = (label, fn) => {
  * The other half is the buying side, and it is deliberately *not* symmetric: a
  * purchase order line stores the cost it was raised at, so a supplier's card is
  * the editor's default and the raised document keeps stating its own price.
+ *
+ * A11.2 (the second block) follows the money one step further out: the invoice.
+ * It bills the same rule in periods — whole weeks and months, on the line's own
+ * days — and the period length is the *party's* cadence, so a booking's cycles
+ * tile it and add up to the Gross.
  */
 
 mem.clear();
@@ -104,6 +109,7 @@ check('the card is read, not copied: the catalog keeps its own prices', () => {
     round2(item.baseWeekly * 4 * (1 + premium)),
     'catalog weekly basis, the coastal premium and all',
   );
+});
 
 check('the window decides — an expired card prices nothing', () => {
   // Meridian's card ended 2025-12-31; CT-2024-002 starts 2026-09-01.
@@ -274,6 +280,172 @@ check('a rate card is a row that names its party, so it blocks removal too', () 
   assert.equal(d.removeParty(p.id), true, 'then the party removes');
 });
 
-console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck13: ${n} checks`);
+/* ========== A11.2: the invoice bills whole units, and the cycles add up ==========
+ *
+ * The Gross is a rule (`lineTotal()`, A11); an invoice is the same rule read in
+ * periods. `lineAmountForPeriod()` used to multiply the *weekly* rate a card
+ * prints by the *days* of the period — 2325 x 8 for one week of a boom lift —
+ * which is not a price anyone agreed. The prototype's rule is whole units
+ * (`wholeUnitsBilled`): a week bills as a week, and every unit lands in exactly
+ * one cycle, so a booking's cycles sum to its Gross however they are cut. The
+ * cut itself is a party term too (`partyCycleDays()`): the cycle length comes
+ * from the counterparty, not from a figure copied onto the order.
+ */
 
+check('a cycle bills whole weeks and months, never the period\'s days', () => {
+  // The fixture's own first cycle: Halstead bills weekly, so INV-001 is
+  // [08-20, 08-27) — one week of a 21-day booking.
+  const o = order('CT-2024-001');
+  const inv = d.getInvoice('INV-001');
+  const amount = (refId) =>
+    d.lineAmountForPeriod(o, o.lineItems.find((li) => li.refId === refId), inv.cycleStart, inv.cycleEnd);
+
+  // 2325 for the week, not 2325 x 8 — the day-multiplied figure this replaced.
+  assert.equal(amount('BL-119'), 2325, 'one whole week of the boom lift');
+  assert.notEqual(amount('BL-119'), 2325 * 8, 'not the weekly rate charged per day of the period');
+  assert.equal(amount('FL-401'), 975, 'one week of the forklift');
+  assert.equal(amount('CN-018'), 162.5, 'the bulk line bills its week too (50 x 3.25)');
+  // One-time lines bill once, in the period holding the rental start.
+  assert.equal(amount('SG-LFT-001'), 92, 'the consumable, once');
+  assert.equal(amount('EMP-001'), 2480, 'the labor, once');
+  assert.equal(d.invoiceTotals(inv).base, 6034.5, 'and the period base is the sum of them');
+
+  // A monthly party, on a card: Coastal's 28 days is one monthly unit of the
+  // agreed 2325 — with the line's hazmat premium applied once, on the amount.
+  const coastal = order('CT-2024-003');
+  const gn = coastal.lineItems.find((li) => li.refId === 'GN-511');
+  const hazmat = d.pricing.riskPremiums.hazmat;
+  const rates = d.rateBasis(gn, d.getItem('serialized', 'GN-511'), coastal);
+  assert.equal(rates.basis, 'Monthly', 'the monthly basis steps in at 28 days');
+  assert.equal(rates.rate, 2325, 'and prints the card\'s agreed monthly rate');
+  const monthly = d.getInvoice('INV-003');
+  assert.equal(
+    d.lineAmountForPeriod(coastal, gn, monthly.cycleStart, monthly.cycleEnd),
+    round2(2325 * (1 + hazmat)),
+    'which bills once, premium and all (the premium is not folded into the rate twice)',
+  );
 });
+
+check('an invoice\'s fees are the prototype\'s rates, on the period\'s own base', () => {
+  // The fee chain the fixture's invoices carry: env fee from the invoice's own
+  // snapshot, a flat 3% waiver when it has one, tax on the lot — all computed from
+  // a base that is the *period*, not the order.
+  const inv = d.getInvoice('INV-002'); // damageWaiver: true, envFeePct: 5
+  const o = order(inv.orderId);
+  const t = d.invoiceTotals(inv);
+  const base = round2(
+    o.lineItems.reduce((s, li) => s + d.lineAmountForPeriod(o, li, inv.cycleStart, inv.cycleEnd), 0),
+  );
+
+  assert.equal(t.base, base, 'the base is what this period bills, derived from the lines');
+  assert.notEqual(t.base, d.orderAmount(o), 'not the whole order\'s Gross');
+  assert.equal(t.envFee, round2(base * (inv.envFeePct / 100)), 'the env fee is the invoice\'s own percent');
+  assert.equal(t.waiver, round2(base * 0.03), 'and the waiver 3% of the base, as the prototype computes it');
+  assert.notEqual(t.waiver, round2(base * 0.05), 'not the 5% the port slipped in');
+  assert.equal(t.tax, round2((base + t.envFee + t.waiver + t.fuel) * inv.taxRate), 'tax on the lot');
+  assert.equal(t.total, round2(t.base + t.envFee + t.waiver + t.fuel + t.tax), 'and the total is the chain');
+});
+
+check('the cycle length is the party\'s term — read, never stored', () => {
+  // Three parties, three cadences, and the fixture's own cycles are exactly
+  // start + cadence: 7, 14 and 28 days. A cycle length stored on the order (or the
+  // pricing default applied to everyone) could not produce all three.
+  assert.equal(d.partyCycleDays(order('CT-2024-001')), 7, 'Halstead bills weekly');
+  assert.equal(d.partyCycleDays(order('CT-2024-002')), 14, 'Meridian bi-weekly');
+  assert.equal(d.partyCycleDays(order('CT-2024-003')), 28, 'Coastal monthly');
+  assert.equal(d.getInvoice('INV-001').cycleEnd, '2026-08-27', 'Halstead: start + 7');
+  assert.equal(d.getInvoice('INV-002').cycleEnd, '2026-09-15', 'Meridian: start + 14');
+  assert.equal(d.getInvoice('INV-003').cycleEnd, '2026-09-30', 'Coastal: start + 28');
+  assert.notEqual(d.partyCycleDays(order('CT-2024-001')), d.pricing.cycleDays, 'not the pricing default');
+
+  // A cadence the store doesn't know — a supplier's `net-30` terms, an empty field
+  // — falls back to the pricing setting rather than reading as a zero-day cycle.
+  const p = d.getParty('PTY-004');
+  const was = p.billingCycle;
+  d.updateParty(p.id, { billingCycle: 'net-30' });
+  assert.equal(d.partyCycleDays(order('CT-2024-004')), d.pricing.cycleDays, 'unknown cadence → the default');
+  d.updateParty(p.id, { billingCycle: was });
+  assert.equal(d.partyCycleDays(order('CT-2024-004')), 84, 'and back to the party\'s quarterly cadence');
+});
+
+check('a booking\'s cycles add up to its Gross — no unit and no day bills twice', () => {
+  const o = order('CT-2024-001');
+  const gross = d.orderAmount(o);
+  assert.equal(gross, 12959.5, 'the Gross the order screens print');
+
+  // A settled cycle must not stop the clock: the period that follows is a fact of
+  // the calendar, not of the cheque (the prototype rolls only *unpaid* invoices).
+  d.setInvoiceStatus('INV-001', 'paid');
+  assert.equal(d.invoicesFor(o.orderId).length, 1, 'one cycle on file to begin with');
+
+  d.runNextCycle();
+  const raised = d.invoicesFor(o.orderId);
+  assert.equal(raised.length, 2, 'a run raises the next period');
+  assert.equal(raised[1].cycle, 2, 'numbered from 1 on the order, not on the ledger');
+  assert.equal(raised[1].cycleStart, '2026-08-27', 'starting where the last period ended');
+  assert.equal(raised[1].cycleEnd, '2026-09-03', 'and a week long: the party\'s cadence, not the default');
+  assert.equal(raised[1].fuelCharge, raised[0].fuelCharge, 'keeping the terms the last one was raised at');
+  assert.equal(raised[1].taxRate, raised[0].taxRate);
+
+  d.runNextCycle();
+  assert.equal(d.invoicesFor(o.orderId).length, 3, 'a second run covers the rest of the booking');
+  // The windows tile [start, end): each begins where the last ended, and the last
+  // ends at the order's own end — so the booking's days are covered exactly once.
+  const cycles = d.invoicesFor(o.orderId);
+  assert.deepEqual(
+    cycles.map((c) => [c.cycle, c.cycleStart, c.cycleEnd]),
+    [
+      [1, '2026-08-20', '2026-08-27'],
+      [2, '2026-08-27', '2026-09-03'],
+      [3, '2026-09-03', '2026-09-10'],
+    ],
+  );
+
+  // The invariant: each line's amounts across the cycles add up to its own total,
+  // and the cycle bases add up to the Gross.
+  const across = (li) => cycles.reduce((s, c) => s + d.lineAmountForPeriod(o, li, c.cycleStart, c.cycleEnd), 0);
+  for (const li of o.lineItems) {
+    assert.equal(across(li), d.lineTotal(li, o), `${li.id} adds up across the cycles`);
+  }
+  assert.equal(
+    round2(cycles.reduce((s, c) => s + d.invoiceTotals(c).base, 0)),
+    gross,
+    'and the period bases add up to the Gross',
+  );
+
+  // Nothing left to bill: a run raises no cycle at all — not a $0 period carrying
+  // the fuel charge forward, which is what rolling past the end would produce.
+  assert.equal(d.runNextCycle(), 0, 'a booking with no days left raises nothing');
+
+  d.setInvoiceStatus('INV-001', 'invoiced'); // put the fixture back as it was found
+});
+
+check('the basis steps on the line\'s own days, not the order\'s', () => {
+  // CT-2024-004's excavator rides a 24-day order. Narrow the line to three days
+  // and the *line* decides the basis: three days of the daily rate, not the four
+  // weeks it would bill if the basis read the order's window.
+  const o = order('CT-2024-004');
+  const li = o.lineItems[0];
+  const item = d.getItem('serialized', 'ET-310');
+  const premium = d.pricing.riskPremiums.coastal;
+  const weekly = round2(item.baseWeekly * 4 * (1 + premium));
+
+  assert.equal(d.orderDays(o), 24, 'the order runs 24 days');
+  assert.equal(d.rateBasis(li, item, o).basis, 'Weekly', 'so the booking bills weekly');
+  assert.equal(d.lineTotal(li, o), weekly, 'four weeks, as the Gross above it');
+
+  d.updateOrderLineDates(o.orderId, li.id, '2026-08-01', '2026-08-04');
+  assert.equal(d.lineDays(li, o), 3, 'the line itself is only three days');
+  assert.equal(d.rateBasis(li, item, o).basis, 'Daily', 'which is the daily basis');
+  assert.equal(d.rateBasis(li, item, o).rate, item.rateDaily, 'at the catalog\'s daily rate');
+  assert.equal(d.lineTotal(li, o), round2(item.rateDaily * 3 * (1 + premium)), 'three days of it, premium and all');
+  // The invoice reads the same basis for the same window — one day source, two
+  // readers, so the row and the bill cannot disagree.
+  assert.equal(d.lineAmountForPeriod(o, li, o.startDate, o.endDate), d.lineTotal(li, o), 'and the bill agrees');
+
+  d.updateOrderLineDates(o.orderId, li.id, '2026-08-01', '2026-08-25');
+  assert.equal(d.lineDays(li, o), 24, 'put back');
+  assert.equal(d.lineTotal(li, o), weekly, 'and the four weeks are back');
+});
+
+console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck13: ${n} checks`);

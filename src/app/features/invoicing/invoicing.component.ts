@@ -108,9 +108,14 @@ export class InvoicingComponent {
     this.data.setInvoiceStatus(inv.id, status as InvoiceStatus);
   }
 
-  /** Run the next billing cycle: roll every unpaid invoice forward one period. */
+  /**
+   * Run the next billing cycle: every active order gets the period that follows
+   * its last one, at its own party's cadence. The store decides it all
+   * (`runNextCycle()`) — including that a period with nothing left to bill is not
+   * raised — and this only reports how many invoices it produced.
+   */
   runNextCycle(): void {
-    const count = this.data.generateInvoices();
+    const count = this.data.runNextCycle();
     this.lastRun = count;
   }
 

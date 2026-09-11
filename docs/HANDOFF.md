@@ -18,7 +18,7 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (135 checks across tenancy,
+services to JS and drives the real store from Node (140 checks across tenancy,
 attribution, the item↔location spine, per-place stock levels, the vertical
 registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
@@ -326,9 +326,12 @@ The store models the SaaS boundary the API will implement, so these are load-bea
 - **A negotiated rate is read the same way (A11).** A customer's price card
   (`price_cards`, one per counterparty, with `price_card_lines`) is what an order
   actually bills at: `lineTotal()` and `rateBasis()` both go through one reader,
-  `cardRateFor(partyId, item, onDate)`, so the rate a row *prints* and the amount
-  the invoice *multiplies* are the same call — and repricing a card never writes an
-  order row. The card carries an effective window and the date it is read on is the
+  `cardRateFor(partyId, item, onDate)`, so the rate a row *prints* is the rate the
+  amount is built from, on the same day and from the same source — and repricing a
+  card never writes an order row. (The line's own risk premium is the one factor the
+  *amount* applies and the printed rate does not, A11.2: the figure a row shows stays
+  the figure a counterparty agreed.) The card carries an effective window and the
+  date it is read on is the
   booking's own start (`lineStart()`), which is what makes a renewal a new card
   rather than a re-pricing of history. The catalog keeps its list prices
   underneath (`items.rateDaily` is the fallback). The buying side is deliberately
@@ -339,6 +342,23 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   none) still reaches them, while a cost the buyer typed is never overwritten.
   Nothing references a card, so removing one
   needs no guard — it re-prices, visibly, on the order screens.
+- **The invoice bills that rate whole (A11.2).** The same audit that confirmed A11's
+  reader found the *money* disagreeing with it: `lineAmountForPeriod()` multiplied the
+  rate `rateBasis()` returns — a weekly or monthly one, for most bookings — by the day
+  count of the cycle, so a 21-day boom lift invoiced `2325 x 21` for what Order Details
+  prints as three weeks. It bills whole units now (`wholeUnitsBilled()`, the prototype's
+  rule: a unit goes to the cycle holding the majority of its days), on the **line's own
+  days** (`lineDays()`), with the risk premium applied once to the amount while the rate
+  a row prints stays the agreed one — so `rate x units x qty x (1 + premium)` reconciles
+  and a booking's cycles add up to its `lineTotal()` (`check13` asserts the sum to the
+  cent). The period length is a counterparty term too: `partyCycleDays()` reads
+  `parties.billing_cycle`, a column the model had carried since A5 with no reader at all,
+  and "Run Next Cycle" is a real roll now (`runNextCycle()` — the store method it called
+  only ever raised cycle 1 for orders that had none, so no second cycle could exist).
+  The same pass fixed the fee chain's one wrong constant: the damage waiver is **3%** of
+  the base, the prototype's figure (`invoiceCompute`, js/pages/invoicing.js:111), where
+  the port had 5% — a slip from the original port commit that nothing had questioned
+  because no number on screen was ever reconciled against another.
 - **A movement's place is the same FK.** `Movement.locationId` points at the same
   hierarchy, so "what left Yard A this month?" is `movementsAtLocation(id)` — a
   subtree query — instead of a substring search on a stored label. The store
@@ -668,14 +688,22 @@ The store models the SaaS boundary the API will implement, so these are load-bea
    commitment against `qtyOnHand` for the conflict check, but only *parts used* on a
    work order draw stock down (`DataService` work-order posting). Deciding whether a
    booking should also reserve/move stock is open.
-8. **Invoicing still bills weekly/monthly rentals per *day*** —
-   `lineAmountForPeriod()` multiplies the rate `rateBasis()` returns (which can be
-   `baseWeekly` / `baseMonthly`) by the day count, so a 22-day boom lift invoices
-   2600 x 22 instead of the prototype's 2600 x `ceil(22/7)`. The prototype's
-   `wholeUnitsBilled()` (js/pages/invoicing.js) pro-rates whole weeks/months per
-   cycle; port it if invoiced totals need to match the Gross the rest of the app now
-   prints (`lineTotal()`). Order Details / queues / dashboards are already on the
-   prototype figure.
+8. **Invoicing bills what the Gross prints (closed in A11.2).** It used to multiply
+   the rate `rateBasis()` returned — a *weekly* or *monthly* figure — by the day count
+   of the cycle, so a 21-day boom lift invoiced `2600 x 21` where Order Details prints
+   `2600 x 3` (and an expired-card rental could not agree even with itself, since the
+   printed rate and the amount read different day counts). `lineAmountForPeriod()` now
+   bills whole weeks/months (`wholeUnitsBilled()`, js/pages/invoicing.js), on the
+   line's own days, so a booking's cycles tile it and sum to its `lineTotal()` — and
+   the period length comes from the party's cadence rather than the pricing default.
+   What is still open here: cycles are raised only by the Invoicing page's button
+   (`runNextCycle()` — nothing runs on a timer), and a raised invoice can only change
+   status, with no correction path (a credit note or a re-issued cycle) — deleting it
+   is the only way to undo one. The line's risk premium is also applied to money but
+   printed nowhere: the invoicing detail shows the agreed rate with the amount beside
+   it (as the prototype does), so on a hazmat or overtime line the two figures only
+   reconcile for a reader who knows the multiplier — naming it in that panel is a
+   small UI job and the obvious next step there.
 
 9. **Only `issue`, `return`, `receive`, `transfer` and `adjust` are ever
    written, and the last two only by the Assets page.** `transfer` and `adjust`
@@ -715,6 +743,10 @@ The store models the SaaS boundary the API will implement, so these are load-bea
     read at read time, not a price copied onto an order — which is why
     `price_card_lines` carries an effective window (the date a booking is priced on
     is its own start day, so a renewal is a new card and history is not re-priced).
+    A11.2 finished the sentence on the other side of the ledger: the invoice reads
+    the same rules (`partyCycleDays()`, `lineDays()`, `wholeUnitsBilled()`) instead
+    of carrying its own arithmetic, so what a cycle bills and what the Gross prints
+    are the same number seen twice, not two numbers that have to be kept in step.
     What the doc still states
     and nothing enforces is the rest of the table; it is the API's to implement.
 

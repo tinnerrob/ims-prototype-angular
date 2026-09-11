@@ -216,6 +216,61 @@ function countWeekdays(a: string, b: string): number {
   return Math.max(1, n);
 }
 
+/** Whole days from `a` to `b`: the day *index* of `b` (prototype `dayOffset`). */
+function dayOffset(a: string, b: string): number {
+  return Math.round((Date.parse(b + 'T00:00:00') - Date.parse(a + 'T00:00:00')) / 86400000);
+}
+
+/** A day ISO shifted by whole days (prototype `addDays`). */
+function addDays(iso: string, days: number): string {
+  return new Date(Date.parse(iso + 'T00:00:00') + days * 86400000).toISOString().slice(0, 10);
+}
+
+/** Billable days in a day range, honouring a line's weekend policy (prototype `billableDays`). */
+function billableDaysBetween(policy: OrderLine['weekendPolicy'], a: string, b: string): number {
+  if (policy === 'skip') return countWeekdays(a, b);
+  if (policy === 'overtime') return daysBetween(a, b) * 1.5;
+  return daysBetween(a, b);
+}
+
+/** A party's billing cadence → the length of one cycle, in days (prototype `BILLING_CYCLES`). */
+const BILLING_CYCLES: Record<string, number> = {
+  daily: 1,
+  weekly: 7,
+  'bi-weekly': 14,
+  monthly: 28,
+  quarterly: 84,
+};
+
+/**
+ * Whole rate units (weeks or months) of a booking that bill inside the day range
+ * `[sDay, eDay]` — the prototype's `wholeUnitsBilled()`. A rental on the weekly or
+ * monthly basis bills in **whole units**, never `rate x days`, so every unit has to
+ * land in exactly one billing cycle: a unit is billed by the cycle that holds the
+ * majority of its days, decided by the unit's upper-median day (the tie going to
+ * the later cycle, which is what "run the next cycle" means). Every unit lands in
+ * exactly one cycle, so summing cycles never double-bills and always adds up to
+ * the line's own `lineTotal()`.
+ *
+ * @param sDay first day of the cycle, as an index from the line's first day
+ * @param eDay last day of the cycle, as an index from the line's first day
+ * @param unitDays 7 for the weekly basis, 28 for the monthly
+ * @param totalDays the line's own length in days
+ */
+function wholeUnitsBilled(sDay: number, eDay: number, unitDays: number, totalDays: number): number {
+  if (eDay < sDay) return 0;
+  const units = Math.ceil(totalDays / unitDays);
+  let billed = 0;
+  for (let k = 0; k < units; k++) {
+    const unitStart = k * unitDays;
+    const unitEnd = Math.min((k + 1) * unitDays - 1, totalDays - 1);
+    if (unitEnd < sDay) continue;
+    const billDay = unitStart + Math.ceil((unitEnd - unitStart) / 2);
+    if (billDay >= sDay && billDay <= eDay) billed++;
+  }
+  return billed;
+}
+
 /** The seeded demo workspace + the person the session starts as. */
 const DEMO_TENANT_ID = 'TNT-NORTHLINE';
 const DEMO_USER_ID = 'USR-003';
@@ -1188,13 +1243,24 @@ export class DataService {
     return li.startDate ?? order.startDate;
   }
 
+  /** The day a booking ends: the line's own window when it has one, else the order's. */
+  lineEnd(li: OrderLine, order: Order): string {
+    return li.endDate ?? order.endDate;
+  }
+
+  /**
+   * The length of a booking in whole days (prototype `liDays`). A line can be
+   * booked for less than the order it rides on — a machine that leaves a week
+   * after the crew does — and *that* is the count the rate basis steps up on:
+   * a 3-day line inside a 21-day order bills the daily rate, not three weeks.
+   */
+  lineDays(li: OrderLine, order: Order): number {
+    return daysBetween(this.lineStart(li, order), this.lineEnd(li, order));
+  }
+
   /** Billable days honouring a line's weekend policy (prototype `billableDays`). */
   billableDays(order: Order, li: OrderLine): number {
-    const s = li.startDate ?? order.startDate;
-    const e = li.endDate ?? order.endDate;
-    if (li.weekendPolicy === 'skip') return countWeekdays(s, e);
-    if (li.weekendPolicy === 'overtime') return daysBetween(s, e) * 1.5;
-    return daysBetween(s, e);
+    return billableDaysBetween(li.weekendPolicy, this.lineStart(li, order), this.lineEnd(li, order));
   }
 
   /**
@@ -1216,17 +1282,19 @@ export class DataService {
    *    catalog's hourly billable / retail / cost price),
    *  - kit + attachment bill their daily rate x billable days,
    *  - serialized + bulk step up to the weekly (`ceil(days / 7)`) and monthly
-   *    (`ceil(days / 28)`) basis at 7 and 28 days,
+   *    (`ceil(days / 28)`) basis at 7 and 28 days, on the **line's own** days
+   *    (`lineDays()`) — the same count `rateBasis()` steps on and the same one the
+   *    invoice bills whole units of,
    *  - the risk premium scales everything except the one-time types.
-   * `lineAmountForPeriod()` is the *invoicing* sibling (pro-rated per billing cycle);
-   * this one is the whole-booking figure the scheduler and the queues show.
+   * `lineAmountForPeriod()` is the *invoicing* sibling (whole units per billing
+   * cycle); this one is the whole-booking figure the scheduler and the queues show.
    */
   lineTotal(li: OrderLine, order: Order): number {
     const item = this.getItem(li.type, li.refId);
     if (!item) return 0;
     const qty = li.qty || 1;
     const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
-    const days = this.orderDays(order);
+    const days = this.lineDays(li, order);
     // The card is read on the day the booking starts, so a later renewal prices
     // the contracts that start under it and leaves the earlier ones alone.
     const rates = this.cardRateFor(order.partyId, item, this.lineStart(li, order));
@@ -2953,8 +3021,13 @@ export class DataService {
     return this.db.orders.filter((o) => o.status === 'active');
   }
 
-  invoiceFor(orderId: string): Invoice | undefined {
-    return this.db.invoices.find((i) => i.orderId === orderId);
+  /**
+   * An order's invoices, oldest cycle first. A booking is billed in periods, so
+   * "the invoice" is never single — `runNextCycle()` reads the last one to carry
+   * the terms forward.
+   */
+  invoicesFor(orderId: string): Invoice[] {
+    return this.db.invoices.filter((i) => i.orderId === orderId).sort((a, b) => a.cycle - b.cycle);
   }
 
   markInvoicePaid(id: string): void {
@@ -2981,53 +3054,85 @@ export class DataService {
     }
   }
 
-  /** Line amount billed in a period, honouring billing rules (prototype `liAmountForPeriod`). */
+  /**
+   * Amount billed for one line in one billing period (prototype
+   * `liAmountForPeriod`) — the derived base of an invoice, and where the billing
+   * rules bite:
+   *  - the one-time types (labor / consumable / part) bill once, in the period
+   *    that contains their rental start, so no cycle can bill them twice;
+   *  - kit + attachment bill their daily rate x billable days inside the period;
+   *  - serialized + bulk step up to the weekly / monthly basis on the **line's**
+   *    days and bill **whole units** (`wholeUnitsBilled()`): the fixture's 21-day
+   *    boom lift invoices three weekly units however long a cycle is — never
+   *    `weekly rate x days`, which is not a price anyone agreed;
+   *  - the risk premium is applied once, here, to the amount.
+   * A period is `[periodStart, periodEnd)` — the day `periodEnd` names is the next
+   * period's first, which is how the fixture's cycles are spaced (`partyCycleDays`
+   * apart). Because every unit lands in exactly one period, the periods of a
+   * booking sum to its `lineTotal()`.
+   */
   lineAmountForPeriod(order: Order, li: OrderLine, periodStart: string, periodEnd: string): number {
     const item = this.getItem(li.type, li.refId);
     if (!item) return 0;
-    const liS = li.startDate ?? order.startDate;
-    const liE = li.endDate ?? order.endDate;
+    const liS = this.lineStart(li, order);
+    const liE = this.lineEnd(li, order);
     const s = liS > periodStart ? liS : periodStart;
     const e = liE < periodEnd ? liE : periodEnd;
-    if (s > e) return 0; // no overlap with the cycle
+    if (s > e) return 0; // no overlap with the period
     const qty = li.qty || 1;
-    const rates = this.rateBasis(li, item, order);
+    const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
+    const rates = this.cardRateFor(order.partyId, item, liS);
 
-    // One-time charges (labor / consumable / part) bill once, in the cycle that
-    // contains the rental start, so they are never double-billed across cycles.
+    // One-time charges bill once, in the period that holds the rental start, so
+    // they are never double-billed across cycles.
     if (li.type === 'labor' || li.type === 'consumable' || li.type === 'part') {
-      const startsHere = liS >= periodStart && liS <= periodEnd;
-      return startsHere ? round2(qty * rates.rate) : 0;
+      const startsHere = liS >= periodStart && liS < periodEnd;
+      return startsHere ? round2(qty * (rates.unitPrice ?? rates.rateDaily)) : 0;
     }
-    // Day-rated lines bill per billable day inside the cycle.
-    const days = li.weekendPolicy === 'skip'
-      ? countWeekdays(s, e)
-      : li.weekendPolicy === 'overtime'
-        ? daysBetween(s, e) * 1.5
-        : daysBetween(s, e);
-    return round2(qty * rates.rate * days);
+    // Kit + attachment bill their daily rate per billable day inside the period.
+    if (li.type === 'kit' || li.type === 'attachment') {
+      return round2(rates.rateDaily * billableDaysBetween(li.weekendPolicy, s, e) * qty * (1 + premium));
+    }
+    // Equipment: whole weeks / months, on the line's own days.
+    const totalDays = this.lineDays(li, order);
+    const sDay = Math.max(0, dayOffset(liS, s));
+    const eDay = Math.max(
+      sDay,
+      Math.min(dayOffset(liS, periodEnd) - 1, dayOffset(liS, liE), totalDays - 1),
+    );
+    if (totalDays >= 28 && rates.baseMonthly) {
+      return round2(wholeUnitsBilled(sDay, eDay, 28, totalDays) * rates.baseMonthly * qty * (1 + premium));
+    }
+    if (totalDays >= 7 && rates.baseWeekly) {
+      return round2(wholeUnitsBilled(sDay, eDay, 7, totalDays) * rates.baseWeekly * qty * (1 + premium));
+    }
+    return round2(rates.rateDaily * billableDaysBetween(li.weekendPolicy, s, e) * qty * (1 + premium));
   }
 
   /**
-   * Rate basis label + effective rate for a line (prototype `rateBasis`) — what
-   * the invoicing screen prints beside a booking, and the rate
-   * `lineAmountForPeriod()` multiplies. It reads the same card `lineTotal()` does,
-   * on the same day, so a printed rate and a billed amount cannot disagree.
+   * Rate basis label + the **agreed rate** for a line (prototype `rateBasis`) — what
+   * the invoicing screen prints beside a booking. It reads the card `lineTotal()`
+   * reads, on the same day, and steps up on the same day count (`lineDays()`), so
+   * the basis a row prints and the basis its amount multiplies cannot disagree.
+   *
+   * The rate is the rate a counterparty agreed: the line's own risk premium is not
+   * folded into it but applied once, to the amount (`lineTotal()` /
+   * `lineAmountForPeriod()`), where the premium scales the whole line. That is the
+   * prototype's split, and it keeps the printed figure the negotiable one.
    */
   rateBasis(li: OrderLine, item: Item, order: Order): { basis: string; rate: number } {
-    const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
-    const days = this.orderDays(order);
+    const days = this.lineDays(li, order);
     const rates = this.cardRateFor(order.partyId, item, this.lineStart(li, order));
     if (li.type === 'labor') return { basis: 'Hourly', rate: rates.unitPrice ?? rates.rateDaily };
     if (li.type === 'consumable' || li.type === 'part') {
-      return { basis: 'Unit', rate: round2((rates.unitPrice ?? rates.rateDaily) * (1 + premium)) };
+      return { basis: 'Unit', rate: rates.unitPrice ?? rates.rateDaily };
     }
     if (days >= 28 && rates.baseMonthly) return { basis: 'Monthly', rate: rates.baseMonthly };
     if (days >= 7 && rates.baseWeekly) return { basis: 'Weekly', rate: rates.baseWeekly };
-    return { basis: 'Daily', rate: round2(rates.rateDaily * (1 + premium)) };
+    return { basis: 'Daily', rate: rates.rateDaily };
   }
 
-  /** Invoice totals: base + env fee + waiver + fuel + tax (prototype `invoiceTotals`). */
+  /** Invoice totals: base + env fee + waiver + fuel + tax (prototype `invoiceCompute`). */
   invoiceTotals(inv: Invoice): InvoiceTotals {
     const order = this.getOrder(inv.orderId);
     const base = order
@@ -3039,7 +3144,10 @@ export class DataService {
         )
       : 0;
     const envFee = round2(base * ((inv.envFeePct ?? this.db.settings.pricing.envFeePct) / 100));
-    const waiver = inv.damageWaiver ? round2(base * 0.05) : 0;
+    // The waiver is a flat 3% of the base when the invoice carries one — the
+    // prototype's own figure (js/pages/invoicing.js `invoiceCompute`); there is no
+    // setting for it, so the constant lives here once.
+    const waiver = inv.damageWaiver ? round2(base * 0.03) : 0;
     const fuel = round2(inv.fuelCharge ?? 0);
     const taxable = base + envFee + waiver + fuel;
     const tax = round2(taxable * (inv.taxRate ?? 0));
@@ -3051,33 +3159,72 @@ export class DataService {
     return round2(this.db.invoices.reduce((s, inv) => s + this.invoiceTotals(inv).total, 0));
   }
 
-  /** Generate cycle-1 invoices for active orders that don't have one yet. */
-  generateInvoices(): number {
+  /**
+   * A party's billing cadence as a cycle length in days (prototype
+   * `partyCycleDays`). `parties.billing_cycle` is a counterparty term — the same
+   * kind of per-party fact a price card carries — so the invoicing screen *reads*
+   * it to space the periods instead of storing a cycle length per order. A party
+   * with no known cadence (a supplier's `net-30` terms, an empty field) falls back
+   * to the pricing setting's `cycleDays`.
+   */
+  partyCycleDays(order: Order): number {
+    const cadence = this.getParty(order.partyId)?.billingCycle;
+    return (cadence && BILLING_CYCLES[cadence]) || this.db.settings.pricing.cycleDays;
+  }
+
+  /**
+   * Raise the next billing period for every active order — the Invoicing screen's
+   * "Run Next Cycle" (prototype `#invCycle`), and the only way a cycle comes into
+   * being. Each order gets the period that follows its last one,
+   * `[lastEnd, lastEnd + partyCycleDays())`, clamped to the booking's end; an order
+   * that has never been billed gets cycle 1, `[start, start + cadence)`. The
+   * fixture's cycles are exactly this: Halstead bill weekly, Meridian bi-weekly,
+   * Coastal monthly — three parties, three cadences, one rule.
+   *
+   * Two deliberate differences from the prototype, both about not raising money
+   * nothing accounts for:
+   *  - a period that bills **no base** is not raised. The prototype rolls every
+   *    unpaid invoice forever, so a booking that has run out of days collects `$0`
+   *    cycles carrying its fuel charge; here the derived base decides, and a period
+   *    with nothing billable in it stays unwritten.
+   *  - payment status does not gate the calendar. The prototype rolls only
+   *    *unpaid* invoices, which would stop the clock — and the billing — the moment
+   *    a customer settles one cycle.
+   *
+   * The snapshot columns (`envFeePct`, `damageWaiver`, `taxRate`) are copied from
+   * the order's previous invoice, so a cycle keeps stating the terms the earlier
+   * ones were raised at; cycle 1 takes them from the pricing settings.
+   */
+  runNextCycle(): number {
     const pricing = this.db.settings.pricing;
-    let created = 0;
-    for (const o of this.activeOrders()) {
-      if (this.invoiceFor(o.orderId)) continue;
-      const start = o.startDate;
-      const endMs = Math.min(
-        Date.parse(start + 'T00:00:00') + (pricing.cycleDays - 1) * 86400000,
-        Date.parse(o.endDate + 'T00:00:00'),
-      );
-      this.db.invoices.push({
+    let raised = 0;
+    for (const order of this.activeOrders()) {
+      const last = this.invoicesFor(order.orderId).pop();
+      const cycleStart = last ? last.cycleEnd : order.startDate;
+      const candidate: Invoice = {
         id: this.nextInvoiceId(),
-        orderId: o.orderId,
-        cycle: 1,
-        cycleStart: start,
-        cycleEnd: new Date(endMs).toISOString().slice(0, 10),
-        envFeePct: pricing.envFeePct,
-        damageWaiver: false,
-        fuelCharge: 0,
-        taxRate: this.taxRate(),
+        orderId: order.orderId,
+        cycle: (last?.cycle ?? 0) + 1,
+        cycleStart,
+        cycleEnd: this.periodEnd(order, cycleStart),
+        envFeePct: last?.envFeePct ?? pricing.envFeePct,
+        damageWaiver: last?.damageWaiver ?? false,
+        fuelCharge: last?.fuelCharge ?? 0,
+        taxRate: last?.taxRate ?? this.taxRate(),
         status: 'pending',
-      });
-      created++;
+      };
+      if (this.invoiceTotals(candidate).base <= 0) continue; // nothing left to bill
+      this.db.invoices.push(candidate);
+      raised++;
     }
     this.save();
-    return created;
+    return raised;
+  }
+
+  /** The exclusive end of a period that starts at `cycleStart`: the party's cadence, clamped to the order. */
+  private periodEnd(order: Order, cycleStart: string): string {
+    const window = addDays(cycleStart, this.partyCycleDays(order));
+    return window < order.endDate ? window : order.endDate;
   }
 
   /** Default sales-tax rate (GA schedule, prototype `taxRate`). */
