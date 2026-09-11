@@ -19,8 +19,9 @@
     </button>
   </div>
   <div class="card-body">
-    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
-      <input class="filter-input search" placeholder="Search ID, name, category…" [(ngModel)]="search" />
+    <!-- The search itself is the shell's topbar box — it spans every tab on this
+         page — so this row keeps only the record count in its usual place. -->
+    <div class="d-flex align-items-center justify-content-end flex-wrap mb-3 gap-2">
       <span class="text-muted2">{{ rows().length }} record(s)</span>
     </div>
 

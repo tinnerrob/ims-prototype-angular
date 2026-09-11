@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService, periodLabel } from '../../core/data.service';
 import { Item, Movement, MovementKind, MOVEMENT_KIND_LABEL } from '../../core/models';
+import { PageSearchService } from '../../core/page-search.service';
 import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -66,7 +67,6 @@ export class HandoffComponent {
   tab: HandoffTab = 'outbound';
   /** Selected board day (ISO) for the outbound / incoming lists. */
   day = new Date().toISOString().slice(0, 10);
-  search = '';
 
   /** Return editor (prototype `hoCheckInModal`). */
   returnOpen = false;
@@ -77,7 +77,14 @@ export class HandoffComponent {
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
 
-  constructor(readonly data: DataService) {}
+  constructor(
+    readonly data: DataService,
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: one query for all four tabs,
+    // so a search narrows whichever list is open and the pill counts matches.
+    this.search.report(() => ({ shown: this.count(this.tab), total: this.totalCount(this.tab) }));
+  }
 
   /* -------------------------------- day --------------------------------- */
 
@@ -104,9 +111,9 @@ export class HandoffComponent {
     return this.tab === 'outbound' || this.tab === 'incoming';
   }
 
+  /** Switching tabs keeps the page search — it covers every list on this page. */
   selectTab(t: HandoffTab): void {
     this.tab = t;
-    this.search = '';
   }
 
   count(t: HandoffTab): number {
@@ -136,18 +143,6 @@ export class HandoffComponent {
     }
   }
 
-  searchPlaceholder(): string {
-    switch (this.tab) {
-      case 'outbound':
-      case 'incoming':
-        return 'Search asset, model, order, custodian…';
-      case 'custody':
-        return 'Search asset, custodian, order…';
-      default:
-        return 'Search movement, item, order, note…';
-    }
-  }
-
   emptyLabel(): string {
     switch (this.tab) {
       case 'outbound':
@@ -155,19 +150,21 @@ export class HandoffComponent {
       case 'incoming':
         return `No units due back on ${this.dayLabel()}.`;
       case 'custody':
-        return this.search ? 'No matching units in custody.' : 'Nothing is out right now.';
+        return this.search.isBlank() ? 'Nothing is out right now.' : 'No matching units in custody.';
       default:
-        return this.search ? 'No matching movements.' : 'No movements logged yet.';
+        return this.search.isBlank() ? 'No movements logged yet.' : 'No matching movements.';
     }
   }
 
   /* ------------------------------- lists -------------------------------- */
 
-  /** Case-insensitive filter over the visible columns of the active tab. */
+  /**
+   * Case-insensitive filter over the visible columns of a tab — the shell's
+   * topbar page search. One query covers all four tabs (board, custody, log), so
+   * it survives a tab switch and every pill counts what matches it.
+   */
   private matches(...parts: (string | null | undefined)[]): boolean {
-    const q = this.search.trim().toLowerCase();
-    if (!q) return true;
-    return parts.some((p) => (p ?? '').toLowerCase().includes(q));
+    return this.search.matches(...parts);
   }
 
   /**

@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
+import { PageSearchService } from '../../core/page-search.service';
 import { CatalogType, ITEM_STATUSES, Item, needsReorder, statusClass } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
@@ -120,7 +121,6 @@ const BLANK_ITEM_FORM = {
 })
 export class ItemsComponent {
   type: CatalogType = 'serialized';
-  search = '';
 
   modalOpen = false;
   editingId: string | null = null;
@@ -133,7 +133,17 @@ export class ItemsComponent {
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: Item | null = null;
 
-  constructor(private readonly data: DataService) {}
+  constructor(
+    private readonly data: DataService,
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: report how many of the active
+    // tab's records survive it (the shell shows "shown of total" next to the box).
+    this.search.report(() => ({
+      shown: this.rows().length,
+      total: this.data.listItems(this.type).length,
+    }));
+  }
 
   /** Tabs for the active vertical (prototype `invTabKeys()`). */
   tabs(): InvTab[] {
@@ -145,30 +155,47 @@ export class ItemsComponent {
     return this.tabs().find((t) => t.key === this.type);
   }
 
-  count(type: CatalogType): number {
-    return this.data.listItems(type).length;
+  /**
+   * One tab's records, narrowed by the page search. The search spans every tab
+   * on this page: a query typed while "Items (Serialized)" is open also filters
+   * the other types, so the tab counts say where the matches are.
+   */
+  private tabRows(type: CatalogType): Item[] {
+    return this.data
+      .listItems(type)
+      .filter((i) =>
+        this.search.matches(
+          i.id,
+          i.name,
+          i.category,
+          i.status,
+          i.serial,
+          i.make,
+          i.model,
+          i.role,
+          i.bin,
+          i.fuelType,
+        ),
+      );
   }
 
-  /** Rows for the active tab, filtered by the inline search. */
+  /** Tab-strip pill: matching records of that type (all of them when idle). */
+  count(type: CatalogType): number {
+    return this.tabRows(type).length;
+  }
+
+  /** Rows for the active tab, filtered by the page search. */
   rows(): Item[] {
-    const q = this.search.trim().toLowerCase();
-    const list = this.data.listItems(this.type);
-    if (!q) return list;
-    return list.filter(
-      (i) =>
-        i.id.toLowerCase().includes(q) ||
-        i.name.toLowerCase().includes(q) ||
-        i.category.toLowerCase().includes(q),
-    );
+    return this.tabRows(this.type);
   }
 
   columns(): Col[] {
     return COLUMNS[this.type] ?? COLUMNS['attachment'];
   }
 
+  /** Switching tabs keeps the page search — it spans every tab (see `tabRows`). */
   selectType(t: CatalogType): void {
     this.type = t;
-    this.search = '';
     this.closeViewer();
   }
 

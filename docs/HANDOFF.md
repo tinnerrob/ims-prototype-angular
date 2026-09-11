@@ -249,6 +249,7 @@ detail right**, with orders as the top rows.
   the app shell, raised above the editor modals) and the `snapshotForm()` /
   `formChanged()` compare-on-close helpers.
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
+- `src/app/core/page-search.service.ts` — the page-scoped topbar search (below).
 - `src/app/app.routes.ts` — route map (module routes are guarded).
 - `src/styles.scss` — token-driven global theme; `index.html` loads Bootstrap Icons CDN.
 
@@ -289,6 +290,28 @@ detail right**, with orders as the top rows.
   page's own editor (`editFromViewer()`). Pages with an existing read-only detail
   modal (Orders → contract, Invoicing) route the row click into it instead, and
   Inspections skips the viewer entirely: a log row opens the inspection editor.
+- **Topbar search = page search** (`src/app/core/page-search.service.ts`). The box is
+  not global: the shell renders it only on the views whose `VIEWS` entry carries a
+  `search` placeholder — Items & Stock, Hand-Off, Receiving / Inspections, Parties &
+  Orders, Fleet Telemetry, Labor & Timesheets, Field Service, Billing & Invoicing — and
+  hides it on every other view (Dashboard, Scheduling, Locations, … have no search box).
+  A page searches *all* of itself through the service's shared `matches()` rule (the
+  same case-insensitive "any field contains the query" on every page), the query
+  survives tab switches, and the tab pills/counts then read as matches instead of
+  totals (Items & Stock filters all seven types at once, Hand-Off all four lists,
+  Parties & Orders both sub-tabs — the point of "search the page, not the tab").
+  The shell also shows a "shown of total" chip beside the box: a page publishes it once
+  from its constructor with `search.report(() => ({ shown, total }))`, a thunk the
+  service runs *inside* a `computed`, so the chip stays live off the page's own signals
+  with no push. That thunk is why the shell hands the box over at **NavigationStart**
+  (before the target page is constructed and reports) — doing it on NavigationEnd wiped
+  the fresh report. Pages with no count row (Inspections, Field Service, Invoicing, and
+  the timesheet board) word their `@empty` row for the search instead
+  ("No work orders match your search."). This deliberately replaces the prototype's
+  global search (`App.onSearch`, which jumped to Telemetry/Items with `?q=` from any
+  page), and the per-page search fields those pages used to carry (`.filter-input.search`
+  on Items, Hand-Off, Telemetry) went with it — Admin → Locations keeps its own, since
+  that view has no page search.
 - **Modal dismissal:** every hand-rolled modal root
   (`<div class="modal show d-block" …>`) carries `imsModalDismiss (dismiss)="closeFoo()"`.
   The directive owns **both** exits — a press-and-release outside the `.modal-content`
@@ -485,3 +508,7 @@ The original vanilla-JS prototype lives in the sibling repo
 `docs/architecture/`: `modal-design-spec.md`, `AI-ONBOARDING.md`,
 `app-review-*.md`). Match UI/behavior against `js/pages/scheduler.js` /
 `js/pages/timesheet.js` when refining.
+
+One deliberate shell-level deviation: the prototype's **global** search jumped to Fleet
+Telemetry / Items from any page, while this port scopes the topbar search to the page it
+is on (see "Topbar search = page search" above). Don't restore the global jump.

@@ -55,16 +55,31 @@
         </div>
       </div>
       <div class="topbar-right">
-        <div class="global-search">
-          <i class="bi bi-search"></i>
-          <input
-            type="text"
-            placeholder="Search assets, SKUs, orders, employees..."
-            aria-label="Global search"
-            [(ngModel)]="search"
-            (keydown.enter)="onSearch()"
-          />
-        </div>
+        <!-- Page search: the box belongs to the view on screen, so it is only
+             rendered on the views the registry marks searchable (`VIEWS[].search`)
+             and it filters that page live — × / Escape clear it, and the chip
+             reports how much of the page survives the query. -->
+        @if (search.active()) {
+          <div class="global-search">
+            <i class="bi bi-search"></i>
+            <input
+              type="text"
+              [placeholder]="search.placeholder()"
+              [attr.aria-label]="search.placeholder()"
+              [ngModel]="search.query()"
+              (ngModelChange)="setSearch($event)"
+              (keydown.escape)="clearSearch()"
+            />
+            @if (search.query()) {
+              <button class="search-clear" type="button" title="Clear search" (click)="clearSearch()">
+                <i class="bi bi-x-lg"></i>
+              </button>
+            }
+            @if (search.results(); as r) {
+              <span class="search-count" title="Matches on this page">{{ r.shown }} of {{ r.total }}</span>
+            }
+          </div>
+        }
         <button class="icon-btn" type="button" title="Notifications" (click)="openNotifications()">
           <i class="bi bi-bell"></i>
           @if (notifications() > 0) {

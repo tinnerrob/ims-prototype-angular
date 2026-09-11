@@ -10,7 +10,7 @@
       @for (t of tabs; track t.key) {
         <button class="subtab" type="button" [class.active]="tab === t.key" (click)="selectTab(t.key)">
           <i class="bi {{ t.icon }}"></i>{{ t.label }}
-          <span class="count-pill">{{ totalCount(t.key) }}</span>
+          <span class="count-pill">{{ count(t.key) }}</span>
         </button>
       }
     </div>
@@ -41,8 +41,9 @@
   </div>
 
   <div class="card-body">
-    <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
-      <input class="filter-input search" [placeholder]="searchPlaceholder()" [(ngModel)]="search" />
+    <!-- The search itself is the shell's topbar box (one query for all four
+         tabs), so this row keeps only the record count in its usual place. -->
+    <div class="d-flex align-items-center justify-content-end flex-wrap mb-3 gap-2">
       <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
     </div>
 

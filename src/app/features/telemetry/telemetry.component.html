@@ -5,14 +5,9 @@
     <div class="card mb-3">
       <div class="card-header">
         <span class="card-title"><i class="bi bi-list-ul"></i> Fleet Asset Status</span>
-        <span class="text-muted2 fw-medium">{{ totalTracked() }} serialized units</span>
+        <span class="text-muted2 fw-medium">{{ unitsLabel() }}</span>
       </div>
       <div class="card-body">
-        <input
-          class="filter-input mb-2"
-          placeholder="Search asset ID, make, model, serial..."
-          [(ngModel)]="filter"
-        />
         <div class="table-wrap">
           <table class="table">
             <thead>

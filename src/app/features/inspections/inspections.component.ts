@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService, PeriodView, periodLabel, periodPhrase } from '../../core/data.service';
+import { PageSearchService } from '../../core/page-search.service';
 import {
   Inspection,
   InspectionCheckKey,
@@ -68,7 +69,17 @@ export class InspectionsComponent {
   /** Editor values as they were when it opened (drives the discard prompt). */
   private editSnap = '';
 
-  constructor(readonly data: DataService) {}
+  constructor(
+    readonly data: DataService,
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: report how much of the log
+    // survives it (the shell shows "shown of total" next to the box).
+    this.search.report(() => ({
+      shown: this.logEntries().length,
+      total: this.inspections().length,
+    }));
+  }
 
   serialized() {
     return this.data.listItems('serialized');
@@ -93,14 +104,35 @@ export class InspectionsComponent {
     return this.logRange !== 'all';
   }
 
-  /** Logged inspections inside the selected period (newest first). */
+  /**
+   * Logged inspections inside the selected period, narrowed by the page search
+   * (the shell's topbar box). The two filters compose: the period picks the
+   * window, the query picks the rows inside it.
+   */
   logEntries(): Inspection[] {
-    if (!this.logFiltered()) return this.inspections();
     const b = this.logBounds();
-    return this.inspections().filter((r) => r.date >= b.start && r.date <= b.end);
+    return this.inspections().filter(
+      (r) =>
+        (!this.logFiltered() || (r.date >= b.start && r.date <= b.end)) && this.searchHits(r),
+    );
+  }
+
+  /** Does the topbar page search match this inspection row? */
+  private searchHits(r: Inspection): boolean {
+    return this.search.matches(
+      r.id,
+      r.itemId,
+      this.data.itemLabel('serialized', r.itemId),
+      r.direction,
+      r.status,
+      r.orderId,
+      r.date,
+      r.notes,
+    );
   }
 
   logEmptyLabel(): string {
+    if (!this.search.isBlank()) return 'No inspections match your search.';
     if (!this.logFiltered()) return 'No inspections logged.';
     const w = this.logWindow();
     return `No inspections logged for ${periodPhrase(w.view, w.date)}.`;

@@ -4,8 +4,9 @@ import { ModuleKey } from './models';
  * IMS — view registry (single source of truth).
  *
  * Direct port of the prototype's `VIEWS` registry in `js/router.js`: one entry
- * per view carrying its topbar title/subtitle, sidebar grouping + icon, and the
- * industry-module key that gates it (absent for always-on core views).
+ * per view carrying its topbar title/subtitle, sidebar grouping + icon, the
+ * industry-module key that gates it (absent for always-on core views), and —
+ * for the views that have one — its page-search placeholder.
  *
  * Adding a feature = one entry here (plus its route in `app.routes.ts`), exactly
  * as the prototype says: "one entry here + its nav item in index.html".
@@ -21,6 +22,12 @@ export interface ViewDef {
   title: string;
   /** Topbar subtitle (prototype `VIEWS.desc`). */
   desc: string;
+  /**
+   * Page-search placeholder. Set it and the shell renders the topbar search box
+   * on this view, worded as *this* page's search (see `PageSearchService`);
+   * leave it off and the view has no search box at all.
+   */
+  search?: string;
   /** Sidebar label — omit for a view that is routable but not in the sidebar. */
   nav?: string;
   /** Bootstrap Icons class for the sidebar entry. */
@@ -46,6 +53,7 @@ export const VIEWS: ViewDef[] = [
     id: 'items',
     title: 'Items & Stock',
     desc: 'Core catalog: typed items, stock quantities, and on-hand levels across the inventory.',
+    search: 'Search every item tab — ID, name, category, serial…',
     nav: 'Items & Stock',
     icon: 'bi-box-seam',
     group: 'inventory',
@@ -56,6 +64,7 @@ export const VIEWS: ViewDef[] = [
     id: 'handoff',
     title: 'Item Hand-Off & Custody',
     desc: 'Core: custody & movement of items — issue out, receive/return, and chain of custody.',
+    search: 'Search assets, orders, custodians, movements…',
     nav: 'Item Hand-Off & Custody',
     icon: 'bi-arrow-left-right',
     group: 'movement',
@@ -64,6 +73,7 @@ export const VIEWS: ViewDef[] = [
     id: 'inspections',
     title: 'Receiving / Inspections',
     desc: 'Core: receiving, inspection, and check-in of items to locations.',
+    search: 'Search inspections, assets, orders…',
     nav: 'Receiving / Inspections',
     icon: 'bi-clipboard-check',
     group: 'movement',
@@ -72,6 +82,7 @@ export const VIEWS: ViewDef[] = [
     id: 'orders',
     title: 'Parties & Orders',
     desc: 'Counterparties (customers, vendors, sites) and the orders placed against inventory.',
+    search: 'Search customers, contracts, projects…',
     nav: 'Parties & Orders',
     icon: 'bi-folder2-open',
     group: 'movement',
@@ -102,6 +113,7 @@ export const VIEWS: ViewDef[] = [
     id: 'telemetry',
     title: 'Fleet Telemetry',
     desc: 'Module: live fleet telemetry and geofence monitoring for tracked items.',
+    search: 'Search assets — ID, make, model, serial…',
     nav: 'Fleet Telemetry',
     icon: 'bi-geo-alt',
     group: 'module',
@@ -111,6 +123,7 @@ export const VIEWS: ViewDef[] = [
     id: 'timesheet',
     title: 'Labor & Timesheets',
     desc: 'Module: labor time records against orders and work orders.',
+    search: 'Search employees, jobs, work orders…',
     nav: 'Labor & Timesheets',
     icon: 'bi-clock-history',
     group: 'module',
@@ -121,6 +134,7 @@ export const VIEWS: ViewDef[] = [
     id: 'maintenance',
     title: 'Field Service & Maintenance',
     desc: 'Module: field service and maintenance work orders against item instances.',
+    search: 'Search work orders, assets, service types…',
     nav: 'Field Service',
     icon: 'bi-tools',
     group: 'module',
@@ -141,6 +155,7 @@ export const VIEWS: ViewDef[] = [
     id: 'invoicing',
     title: 'Billing & Invoicing',
     desc: 'Module: billing derived from priced orders.',
+    search: 'Search invoices, contracts, customers…',
     nav: 'Billing & Invoicing',
     icon: 'bi-receipt',
     group: 'module',

@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
+import { PageSearchService } from '../../core/page-search.service';
 import {
   SERVICE_TYPES,
   statusClass,
@@ -62,11 +63,43 @@ export class MaintenanceComponent {
   /** Read-only record viewer (opened by clicking a table row). */
   viewer: ViewModel | null = null;
 
-  constructor(readonly data: DataService) {}
+  constructor(
+    readonly data: DataService,
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: report how much of the
+    // work-order grid survives it (the shell shows "shown of total").
+    this.search.report(() => ({
+      shown: this.workOrders().length,
+      total: this.data.listWorkOrders().length,
+    }));
+  }
 
+  /** Work orders on the active status filter, narrowed by the page search. */
   workOrders(): WorkOrder[] {
-    const all = this.data.listWorkOrders();
+    const all = this.data.listWorkOrders().filter((w) => this.searchHits(w));
     return this.filter === 'all' ? all : all.filter((w) => w.status === this.filter);
+  }
+
+  /** Does the topbar page search match this work order (asset, service, parts)? */
+  private searchHits(w: WorkOrder): boolean {
+    return this.search.matches(
+      w.id,
+      w.itemId,
+      this.assetLabel(w),
+      w.type,
+      w.status,
+      w.date,
+      w.notes,
+      ...w.parts.map((p) => `${p.refId} ×${p.qty}`),
+    );
+  }
+
+  /** Empty-grid wording — the page search is the likely reason nothing shows. */
+  emptyLabel(): string {
+    return this.search.isBlank()
+      ? 'No records — add one with "New Work Order".'
+      : 'No work orders match your search.';
   }
 
   count(status: WorkOrderStatus): number {

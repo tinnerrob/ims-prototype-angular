@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
 import { Order, ORDER_STATUS_LABEL, Party, statusClass } from '../../core/models';
+import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -54,14 +55,56 @@ export class OrdersComponent {
   /** Customer behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: Party | null = null;
 
-  constructor(readonly data: DataService) {}
-
-  parties(): Party[] {
-    return this.data.listParties();
+  constructor(
+    readonly data: DataService,
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: it spans both sub-tabs (and
+    // the active/closed filter), so report what the open tab is showing.
+    this.search.report(() => ({
+      shown: this.tab === 'customers' ? this.parties().length : this.orderMatches().length,
+      total: this.tab === 'customers' ? this.data.listParties().length : this.data.listOrders().length,
+    }));
   }
 
+  /** Customers matching the page search (the sub-tab pill counts these). */
+  parties(): Party[] {
+    return this.data.listParties().filter((p) =>
+      this.search.matches(
+        p.id,
+        p.name,
+        p.contact,
+        p.phone,
+        p.email,
+        p.billingAddress,
+        p.billingCycle,
+        p.notes,
+        p.active === false ? 'Inactive' : 'Active',
+      ),
+    );
+  }
+
+  /**
+   * Contracts matching the page search, before the active/closed filter — so a
+   * search reaches closed contracts too and the pill says how many there are.
+   */
+  orderMatches(): Order[] {
+    return this.data.listOrders().filter((o) =>
+      this.search.matches(
+        o.orderId,
+        o.party,
+        o.projectName,
+        o.jobSite,
+        this.statusLabel[o.status],
+        o.startDate,
+        o.endDate,
+      ),
+    );
+  }
+
+  /** Contracts on the active/closed filter, narrowed by the page search. */
   orders(): Order[] {
-    return this.data.listOrders().filter((o) => o.status === this.filter);
+    return this.orderMatches().filter((o) => o.status === this.filter);
   }
 
   badge(status: string): string {

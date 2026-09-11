@@ -11,7 +11,7 @@
         <i class="bi bi-people"></i>Customers<span class="count-pill">{{ parties().length }}</span>
       </button>
       <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="setTab('orders')">
-        <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ data.listOrders().length }}</span>
+        <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ orderMatches().length }}</span>
       </button>
     </div>
     <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="tab === 'customers' ? openCustomer() : newOrder()">

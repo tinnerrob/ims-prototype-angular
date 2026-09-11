@@ -1,9 +1,8 @@
 import { Component } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
 
 import { DataService } from '../../core/data.service';
 import { Item, statusClass } from '../../core/models';
+import { PageSearchService } from '../../core/page-search.service';
 import { GEO_BOUNDS, TrackedPosition, TelemetryService } from '../../core/telemetry.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { assetTip } from '../../shared/tip/tip-builders';
@@ -40,40 +39,55 @@ const MAP_WIDTH_M = LNG_SPAN_DEG * 111320 * Math.cos((33.735 * Math.PI) / 180);
 @Component({
   selector: 'ims-telemetry',
   standalone: true,
-  imports: [FormsModule, RecordViewComponent, TipDirective],
+  imports: [RecordViewComponent, TipDirective],
   templateUrl: './telemetry.component.html',
   styleUrl: './telemetry.component.scss',
 })
 export class TelemetryComponent {
-  filter = '';
-
   /** Read-only record viewer (opened by clicking a fleet row). */
   viewer: ViewModel | null = null;
 
   constructor(
     readonly data: DataService,
     readonly telemetry: TelemetryService,
-    private readonly route: ActivatedRoute,
+    readonly search: PageSearchService,
   ) {
-    // Global search routes here with ?q= (prototype `App.geoFilter`).
-    this.filter = this.route.snapshot.queryParamMap.get('q') ?? '';
+    // The topbar search box is this page's search: report how much of the fleet
+    // survives it (the shell shows "shown of total" next to the box).
+    this.search.report(() => ({
+      shown: this.rows().length,
+      total: this.telemetry.tracked().length,
+    }));
     this.telemetry.start();
   }
 
   /* ------------------------------- fleet -------------------------------- */
 
+  /** Tracked assets, narrowed by the page search. */
   rows(): TrackedPosition[] {
-    const q = this.filter.trim().toLowerCase();
-    const all = this.telemetry.tracked();
-    if (!q) return all;
-    return all.filter((t) => {
-      const hay = `${t.item.id} ${this.data.mkName(t.item)} ${t.item.serial ?? ''}`.toLowerCase();
-      return hay.includes(q);
-    });
+    return this.telemetry
+      .tracked()
+      .filter((t) =>
+        this.search.matches(
+          t.item.id,
+          this.data.mkName(t.item),
+          t.item.serial,
+          t.item.category,
+          t.item.status,
+        ),
+      );
   }
 
   totalTracked(): number {
     return this.data.listItems('serialized').length;
+  }
+
+  /** Fleet-size label; narrows to "shown of total" while the search is on. */
+  unitsLabel(): string {
+    const total = this.totalTracked();
+    return this.search.isBlank()
+      ? `${total} serialized units`
+      : `${this.rows().length} of ${total} serialized units`;
   }
 
   badge(status: string): string {

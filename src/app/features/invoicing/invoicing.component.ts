@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
 import { Invoice, InvoiceStatus, INVOICE_STATUS_LABEL } from '../../core/models';
+import { PageSearchService } from '../../core/page-search.service';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget } from '../../shared/record-view/record-view.component';
 import { stampDayRange } from '../../shared/tip/tip-format';
@@ -29,11 +30,43 @@ export class InvoicingComponent {
   detail: Invoice | null = null;
   lastRun = 0;
 
-  constructor(readonly data: DataService) {}
+  constructor(
+    readonly data: DataService,
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: report how much of the ledger
+    // survives it (the shell shows "shown of total" next to the box).
+    this.search.report(() => ({
+      shown: this.invoices().length,
+      total: this.data.listInvoices().length,
+    }));
+  }
 
+  /** Invoices on the active status filter, narrowed by the page search. */
   invoices(): Invoice[] {
-    const all = this.data.listInvoices();
+    const all = this.data.listInvoices().filter((i) => this.searchHits(i));
     return this.filter === 'all' ? all : all.filter((i) => i.status === this.filter);
+  }
+
+  /** Does the topbar page search match this invoice (its contract, customer)? */
+  private searchHits(inv: Invoice): boolean {
+    const o = this.data.getOrder(inv.orderId);
+    return this.search.matches(
+      inv.id,
+      inv.orderId,
+      o?.projectName,
+      o?.jobSite,
+      o ? this.data.partyName(o.partyId) : null,
+      this.label[inv.status],
+      inv.cycle,
+      inv.cycleStart,
+      inv.cycleEnd,
+    );
+  }
+
+  /** Empty-ledger wording — the page search is the likely reason nothing shows. */
+  emptyLabel(): string {
+    return this.search.isBlank() ? 'No invoices.' : 'No invoices match your search.';
   }
 
   countBy(status: InvoiceStatus): number {

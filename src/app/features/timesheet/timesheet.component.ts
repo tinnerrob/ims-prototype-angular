@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { DataService, dISO, hmMin, minHM, periodLabel, snap15 } from '../../core/data.service';
 import { Item, Order, Timesheet, TIMESHEET_KIND, TimesheetTarget, WorkOrder } from '../../core/models';
+import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { employeeTip, orderRecordTip, segmentTip, workOrderTip } from '../../shared/tip/tip-builders';
@@ -112,7 +113,15 @@ export class TimesheetComponent implements OnDestroy {
   constructor(
     readonly data: DataService,
     private readonly cdr: ChangeDetectorRef,
-  ) {}
+    readonly search: PageSearchService,
+  ) {
+    // The topbar search box is this page's search: report how many employees it
+    // keeps on the board (the shell shows "shown of total" next to the box).
+    this.search.report(() => ({
+      shown: this.matchingEmployees(this.data.listTimesheets()).length,
+      total: this.employees().length,
+    }));
+  }
 
   ngOnDestroy(): void {
     this.drag = null;
@@ -247,11 +256,12 @@ export class TimesheetComponent implements OnDestroy {
     return this.data.listItems('labor').slice().sort((a, b) => (a.id < b.id ? -1 : 1));
   }
 
-  /** Employee rows: staffed with positioned clock-segment bars. */
+  /** Employee rows the page search keeps, staffed with positioned clock bars. */
   lanes(): Lane[] {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
-    return this.employees().map((emp) => {
+    const segments = this.data.listTimesheets();
+    return this.matchingEmployees(segments).map((emp) => {
       const isExpanded = this.expanded.has(emp.id);
       const geo = this.isDay() ? this.laneDay(emp.id, nowMin, isExpanded) : this.laneDays(emp.id, isExpanded);
       return {
@@ -264,6 +274,25 @@ export class TimesheetComponent implements OnDestroy {
         open: this.data.openSegment(emp.id) ?? null,
       };
     });
+  }
+
+  /**
+   * Employees the page search keeps: their own fields, or any segment they have
+   * logged — so searching a contract or work-order id keeps the people who
+   * worked it. The segments are passed in because `lanes()` already read them.
+   */
+  private matchingEmployees(segments: Timesheet[]): Item[] {
+    return this.employees().filter((emp) => {
+      if (this.search.matches(emp.id, emp.name, emp.role, emp.category, emp.status)) return true;
+      return segments.some(
+        (t) => t.empId === emp.id && this.search.matches(t.targetId, TIMESHEET_KIND[t.targetType].label),
+      );
+    });
+  }
+
+  /** Empty-board wording — the page search is the likely reason no rows show. */
+  lanesEmptyLabel(): string {
+    return this.search.isBlank() ? 'No employees.' : 'No employees match your search.';
   }
 
   /** Expand / contract one employee's stacked day-items (scheduler parity). */
