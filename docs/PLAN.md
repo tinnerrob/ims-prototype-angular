@@ -310,7 +310,7 @@ any phase yet, and this section says so rather than implying them.
 | # | Increment | Status |
 |---|---|---|
 | B1 | A credential in a table of its own (`user_credentials` — a per-person salt and a digest, never a password) and the store's one sign-in path: `signIn(email, password)` proves it, `signOut()` drops the session, and an empty session acts as nobody | ✅ `90ff25d` |
-| B2 | Sign-in as a screen: the fixture **ships signed out**, every screen is a child of a route parent carrying `requireAuth`, the shell chip names who is signed in and offers **Sign out** (the switcher is gone), and the seeded demo accounts are listed so the workspace is still enterable | ⏳ |
+| B2 | Sign-in as a screen: the fixture **ships signed out**, every screen is a child of a route parent carrying `requireAuth`, the shell chip names who is signed in and offers **Sign out** (the switcher is gone), and the seeded demo accounts are listed so the workspace is still enterable | ✅ `68cafe0` |
 | B3 | The session has an *end*: an idle expiry the store stamps and rolls on activity, so an unattended tab stops acting as someone without a reload | ⏳ |
 
 **B1 — a credential, and the one place that checks it.** The password never enters
