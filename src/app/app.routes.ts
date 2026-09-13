@@ -2,28 +2,19 @@ import { Routes } from '@angular/router';
 
 import { requireModule } from './core/module.guard';
 import { AdminComponent } from './features/admin/admin.component';
-import { FeatureModulesComponent } from './features/admin/feature-modules.component';
-import { VerticalsComponent } from './features/admin/verticals.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
-import { HandoffComponent } from './features/handoff/handoff.component';
-import { InspectionsComponent } from './features/inspections/inspections.component';
-import { InvoicingComponent } from './features/invoicing/invoicing.component';
-import { AssetsComponent } from './features/assets/assets.component';
-import { LocationsComponent } from './features/locations/locations.component';
-import { LogisticsComponent } from './features/logistics/logistics.component';
-import { MaintenanceComponent } from './features/maintenance/maintenance.component';
-import { OrdersComponent } from './features/orders/orders.component';
-import { PricingComponent } from './features/pricing/pricing.component';
-import { PurchasingComponent } from './features/purchasing/purchasing.component';
-import { RentalsComponent } from './features/rentals/rentals.component';
-import { SchedulerComponent } from './features/scheduler/scheduler.component';
-import { TelemetryComponent } from './features/telemetry/telemetry.component';
-import { TimesheetComponent } from './features/timesheet/timesheet.component';
 
 /**
  * Core-first route map (mirrors the prototype's VIEWS registry).
- * Core views are top-level; future industry modules become lazy-loaded
- * child modules under a guard once the module registry is ported.
+ *
+ * **Two pages stay eager.** The dashboard is the landing page a fresh load renders, so
+ * paying a chunk round-trip for it buys nothing; the Administration shell is the frame its
+ * child pages move inside. Everything else — the thirteen feature pages and the three admin
+ * children — loads on first navigation, each as its own chunk, which is what the port's
+ * roadmap asked for and what keeps the initial bundle small.
+ *
+ * The gates still run first: `canActivate` is evaluated *before* the chunk is fetched, so a
+ * licence the workspace does not hold refuses the navigation without downloading the page.
  */
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
@@ -34,9 +25,18 @@ export const routes: Routes = [
     component: AdminComponent,
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'modules' },
-      { path: 'locations', component: LocationsComponent },
-      { path: 'verticals', component: VerticalsComponent },
-      { path: 'modules', component: FeatureModulesComponent },
+      {
+        path: 'locations',
+        loadComponent: () => import('./features/locations/locations.component').then((m) => m.LocationsComponent),
+      },
+      {
+        path: 'verticals',
+        loadComponent: () => import('./features/admin/verticals.component').then((m) => m.VerticalsComponent),
+      },
+      {
+        path: 'modules',
+        loadComponent: () => import('./features/admin/feature-modules.component').then((m) => m.FeatureModulesComponent),
+      },
       // Location Types merged into the Locations page as a sub-tab — keep the
       // old URL working for bookmarks.
       { path: 'location-types', redirectTo: 'locations', pathMatch: 'full' },
@@ -49,20 +49,66 @@ export const routes: Routes = [
   // Legacy deep links: these views now live under Administration.
   { path: 'locations', redirectTo: 'admin/locations', pathMatch: 'full' },
   { path: 'categories', redirectTo: 'admin/verticals', pathMatch: 'full' },
-  { path: 'handoff', component: HandoffComponent },
-  { path: 'inspections', component: InspectionsComponent },
-  { path: 'invoicing', component: InvoicingComponent, canActivate: [requireModule('billing')] },
-  { path: 'assets', component: AssetsComponent },
+  {
+    path: 'handoff',
+    loadComponent: () => import('./features/handoff/handoff.component').then((m) => m.HandoffComponent),
+  },
+  {
+    path: 'inspections',
+    loadComponent: () => import('./features/inspections/inspections.component').then((m) => m.InspectionsComponent),
+  },
+  {
+    path: 'invoicing',
+    loadComponent: () => import('./features/invoicing/invoicing.component').then((m) => m.InvoicingComponent),
+    canActivate: [requireModule('billing')],
+  },
+  {
+    path: 'assets',
+    loadComponent: () => import('./features/assets/assets.component').then((m) => m.AssetsComponent),
+  },
   // The view is "Assets" now — keep the old URL working for bookmarks.
   { path: 'items', redirectTo: 'assets', pathMatch: 'full' },
-  { path: 'logistics', component: LogisticsComponent, canActivate: [requireModule('dispatch')] },
-  { path: 'maintenance', component: MaintenanceComponent, canActivate: [requireModule('service')] },
-  { path: 'orders', component: OrdersComponent },
-  { path: 'pricing', component: PricingComponent },
-  { path: 'purchasing', component: PurchasingComponent },
-  { path: 'rentals', component: RentalsComponent, canActivate: [requireModule('rentals')] },
-  { path: 'scheduler', component: SchedulerComponent, canActivate: [requireModule('scheduling')] },
-  { path: 'telemetry', component: TelemetryComponent, canActivate: [requireModule('telemetry')] },
-  { path: 'timesheet', component: TimesheetComponent, canActivate: [requireModule('labor')] },
+  {
+    path: 'logistics',
+    loadComponent: () => import('./features/logistics/logistics.component').then((m) => m.LogisticsComponent),
+    canActivate: [requireModule('dispatch')],
+  },
+  {
+    path: 'maintenance',
+    loadComponent: () => import('./features/maintenance/maintenance.component').then((m) => m.MaintenanceComponent),
+    canActivate: [requireModule('service')],
+  },
+  {
+    path: 'orders',
+    loadComponent: () => import('./features/orders/orders.component').then((m) => m.OrdersComponent),
+  },
+  {
+    path: 'pricing',
+    loadComponent: () => import('./features/pricing/pricing.component').then((m) => m.PricingComponent),
+  },
+  {
+    path: 'purchasing',
+    loadComponent: () => import('./features/purchasing/purchasing.component').then((m) => m.PurchasingComponent),
+  },
+  {
+    path: 'rentals',
+    loadComponent: () => import('./features/rentals/rentals.component').then((m) => m.RentalsComponent),
+    canActivate: [requireModule('rentals')],
+  },
+  {
+    path: 'scheduler',
+    loadComponent: () => import('./features/scheduler/scheduler.component').then((m) => m.SchedulerComponent),
+    canActivate: [requireModule('scheduling')],
+  },
+  {
+    path: 'telemetry',
+    loadComponent: () => import('./features/telemetry/telemetry.component').then((m) => m.TelemetryComponent),
+    canActivate: [requireModule('telemetry')],
+  },
+  {
+    path: 'timesheet',
+    loadComponent: () => import('./features/timesheet/timesheet.component').then((m) => m.TimesheetComponent),
+    canActivate: [requireModule('labor')],
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

@@ -512,13 +512,41 @@ natural first customer of P9.
 phase was scoped to the proposal, and because the log's own rule is that a phase documents before the
 next one executes. Say the word and 1 goes first (smallest, pure), then 2 (biggest, but pure data).
 
-### P7 — Routing & bundle shape · `HIGH` · ⛔ **approval required**
-**Scope:** `app.routes.ts` (16 eager features), `angular.json` budgets.
-**Do:** convert module-gated features to `loadComponent`, measure initial bundle before/after, and
-re-baseline the budgets to the truth (or keep the warning as the honest signal it is).
-**State before starting:** first-navigation delay, chunk 404s after a stale deploy, and the shell's
-`viewFromUrl()`/search activation running before a lazy component exists. README's roadmap already
-asks for this — it is still a behaviour change, hence ⛔.
+### P7 — Routing & bundle shape · `HIGH` · status: **done (2026-09-12) — every feature page is now its own chunk**
+**Done:** `app.routes.ts` keeps **two** pages eager — the dashboard (the landing page a fresh load
+renders, so a chunk round-trip buys nothing) and the Administration shell (the frame its children move
+inside) — and loads everything else with `loadComponent`: 13 feature pages plus 3 admin children.
+`canActivate` still resolves **before** the chunk is fetched, so a licence the workspace does not hold
+refuses the navigation without downloading the page; the module gating is otherwise unchanged.
+
+**Measured effect:**
+
+| | before | after |
+|---|---|---|
+| Initial total | **830.24 kB** | **478.22 kB** (−352 kB, −42%) |
+| Initial transfer | 185.76 kB | 127.61 kB |
+| `main-*.js` | 740,666 B | 113,929 B |
+| JS files emitted | 2 | 29 (one shared 230 kB chunk + per-route chunks) |
+| Build warning | budget 500 kB **exceeded by 330 kB** | **none** |
+
+**Pre-flight (this is a behaviour change):** no harness reads `app.routes.ts` or a feature component
+(grepped over `scripts/runtime-checks/`), and no feature imports another feature's component — so the
+lazy boundaries are clean and nothing that used to be in the initial bundle is needed *before*
+navigation.
+**The risks recorded when this was gated, and where they stand:** a first-navigation chunk fetch (the
+price of the 352 kB, paid per page), chunk 404s after a stale deploy (the hashed filenames are the
+guard; the deployment shape is unchanged), and the shell's `viewFromUrl()`/search activation running
+before a lazy component exists (it is URL-based at `NavigationStart`, so it never needed the component —
+unchanged). `angular.json`'s 500 kB budget is untouched: it is now a *meaningful* number again
+(478 kB against 500 kB) rather than a warning everyone had agreed to ignore.
+**Docs updated to match:** README's roadmap item is ticked with the numbers, HANDOFF's budget paragraph
+quotes 478 kB, and its route-map line states the eager/lazy split and the guard-before-fetch contract.
+**Verified:** build `complete` with **0 warnings**; `lint:ctor` OK; `lint:styles` `0 class(es)` + the 3
+disclosed pairs; `lint:dead` 0/0; `check:store` **202 ok / 0 FAIL** (the store is untouched by this
+phase, which is exactly what that harness proves).
+**Not verified (honestly):** the runtime behaviour of the chunks themselves — there is no browser here.
+What can be checked without one is checked above: the map type-checks, the payload is measured, and the
+guard-before-fetch ordering is Angular's own contract for `canActivate` + `loadComponent`.
 
 ### P8 — Change-detection feasibility study · `HIGH` · ⛔ **approval required**
 **Scope:** all 27 components (0 `OnPush` today).
@@ -608,7 +636,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 5b | 2026-09-12 | **P5b** — Restructure, measured | Measured every provable restructure (all 0) + unread custom properties (13); deleted the 2 stale ones with their false comment; added `scripts/css-equivalence.js` + `npm run css:equiv` | `MED` | **done** — equivalence check: 619 selectors both sides, **only** the 2 deleted declarations differ; 11 unread scale/palette tokens reported and kept; the reorder restructure shown unprovable without a browser |
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
-| 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
+| 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study | | `HIGH` | ⛔ awaiting approval |
 | 9 | 2026-09-12 | **P9** — Component/template tests | | `HIGH` | ⛔ awaiting approval |
 
@@ -640,6 +668,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
+| Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |
 | Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |

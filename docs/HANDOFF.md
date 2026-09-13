@@ -40,8 +40,9 @@ A **stylesheet change is proved neutral** rather than eyeballed: `npm run css:eq
 takes two built CSS files and prints every selector whose winning value for a property
 changed (workflow in `angular-refactor-log.md` → P5b).
 
-Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
-~830 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
+Build budgets (`angular.json`): the initial bundle warns at 500 kB and now sits at **~478 kB**
+(the route split made every feature page its own chunk), so that warning is again a real signal
+rather than the expected noise it was at ~830 kB; the `anyComponentStyle` warn threshold is **6 kB**
 (raised from 4 kB), because `scheduler.component.scss` — by far the largest component
 stylesheet, everything else lives in `styles.scss` — is ~4.4 kB minified. Builds should
 otherwise be warning-free; a new component-style warning means a component's SCSS has
@@ -452,7 +453,10 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   harness names for you.
 - `src/app/app.component.*` — shell (nav groups Core / Modules / Admin).
 - `src/app/core/page-search.service.ts` — the page-scoped topbar search (below).
-- `src/app/app.routes.ts` — route map (module routes are guarded).
+- `src/app/app.routes.ts` — route map. The dashboard (landing page) and the Administration shell are
+  eager; every feature page and admin child is a `loadComponent` chunk fetched on first navigation,
+  with `canActivate` still evaluated *before* the chunk (a licence the workspace lacks refuses the
+  navigation without downloading the page).
 - `src/styles.scss` — token-driven global theme; `index.html` loads Bootstrap Icons CDN.
 
 ## Conventions

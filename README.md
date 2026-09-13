@@ -111,8 +111,9 @@ touching feature code.
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 
 **Port coverage complete:** full core + all 6 industry modules + module gating + admin, on a single typed, persisted data store.
-- [ ] Industry modules (scheduling, dispatch, telemetry, labor, service, rentals,
-      billing) as lazy-loaded guarded routes once the module registry is ported.
+- [x] Industry modules as **lazy-loaded guarded routes** — every feature page (and every admin child) is
+      its own chunk, fetched on first navigation; the dashboard and the Administration shell stay eager.
+      Initial bundle 830 kB → 478 kB, and the `canActivate` licence check still runs before the fetch.
 
 Design tokens, modal, and column-profile specs live in the prototype repo under
 `docs/architecture/` (`modal-design-spec.md`, `app-review-*.md`, `AI-ONBOARDING.md`).
