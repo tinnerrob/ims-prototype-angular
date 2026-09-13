@@ -16,9 +16,10 @@
   <div class="card-body">
     <p class="text-muted2 small mb-3">
       A workspace is <strong>one</strong> business type — a warehouse, a lumber yard, a hospital, a
-      fleet. It decides the categories (tabs) the Assets page shows. Click a type to use it; the
-      categories you authored under another type are kept. <strong>×</strong> removes a type with
-      its categories (removing the one you are on moves the workspace onto another).
+      fleet. It decides the categories (tabs) the Assets page shows. Click a row to <strong>edit</strong>
+      the type's name and URL; use the <strong>circle</strong> on the left to switch your workspace to
+      that type (the categories you authored under another type are kept). <strong>×</strong> removes a
+      type with its categories (removing the one you are on moves the workspace onto another).
     </p>
     @if (notice) { <div class="form-hint text-danger mb-2">{{ notice }}</div> }
     <div class="table-wrap">
@@ -31,9 +32,18 @@
         </thead>
         <tbody>
           @for (v of verticals(); track v.id) {
-            <tr class="row-open" [class.row-active]="isMine(v)" (click)="chooseVertical(v)">
+            <tr class="row-open" [class.row-active]="isMine(v)" (click)="openEditVertical(v)">
               <td class="fe-idx">
-                <i class="bi" [class.bi-check-circle-fill]="isMine(v)" [class.bi-circle]="!isMine(v)"></i>
+                <button
+                  type="button"
+                  class="v-pick"
+                  [class.v-pick-on]="isMine(v)"
+                  [title]="isMine(v) ? 'This is your business type' : 'Use ' + v.name + ' as your business type'"
+                  [attr.aria-pressed]="isMine(v)"
+                  (click)="pickVertical($event, v)"
+                >
+                  <i class="bi" [class.bi-check-circle-fill]="isMine(v)" [class.bi-circle]="!isMine(v)"></i>
+                </button>
               </td>
               <td class="strong">
                 {{ v.name }}<span class="text-muted2 text-12 ms-2 mono">{{ v.id }}</span>
@@ -227,7 +237,7 @@
 
 <!-- ===== Vertical add modal ===== -->
 @if (verticalOpen) {
-  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="verticalOpen = false">
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="verticalDirty()" (dismiss)="closeVertical()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">

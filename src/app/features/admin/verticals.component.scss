@@ -2,3 +2,21 @@
 tr.row-active {
   background: rgba(13, 110, 253, 0.06);
 }
+
+/* The type chooser: the row opens the editor, so *using* a type is its own small
+   control — the circle at the left of the row (a radio, in effect). */
+.v-pick {
+  border: 0;
+  background: none;
+  padding: 0;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.v-pick:hover,
+.v-pick-on {
+  opacity: 1;
+}
+.v-pick-on {
+  color: var(--brand);
+}

@@ -110,6 +110,7 @@ export class VerticalsComponent {
   verticalOpen = false;
   verticalFormId = '';
   verticalForm = { name: '', slug: '' };
+  private verticalSnap = '';
 
   /** Stock-set editor. */
   stockOpen = false;
@@ -168,8 +169,10 @@ export class VerticalsComponent {
   }
 
   /**
-   * Use a type (a workspace has exactly one). Confirmed, because it changes which
-   * tabs the Assets page shows.
+   * Use a type. It is the **circle** at the left of the row, not the row: a click
+   * on the row opens the editor (`openEditVertical`), so selecting a type is its
+   * own control — and its own confirmation, since it changes which tabs the Assets
+   * page shows.
    */
   async chooseVertical(v: Vertical): Promise<void> {
     if (this.isMine(v)) return;
@@ -184,18 +187,38 @@ export class VerticalsComponent {
     this.data.setActiveVertical(v.id);
   }
 
+  /** The circle's click: use this type, without letting the row's editor open. */
+  pickVertical(event: Event, v: Vertical): void {
+    event.stopPropagation();
+    void this.chooseVertical(v);
+  }
+
   openAddVertical(): void {
     this.verticalFormId = '';
     this.verticalForm = { name: '', slug: '' };
+    this.verticalSnap = snapshotForm({ ...this.verticalForm });
     this.verticalOpen = true;
   }
 
-  /** Edit a business type's name / handle — the pencil on its row. */
+  /** Edit a business type's name / handle — a click anywhere on its row, or its pencil. */
   openEditVertical(v: Vertical): void {
     this.notice = '';
     this.verticalFormId = v.id;
     this.verticalForm = { name: v.name, slug: v.slug };
+    this.verticalSnap = snapshotForm({ ...this.verticalForm });
     this.verticalOpen = true;
+  }
+
+  /** Unsaved edits in the type editor (the modal asks before dropping them). */
+  verticalDirty(): boolean {
+    return formChanged({ ...this.verticalForm }, this.verticalSnap);
+  }
+
+  closeVertical(): void {
+    this.verticalOpen = false;
+    this.verticalFormId = '';
+    this.verticalForm = { name: '', slug: '' };
+    this.verticalSnap = '';
   }
 
   /**
@@ -230,14 +253,14 @@ export class VerticalsComponent {
       this.notice = '';
       this.data.setActiveVertical(v.id);
     }
-    this.verticalOpen = false;
+    this.closeVertical();
   }
 
   /**
    * Remove a business type, with its categories. Refused while rows still name one
    * of its categories or it is the last type left — and the refusal is *said*, not
    * swallowed (the button stays live: a `disabled` button fires no click, so the
-   * click would fall through to the row and switch the workspace instead).
+   * click would fall through to the row and open the editor instead).
    *
    * Removing the type the workspace is **on** is fine: the store moves it onto the
    * default type, and the categories card below follows.
