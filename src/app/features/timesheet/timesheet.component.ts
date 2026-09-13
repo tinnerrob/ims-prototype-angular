@@ -110,6 +110,14 @@ export class TimesheetComponent implements OnDestroy {
   /** Set when a drag actually moved, so the trailing `click` doesn't open the editor. */
   private justDragged = false;
 
+  /**
+   * A drag's window listeners, bound once so they can be removed **by name**: when the
+   * drag ends normally, and when the page goes away mid-drag (`ngOnDestroy`). The
+   * Scheduler tracks its whole-block drag the same way.
+   */
+  private readonly dragMoveHandler = (ev: MouseEvent) => this.onDragMove(ev);
+  private readonly dragUpHandler = () => this.endDrag();
+
   constructor(
     readonly data: DataService,
     private readonly cdr: ChangeDetectorRef,
@@ -124,7 +132,7 @@ export class TimesheetComponent implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.drag = null;
+    this.detachDrag();
   }
 
   /* --------------------------- calendar window -------------------------- */
@@ -516,20 +524,33 @@ export class TimesheetComponent implements OnDestroy {
       moved: false,
     };
     this.drag = d;
-    const move = (ev: MouseEvent) => this.onDragMove(ev);
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      const moved = this.drag?.moved;
-      this.drag = null;
-      if (moved) {
-        // Suppress the click that follows a real drag (prototype `labJustDrag`).
-        this.justDragged = true;
-        this.cdr.detectChanges();
-      }
-    };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('mousemove', this.dragMoveHandler);
+    window.addEventListener('mouseup', this.dragUpHandler);
+  }
+
+  /**
+   * End a drag: the window listeners come off first, then the outcome is applied —
+   * `moved` is read before `detachDrag()` clears the state, because a real drag has to
+   * suppress the `click` that follows it (prototype `labJustDrag`).
+   */
+  private endDrag(): void {
+    const moved = this.drag?.moved;
+    this.detachDrag();
+    if (moved) {
+      this.justDragged = true;
+      this.cdr.detectChanges();
+    }
+  }
+
+  /**
+   * Remove a live drag's window listeners — the normal end (`endDrag`) and the
+   * interrupted one (`ngOnDestroy`), so leaving the page mid-drag cannot leave a
+   * `mousemove`/`mouseup` behind on `window`. Idempotent.
+   */
+  private detachDrag(): void {
+    window.removeEventListener('mousemove', this.dragMoveHandler);
+    window.removeEventListener('mouseup', this.dragUpHandler);
+    this.drag = null;
   }
 
   private onDragMove(ev: MouseEvent): void {

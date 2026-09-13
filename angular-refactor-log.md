@@ -202,8 +202,10 @@ future re-scope of the shell can no longer leak them.
   cleared. The one listener not registered in `ngOnDestroy` — the drag's capture-phase `click`
   killer — is bounded: it removes itself the moment that click arrives, or after 400 ms
   (`scheduler.component.ts:1512`). Self-healing, not a leak.
-**Audited (every listener/observer site, 4 files):** Scheduler (resize/move handlers tracked and
-detached), Timesheet (drag handlers detach on `mouseup`), `tip-host` (one one-shot
+**Audited (every listener/observer site, 4 files):** Scheduler (its *move* drag is tracked, and
+`detachMove()` removes all three listeners; its *resize* drag is built from local closures that
+self-remove on `pointerup` and `detachResize()` only clears state — see P4b's sibling finding),
+Timesheet (drag handlers detach on `mouseup` — hardened in P4b), `tip-host` (one one-shot
 `requestAnimationFrame`, no cancel needed), and the shell's router events.
 **One gap found and deliberately not fixed:** the Timesheet's `ngOnDestroy` nulls `this.drag` but
 does not remove a drag's `mousemove`/`mouseup` listeners if the component is destroyed *mid-drag* —
@@ -216,6 +218,25 @@ editing a drag interaction that no gate can exercise is not a `LOW`-risk change 
 invisibly until a reload. Pre-existing, and stopping it would change the nav badge's live behaviour.
 **Verified:** gates green (build `complete` · `lint:ctor` OK · `lint:styles` 0 unused · **202 ok /
 0 FAIL**); the app's only two `.subscribe(` calls are the two above, both now torn down.
+
+### P4b — Timesheet drag handlers · `LOW` · status: **done (2026-09-12)**
+**Done:** the Timesheet's drag listeners are now named fields (`dragMoveHandler`, `dragUpHandler`) with
+`endDrag()` and an idempotent `detachDrag()`, and `ngOnDestroy` calls `detachDrag()` instead of only
+nulling `this.drag`. A page left mid-drag therefore takes its `mousemove`/`mouseup` off `window`
+immediately, where before they lingered until the next `mouseup` — which removed them and then did
+nothing, since `drag` was already `null`. The normal path keeps its order and effect: detach, read
+`moved`, then set `justDragged` + `detectChanges()` when a real drag happened (so the click that
+follows a drag stays suppressed). Pattern copied from the Scheduler's whole-block drag
+(`onMovePointer` / `endMovePointer` / `detachMove`).
+**Sibling gap the copy revealed (not fixed — same shape, other calendar):** the Scheduler's *resize*
+drag is still built from local closures (`scheduler.component.ts:1336-1339`) and its `detachResize()`
+only does `this.resizing = null` (line 1395), so a page left mid-*resize* keeps
+`pointermove`/`pointerup` until the next pointerup — exactly the gap P4b closes for the Timesheet. The
+fix is the same five lines; recorded as **P4c** pending an explicit go-ahead, because it touches the
+other calendar's drag path.
+**Verified:** gates green (build `complete` · `lint:ctor` OK · `lint:styles` 0 unused · **202 ok /
+0 FAIL**); no local listener closures remain (`dragMoveHandler` is the only `onDragMove` caller);
+36 insertions / 15 deletions in `timesheet.component.ts`.
 **Scope:** `core/telemetry.service.ts`, `features/scheduler/scheduler.component.ts` (gap 4), and the
 2 `router.events` subscriptions in `app.component.ts`.
 **Do:** confirm `TelemetryService`'s interval is cleared on every stop path (component destroy, module
@@ -319,6 +340,7 @@ because the phase added coverage — which must be stated in the log).
 | 2 | 2026-09-12 | **P2** — Dead code sweep | 6 unused imports removed; export + orphan sweep over the whole tree; 10 dead exports deleted | `LOW` | **done** — **33 deletions / 0 insertions** in 4 files, 0 orphans in 96 files, gates green at **202 ok / 0 FAIL** |
 | 3 | 2026-09-12 | **P3** — Naming & formatting | `ims-admin-verticals` → `ims-verticals`; the two `.editorconfig` whitespace violations in `styles.scss`; naming audit over all 99 files | `LOW` | **done** — 2 lines changed in `styles.scss` + 1 selector, 0 non-kebab files / 0 non-PascalCase classes, gates green at **202 ok / 0 FAIL** |
 | 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | Shell router subscriptions given `takeUntilDestroyed`; every listener/observer site audited; telemetry + scheduler "leaks" disproved by reading | `LOW` | **done** — 12 insertions / 6 deletions in `app.component.ts`, 0 real leaks, gates green at **202 ok / 0 FAIL**; Timesheet mid-drag gap recorded as **P4b** (not fixed) |
+| 4b | 2026-09-12 | **P4b** — Timesheet drag handlers | Drag listeners bound as fields, `endDrag()`/`detachDrag()`, `ngOnDestroy` detaches (Scheduler's tracked-handler pattern) | `LOW` | **done** — 36 insertions / 15 deletions in `timesheet.component.ts`, gates green at **202 ok / 0 FAIL**; Scheduler *resize* gap recorded as **P4c** (not fixed) |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | | `MED` | *queued* |
 | 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
@@ -338,7 +360,8 @@ because the phase added coverage — which must be stated in the log).
 | Whitespace drift | 2 `.editorconfig` violations in `src` (both `styles.scss`) | P3 ✔ |
 | Naming conventions | 99 files: 0 non-kebab basenames, 0 non-PascalCase exported classes, 0 CRLF/tabs/missing final newlines | P3 ✔ (already clean) |
 | Possible lifecycle leaks | `telemetry.service.ts:66/71` (`setInterval`), `scheduler.component.ts:1512` (deferred global listener removal) | P4 ✔ — both disproved: the sim is started/stopped by the shell, the listener self-removes within 400 ms |
-| Timesheet mid-drag listeners | `timesheet.component.ts:519-532` — `ngOnDestroy` nulls `drag` but leaves a live drag's `mousemove`/`mouseup` on `window` (they self-heal on the next `mouseup`) | **P4b** (optional, needs go-ahead: copy the Scheduler's tracked-handler pattern) |
+| Timesheet mid-drag listeners | `timesheet.component.ts:519-532` — `ngOnDestroy` nulled `drag` but left a live drag's `mousemove`/`mouseup` on `window` | **P4b ✔** — listeners are named fields now and `detachDrag()` runs on both exits |
+| Scheduler mid-resize listeners | `scheduler.component.ts:1336-1339` + `detachResize()` at 1395 — same shape as P4b: closures self-remove on `pointerup`, `detachResize()` only clears state | **P4c** (optional, needs go-ahead: the same five lines) |
 | Telemetry sim vs module flag | The shell starts the sim on `ngOnInit` if the module is enabled; disabling the module later leaves it ticking until reload | P4 — observed, deliberately unchanged (behaviour) |
 | Eager routes | 0 `loadComponent` of 16 features; initial bundle ~830 kB vs 500 kB warn budget | P7 |
 | No `OnPush` | 0 of 27 components | P8 |
@@ -353,5 +376,6 @@ because the phase added coverage — which must be stated in the log).
 |---|---|---|
 | 2026-09-12 | Log opened; **P1–P5 proposed as the low-risk sequence**, P6–P9 parked as ⛔ | This document |
 | 2026-09-12 | User approved executing **P1–P4 as one batch, one commit per phase, pausing for review before P5** | chat |
+| 2026-09-12 | User approved **P4b** (Timesheet drag handlers) and **pushing the batch to `origin`** | chat |
 
 
