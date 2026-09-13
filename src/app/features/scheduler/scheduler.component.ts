@@ -25,29 +25,32 @@ import { stampRange } from '../../shared/tip/tip-format';
 import { assetTip, orderRecordTip, orderTip, tip } from '../../shared/tip/tip-builders';
 import { Tip, TipLine } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
+import {
+  BarGeom,
+  BarModel,
+  BookingRef,
+  DAY_MS,
+  DayCol,
+  OrderModel,
+  View,
+  bookingsInRange as bookingsInRangeOf,
+  columnsFor,
+  committedUnits as committedUnitsOf,
+  dayAt as dayAtOf,
+  lineEnd as lineEndOf,
+  lineStart as lineStartOf,
+  mondayOf as mondayOfDate,
+  pad2 as pad2Of,
+  peakUnits as peakUnitsOf,
+  periodStartFor,
+  rangeBoundsFor,
+  startOfDay as startOfDayAt,
+} from './scheduler-view';
 
-const DAY_MS = 86400000;
 /** Gap within which a second click counts as a double-click (ms). */
 const DBLCLICK_MS = 250;
 const DAY_W = 90;
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-type View = 'day' | 'week' | 'month';
-interface DayCol { start: number; label: string; sub: string; }
-interface BarGeom { left: number; width: number; }
-interface BarModel {
-  orderId: string;
-  liId: string | null;
-  type: CatalogType | 'order';
-  label: string;
-  /** Short label shown in the row gutter (prototype `shortItemLabel`). */
-  short: string;
-  sub: string;
-  conflict: boolean;
-  geom: BarGeom;
-}
-interface OrderModel { order: Order; isExpanded: boolean; orderBar: BarModel | null; lines: BarModel[]; }
 interface ResizeState { orderId: string; liId: string | null; edge: 'l' | 'r'; track: HTMLElement; }
 /**
  * A whole-block drag (move, not resize). The origin geometry is snapshotted on
@@ -74,8 +77,6 @@ interface MoveState {
   /** True once the pointer actually travelled, so a plain click still selects. */
   moved: boolean;
 }
-/** A booking (order line) of one pool item, with its effective window. */
-interface BookingRef { orderId: string; start: string; end: string }
 /** Pool-card availability state (prototype `resCard` `avail.key`).
  *  Evaluated against the **visible period**, so the badge follows the selected
  *  range; `blocked` only means "not schedulable at all" (a retired item).
@@ -215,29 +216,7 @@ export class SchedulerComponent implements OnDestroy {
     this.cancelRowClick();
   }
 
-  columns(): DayCol[] {
-    const out: DayCol[] = [];
-    if (this.view === 'month') {
-      const d = new Date(this.anchor);
-      const n = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      for (let i = 1; i <= n; i++) {
-        const c = new Date(d.getFullYear(), d.getMonth(), i);
-        out.push({ start: c.getTime(), label: String(i), sub: DAY_NAMES[c.getDay()] });
-      }
-    } else if (this.view === 'week') {
-      const base = this.mondayOf(this.anchor);
-      for (let i = 0; i < 7; i++) {
-        const c = this.dayAt(base, i);
-        out.push({ start: c, label: DAY_NAMES[new Date(c).getDay()], sub: MONTHS[new Date(c).getMonth()] + ' ' + new Date(c).getDate() });
-      }
-    } else {
-      // Day view: 24 one-hour segments (00:00 .. 23:00)
-      for (let h = 0; h < 24; h++) {
-        out.push({ start: 0, label: this.pad2(h) + ':00', sub: '' });
-      }
-    }
-    return out;
-  }
+  columns(): DayCol[] { return columnsFor(this.view, this.anchor); }
 
   colCount(): number { return this.columns().length; }
   viewStart(): number { return this.columns()[0].start; }
@@ -254,9 +233,7 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   /** First day of the visible period — the one the pager label is anchored on. */
-  private periodStart(): Date {
-    return this.view === 'day' ? new Date(this.anchor) : new Date(this.columns()[0].start);
-  }
+  private periodStart(): Date { return periodStartFor(this.view, this.anchor); }
 
   shift(dir: number): void {
     if (this.view === 'month') {
@@ -355,8 +332,8 @@ export class SchedulerComponent implements OnDestroy {
     clearTimeout(this.pendingRowClick.timer);
     this.pendingRowClick = null;
   }
-  lineStart(li: OrderLine, order: Order): string { return li.startDate ?? order.startDate; }
-  lineEnd(li: OrderLine, order: Order): string { return li.endDate ?? order.endDate; }
+  lineStart(li: OrderLine, order: Order): string { return lineStartOf(li, order); }
+  lineEnd(li: OrderLine, order: Order): string { return lineEndOf(li, order); }
 
   /** Units this line takes — never below 1 (a serialized unit / employee is 1). */
   lineQty(li: OrderLine): number { return li.qty || 1; }
@@ -550,56 +527,21 @@ export class SchedulerComponent implements OnDestroy {
    * The visible period as inclusive local-midnight millisecond bounds.
    * Day view = the anchor day; Week/Month = the first..last column.
    */
-  private rangeBounds(): { start: number; end: number } {
-    const cols = this.columns();
-    const start = this.view === 'day' ? this.anchor : cols[0].start;
-    const last = this.view === 'day' ? this.anchor : cols[cols.length - 1].start;
-    return { start, end: this.dayAt(last, 1) - 1 };
-  }
+  private rangeBounds(): { start: number; end: number } { return rangeBoundsFor(this.view, this.anchor); }
 
   /**
    * Active-order bookings of a pool item that **overlap the visible period**
    * (prototype's `capAvailUI` recomputed per render instead of a fixed state).
    * This is what makes the pool reflect the range selected in the calendar.
    */
-  bookingsInRange(item: Item): BookingRef[] {
-    const r = this.rangeBounds();
-    const out: BookingRef[] = [];
-    for (const o of this.orders()) {
-      for (const li of o.lineItems) {
-        if (li.type !== item.type || li.refId !== item.id) continue;
-        const start = this.lineStart(li, o);
-        const end = this.lineEnd(li, o);
-        const s = new Date(start + 'T00:00:00').getTime();
-        const e = new Date(end + 'T00:00:00').getTime() + DAY_MS - 1;
-        if (s <= r.end && r.start <= e) out.push({ orderId: o.orderId, start, end });
-      }
-    }
-    return out;
-  }
+  bookingsInRange(item: Item): BookingRef[] { return bookingsInRangeOf(item, this.orders(), this.view, this.anchor); }
 
   /**
    * Peak units committed at once across a set of windows. Each span is day-
    * inclusive; its end event lands on the day *after* the window, so a booking
    * that finishes the day another begins still counts as overlapping that day.
    */
-  private peakUnits(spans: { start: number; end: number; qty: number }[]): number {
-    const events: { at: number; delta: number }[] = [];
-    for (const s of spans) {
-      events.push({ at: s.start, delta: s.qty });
-      events.push({ at: s.end + DAY_MS, delta: -s.qty });
-    }
-    // Ties end before they start, so a window closing as an identical one opens
-    // doesn't read as a momentary clash it never had.
-    events.sort((a, b) => a.at - b.at || a.delta - b.delta);
-    let running = 0;
-    let peak = 0;
-    for (const ev of events) {
-      running += ev.delta;
-      if (running > peak) peak = running;
-    }
-    return peak;
-  }
+  private peakUnits(spans: { start: number; end: number; qty: number }[]): number { return peakUnitsOf(spans); }
 
   /**
    * How many units of `item` are committed at once between two day bounds — every
@@ -608,19 +550,7 @@ export class SchedulerComponent implements OnDestroy {
    * check measures: 24 jugs of hydraulic fluid on two orders is fine, until the two
    * windows overlap and together ask for more than the item owns.
    */
-  private committedUnits(item: Item, from: number, to: number): number {
-    const spans: { start: number; end: number; qty: number }[] = [];
-    for (const o of this.orders()) {
-      for (const li of o.lineItems) {
-        if (li.type !== item.type || li.refId !== item.id) continue;
-        const s = Date.parse(this.lineStart(li, o) + 'T00:00:00');
-        const e = Date.parse(this.lineEnd(li, o) + 'T00:00:00');
-        if (s > to || e < from) continue;
-        spans.push({ start: Math.max(s, from), end: Math.min(e, to), qty: li.qty || 1 });
-      }
-    }
-    return this.peakUnits(spans);
-  }
+  private committedUnits(item: Item, from: number, to: number): number { return committedUnitsOf(item, this.orders(), from, to); }
 
   /**
    * M/D/YY — the compact date for the narrow panel rows: the pool cards' booking
@@ -1085,14 +1015,8 @@ export class SchedulerComponent implements OnDestroy {
   }
 
   /** Local midnight `i` days after the local midnight at `base` (DST-safe). */
-  dayAt(base: number, i: number): number {
-    const d = new Date(base);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() + i).getTime();
-  }
+  dayAt(base: number, i: number): number { return dayAtOf(base, i); }
 
-  private pad2(n: number): string {
-    return n < 10 ? '0' + n : String(n);
-  }
   orderT0(o: Order): number { return this.data.orderT0(o); }
   orderT1(o: Order): number { return this.data.orderT1(o); }
   lineT0(li: OrderLine, o: Order): number { return li.t0 ?? this.orderT0(o); }
@@ -1576,15 +1500,7 @@ export class SchedulerComponent implements OnDestroy {
       lng: -84.388,
     };
   }
-  private startOfDay(d: Date): number {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    return x.getTime();
-  }
-  private mondayOf(ms: number): number {
-    const x = new Date(ms);
-    const day = (x.getDay() + 6) % 7;
-    x.setDate(x.getDate() - day);
-    return this.startOfDay(x);
-  }
+  private pad2(n: number): string { return pad2Of(n); }
+  private startOfDay(d: Date): number { return startOfDayAt(d); }
+  private mondayOf(ms: number): number { return mondayOfDate(ms); }
 }

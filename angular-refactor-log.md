@@ -561,6 +561,44 @@ are true by construction, which is the point: a check that guesses a field name 
 nothing could test it — "it is P9's first customer". `check26` is that customer's net: extract, then
 prove the same numbers by running the same assertions against the extracted functions.
 
+### P6/3 — the component half, in slices: the calendar & capacity math · `MED` · status: **done (2026-09-12)**
+**What moved.** `src/app/features/scheduler/scheduler-view.ts` (196 lines) now holds the Scheduler's
+period and capacity math as pure functions: `startOfDay` / `mondayOf` / `dayAt` / `pad2`,
+`columnsFor(view, anchor)`, `periodStartFor`, `rangeBoundsFor`, `lineStart` / `lineEnd`, `peakUnits`,
+`bookingsInRange(item, orders, view, anchor)` and `committedUnits(item, orders, from, to)` — plus the
+view-model types (`View`, `DayCol`, `BarGeom`, `BarModel`, `OrderModel`, `BookingRef`) that were declared
+inside the component. `scheduler.component.ts` went **1,591 → 1,506 lines** and now *delegates* through
+same-named thin methods, so its ~100 internal call sites and its template were not touched at all.
+**Why a slice and not the whole 1,591 lines.** `models()` / `conflicts()` are the *geometry* layer: they
+turn these windows into pixels and read catalog names/capacities from the store, so they are their own
+slice with their own proof. This one is the layer beneath them — the part `check26` already asserts.
+**The proof (P6/2's method, applied to a component).** A throwaway dumper
+(`/tmp/dump-scheduler.sh`, kept out of the repo because its *output* is replaced by check26's assertions)
+instantiates the real component in Node and writes a canonical JSON of every derived value: 3 views × 5
+anchor positions (labels, phrase, column counts, first column, timeline width, every column, visible
+bounds), `bookingsInRange` for every pool item, `committedUnits` for every seeded line window, 5 crafted
+`peakUnits` cases, every `models()` bar and `conflicts()` row, and `conflictCount()`. Run before the
+extraction and again after: **42,584 bytes, `cmp` byte-identical** — every derived value in the screen
+provably unchanged, including the geometry layer this slice did not touch.
+**Then the assertions became durable.** check26 grew from 5 to **9 checks**: the four new ones drive the
+extracted module *directly, with no component and no DOM* — the whole point of the extraction —
+including the day-inclusive tie rule in `peakUnits` (a booking that ends the day another begins must not
+read as a clash).
+**Third time the same lesson, recorded again:** my first `peakUnits` assertion expected 1 and the code
+returned 2 — because I wrote the fixture as if `end` were exclusive when spans are day-inclusive, so my
+"back-to-back" pair genuinely shared a day. The code was right; the assertion was wrong. (That is now the
+third time in this effort that a failing check was the check's fault — P9b logged five such cases. The
+pattern is consistent enough to be worth stating plainly: **when a new assertion fails, suspect the
+assertion first**, and prefer claims that are true by construction over field-name guesses.)
+**Verified:** build `complete` (0 warnings) · `lint:ctor` OK · `lint:styles` 0 unused · `lint:dead` 0/0 ·
+`check:store` **219 ok / 0 FAIL** in 26 harnesses · `npm run e2e` all checks passed.
+**What is left of P6's component half (P6/4).** The geometry layer: `models()`, `conflicts()`,
+`conflictCount()`, `isConflicted()`, `conflictDetail()`, and the helpers they drag in — `geom` /
+`geomMin` / `minToX`-style converters, `orderT0` / `orderT1` / `lineT0` / `lineT1`, `dateIncludes`,
+`fmtMin`, `qtySuffix`, `lineDays`, `sortedLines`, `typeRank`, `itemName`, `shortItemLabel`. These need
+`data` passed in (the seeds' pattern) because they resolve catalog names and capacities. The proof
+method is already in place: same dumper, same byte-identical `cmp`.
+
 ### P6a — the `format` extraction · `LOW` · status: **done (2026-09-12)**
 **Done:** the store's `format` section — its only one with **no store state** and **no inbound calls**
 from any other section (P6's measurement) — moved to `core/format.ts`: `money`, `int`, `pct`, `parseDT`,
@@ -834,6 +872,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study + pilot | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; applied the identified pilot — `OnPush` on `field-editor` only | `HIGH` | **done** — no sweep (a stale view is invisible to every gate here); the one pilot is in with a two-minute confirmation checklist recorded; gates green at **210 ok / 0 FAIL** |
 | 9b | 2026-09-12 | **P9b** — The harness reaches a component | Probed and proved that the Scheduler class instantiates in Node (JIT compiler loaded, `ChangeDetectorRef`/`ConfirmService` stubbed); runner now compiles with `--rootDir src/app` + flattens core; `check26.mjs` (5 checks) over its view math | `MED` | **done** — `check:store` **215 ok / 0 FAIL in 26 harnesses**; five of my draft assertions failed and all five were the assertion's fault (recorded); this is the net P6's component extraction was waiting for |
+| 6/3 | 2026-09-12 | **P6/3** — Component half, slice 1: calendar & capacity math | `scheduler-view.ts` (196 lines) of pure functions + the view-model types; component **1,591 → 1,506 lines** delegating through same-named methods (template and ~100 call sites untouched) | `MED` | **done** — before/after dump of every derived value **byte-identical (42,584 B, `cmp`)**; check26 5 → **9 checks** driving the module directly; build/lints clean; **219 ok / 0 FAIL**; e2e green. P6/4 (the geometry layer: `models`/`conflicts` + `geom*`/`*T0`/`*T1`) has its dependency list and proof method ready |
 
 ### Findings ledger (evidence for the phases above)
 
