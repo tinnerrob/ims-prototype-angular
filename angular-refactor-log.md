@@ -531,6 +531,36 @@ natural first customer of P9.
 phase was scoped to the proposal, and because the log's own rule is that a phase documents before the
 next one executes. Say the word and 1 goes first (smallest, pure), then 2 (biggest, but pure data).
 
+### P9b — the harness pattern reaches a component · `MED` · status: **done (2026-09-12)**
+**The gap this closed:** 25 harnesses proved the *store*; the biggest component in the app
+(`scheduler.component.ts`, 1,591 lines) had no regression net at all. `npm run e2e` renders it, and
+rendering says "it draws", not "it draws the right period".
+**What made it possible (probed before designed):** the component class can be instantiated **in Node,
+with no DOM**, because its *derived* reads are pure — the constructor takes the store, and only the drag
+handlers touch the DOM (`getBoundingClientRect`, in `onMoveMove`/`onResizeMove`). Two details make it
+run: `import '@angular/compiler'` first (the decorators need JIT outside the framework) and stubs for the
+injected `ChangeDetectorRef`/`ConfirmService`, which the methods under test never call.
+**The runner change that unlocked it:** `check-store.sh` now compiles with `--rootDir src/app` and
+includes `features/scheduler/scheduler.component.ts`, then copies the emitted `core/` up to the temp root
+so the other 25 harnesses' flat `./data.service.js` imports keep working. (Second time this runner has
+had to learn something — the first was the recursive import fix-up in P6/2.)
+**`check26.mjs`** (5 checks) asserts the Scheduler's view math against the fixture: it opens on the week
+view, Monday-anchored and self-consistent; a week is seven consecutive labelled days; day and month views
+switch and a month is 28–31 columns all inside the anchored month; every bar names a real order; and the
+conflict list names orders while *nothing on the order row stores one* (derived, not held).
+**Honest note on the first three drafts of it:** five of my initial assertions failed, and **every one
+was the assertion's fault, not the app's** — I guessed that a day view is one column (it is 24), that
+bars carry a `liId`/`left`/`width` (they don't, at the top level), that day columns all sit in one
+calendar day, that an order outside the week can't produce a bar (its *line's* dates decide), and that
+the anchor is the earliest order rather than the first *active* one. They are now narrowed to claims that
+are true by construction, which is the point: a check that guesses a field name tests the guess.
+**Verified:** `check:store` **215 ok / 0 FAIL** in 26 harnesses; build `complete`; `lint:ctor` OK;
+`lint:dead` 0/0; `npm run e2e` still green.
+**What this unblocks:** P6's component half. The extraction (`scheduler-view.ts` for `models` / `columns`
+/ `conflicts` / `peakUnits` / `bookingsInRange` / `committedUnits`) was filed in P6 precisely because
+nothing could test it — "it is P9's first customer". `check26` is that customer's net: extract, then
+prove the same numbers by running the same assertions against the extracted functions.
+
 ### P6a — the `format` extraction · `LOW` · status: **done (2026-09-12)**
 **Done:** the store's `format` section — its only one with **no store state** and **no inbound calls**
 from any other section (P6's measurement) — moved to `core/format.ts`: `money`, `int`, `pct`, `parseDT`,
@@ -803,7 +833,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 6/2 | 2026-09-12 | **P6/2** — Seeds → `core/seed/` | 24 pure data factories into 5 modules + the 8 shared fixture facts + `pad3` → `format.ts`; the 6 store-coupled seeders stay; generated mechanically and policed by a snapshot diff | `LOW/MED` | **done** — store **5,179 → 4,333** lines, `core/seed/` 915; **whole seeded store byte-identical** (92,351 B, `cmp` clean); check:store 210/0; also fixed a latent `check-store.sh` import-rewrite bug that broke on nested paths |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study + pilot | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; applied the identified pilot — `OnPush` on `field-editor` only | `HIGH` | **done** — no sweep (a stale view is invisible to every gate here); the one pilot is in with a two-minute confirmation checklist recorded; gates green at **210 ok / 0 FAIL** |
-| 9 | 2026-09-12 | **P9** — Rendering checks | `check25.mjs` (8 checks) over the untested pure helpers; then the browser option: Playwright dev-dep, `scripts/serve-dist.mjs` + `scripts/e2e-smoke.mjs` (`npm run e2e`) driving the built app | `HIGH` | **done** — `check:store` **210 ok / 0 FAIL**; e2e green (6 lazy routes render with a clean console + the field-editor grid exercised through the UI, screenshots to `dist/e2e/`); the P8 pilot is now empirically verified |
+| 9b | 2026-09-12 | **P9b** — The harness reaches a component | Probed and proved that the Scheduler class instantiates in Node (JIT compiler loaded, `ChangeDetectorRef`/`ConfirmService` stubbed); runner now compiles with `--rootDir src/app` + flattens core; `check26.mjs` (5 checks) over its view math | `MED` | **done** — `check:store` **215 ok / 0 FAIL in 26 harnesses**; five of my draft assertions failed and all five were the assertion's fault (recorded); this is the net P6's component extraction was waiting for |
 
 ### Findings ledger (evidence for the phases above)
 

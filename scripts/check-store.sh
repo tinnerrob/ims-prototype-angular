@@ -18,6 +18,8 @@ trap 'rm -rf "$OUT"' EXIT
 cd "$ROOT"
 npx tsc src/app/core/data.service.ts src/app/core/session.service.ts src/app/core/modules.service.ts \
   src/app/core/forms.service.ts src/app/core/vertical-metadata.ts \
+  src/app/features/scheduler/scheduler.component.ts \
+  --rootDir src/app \
   --outDir "$OUT" --module es2022 --target es2022 --moduleResolution bundler \
   --experimentalDecorators --skipLibCheck --strict false
 
@@ -26,6 +28,7 @@ npx tsc src/app/core/data.service.ts src/app/core/session.service.ts src/app/cor
 perl -pi -e "s|from '(\.[^']+)'|from '\$1.js'|g" $(find "$OUT" -name '*.js')
 # The services import @angular/core (signals, @Injectable); point Node at the
 # installed packages rather than installing anything for this.
+cp -R "$OUT"/core/. "$OUT"/
 ln -s "$ROOT/node_modules" "$OUT/node_modules"
 cp scripts/runtime-checks/*.mjs "$OUT/"
 # check9 compares the data-model document with the model source, and TypeScript
@@ -33,4 +36,4 @@ cp scripts/runtime-checks/*.mjs "$OUT/"
 cp src/app/core/models.ts src/app/core/data.service.ts docs/DATA-MODEL.md "$OUT/"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs && node check20.mjs && node check21.mjs && node check22.mjs && node check23.mjs && node check24.mjs && node check25.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs && node check20.mjs && node check21.mjs && node check22.mjs && node check23.mjs && node check24.mjs && node check25.mjs && node check26.mjs
