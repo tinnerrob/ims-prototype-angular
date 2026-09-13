@@ -53,3 +53,8 @@ export function fmtDT(iso: string | null | undefined): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+
+
+/* id padding: `PO-2026-003`, `CAT-001` — the store and the seed modules both build ids. */
+/** `pad3` — id-generator formatting (`PO-2026-003`, `RC-2026-001`, `INSP-001`). */
+export const pad3 = (n: number) => String(n).padStart(3, '0');

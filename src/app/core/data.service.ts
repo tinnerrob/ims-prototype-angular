@@ -65,12 +65,10 @@ import {
   isPurchasable,
   isUnitStock,
   needsReorder,
-  behaviourOfType,
   typeForBehaviour,
   uniqueFields,
-  verticalLabel,
 } from './models';
-import { VERTICAL_METADATA, VerticalMetadata, VerticalTabMeta, verticalMetaFor, tabMetaFor } from './vertical-metadata';
+import { VerticalMetadata, VerticalTabMeta, verticalMetaFor, tabMetaFor } from './vertical-metadata';
 
 /*
  * The pure date/period and money helpers live in their own modules (B1) — the
@@ -78,7 +76,7 @@ import { VERTICAL_METADATA, VerticalMetadata, VerticalTabMeta, verticalMetaFor, 
  * block so every existing `from '../../core/data.service'` import keeps working
  * unchanged; only `DataService` itself reads them locally.
  */
-import { fmtDT, fmtDate, int, money, parseDT, pct } from './format';
+import { fmtDT, fmtDate, int, money, pad3, parseDT, pct } from './format';
 import {
   dISO,
   hmMin,
@@ -92,9 +90,12 @@ import {
 } from './period';
 import type { PeriodView } from './period';
 import { round2, movingCost, billableDaysBetween, wholeUnitsBilled, BILLING_CYCLES } from './pricing';
+import { seedFormSchemas, seedTenants, seedUsers } from './seed/tenancy';
+import { seedAssetCategories, seedLocationTypes, seedLocations, seedOverheads, seedPricing, seedReceiving, seedStockSchema, seedTaxSchedules, seedVerticals } from './seed/config';
+import { seedOrders, seedParties, seedPriceCards, seedPurchaseOrders } from './seed/parties';
+import { seedDispatches, seedDocuments, seedInspections, seedInvoices, seedRentals, seedTimesheets, seedVehicles, seedWorkOrders } from './seed/operations';
+import { CREW_BASE, DEMO_OWNER_ID, DEMO_TENANT_ID, DEMO_USER_ID, SHOP_STATUS, WAREHOUSE_1, YARD_STAGING } from './seed/fixtures';
 
-/** `pad3` — id-generator formatting (`PO-2026-003`, `RC-2026-001`, `INSP-001`). */
-const pad3 = (n: number) => String(n).padStart(3, '0');
 
 /** The public helper surface, unchanged (period pagers, logs, purchasing lists). */
 export { hmMin, minHM, snap15, dISO, periodLabel, periodPhrase, mondayOf, dayAt, periodBounds } from './period';
@@ -161,35 +162,11 @@ export interface ReceiveInput {
 }
 
 
-/** The seeded demo workspace + the person the session starts as. */
-const DEMO_TENANT_ID = 'TNT-NORTHLINE';
-const DEMO_USER_ID = 'USR-003';
-/** Who the fixtures are attributed to (the workspace owner, in a real install). */
-const DEMO_OWNER_ID = 'USR-001';
 
 /** The audit columns, ignored when comparing a row with the last saved copy. */
 const AUDIT_KEYS = ['tenantId', 'createdAt', 'createdBy', 'updatedAt', 'updatedBy'];
 
-/**
- * Seeded placement ids (`settings.locations`) — the fixtures' `locationId`
- * values. Named because the alternative is eight call sites repeating `'LOC-03'`
- * and a reader who can't tell a yard from a warehouse without scrolling to the
- * location seed.
- */
-const YARD_STAGING = 'LOC-03'; // Yard A — equipment staging (machines, bulk, attachments)
-const WAREHOUSE_1 = 'LOC-05'; // Warehouse 1 (kits, the shop's own stock)
-/** Where a unit that is in the shop sits (vs. staged in the yard). */
-const SHOP_STATUS = 'In Shop';
 
-/**
- * Where a crew member is **based**, by the department they work in (Phase C): a
- * person carries a place too (their home base), the same single FK a machine has.
- */
-const CREW_BASE: Record<string, string> = {
-  Field: YARD_STAGING, // operators muster in the yard
-  Shop: WAREHOUSE_1, // technicians work out of the shop
-  Dispatch: 'LOC-04', // drivers park up in Yard B
-};
 
 /**
  * A counted row's derived quantities (see `StockLevel`): the fields that are
@@ -219,37 +196,6 @@ function contentSignature(row: object): string {
   return JSON.stringify(row, (k, v) => (AUDIT_KEYS.includes(k) ? undefined : v));
 }
 
-/**
- * The default field set per catalog type (B2) — shared by the seeded `form_schemas`
- * **and** the seeded asset categories (Phase C), so the two cannot drift. A
- * category seeded from the registry starts with its type's fields; a tenant then
- * owns them.
- */
-const ASSET_FIELD_DEFAULTS: Record<CatalogType, FormField[]> = {
-  serialized: [
-    { key: 'emissionsTier', label: 'Emissions Tier', kind: 'select', options: ['Tier 4 Final', 'Tier 4', 'Tier 3'] },
-    { key: 'warrantyExpiry', label: 'Warranty Expiry', kind: 'date' },
-    { key: 'gpsTrackerId', label: 'GPS Tracker ID', kind: 'text' },
-  ],
-  bulk: [
-    { key: 'grade', label: 'Grade', kind: 'text' },
-    { key: 'moisturePct', label: 'Moisture', kind: 'measurement', unit: '%', min: 0, max: 100 },
-  ],
-  consumable: [{ key: 'manufacturerPartNo', label: 'Manufacturer Part No.', kind: 'text' }],
-  part: [
-    { key: 'manufacturerPartNo', label: 'Manufacturer Part No.', kind: 'text' },
-    { key: 'torqueSpec', label: 'Torque Spec', kind: 'measurement', unit: 'Nm', min: 0 },
-  ],
-  labor: [
-    { key: 'licenceNo', label: 'Licence No.', kind: 'text' },
-    { key: 'certExpiry', label: 'Certification Expiry', kind: 'date' },
-  ],
-  attachment: [
-    { key: 'couplerType', label: 'Coupler Type', kind: 'select', options: ['Pin-on', 'Quick Coupler', 'Hydraulic'] },
-    { key: 'weightKg', label: 'Weight', kind: 'measurement', unit: 'kg', min: 0 },
-  ],
-  kit: [],
-};
 
 /**
  * IMS — DataService (the JSON store / API seam).
@@ -357,21 +303,21 @@ export class DataService {
     documents: Document[];
   } = {
     settings: {
-      locations: this.seedLocations(),
-      locationTypes: this.seedLocationTypes(),
-      taxSchedules: this.seedTaxSchedules(),
-      overheads: this.seedOverheads(),
-      pricing: this.seedPricing(),
-      receiving: this.seedReceiving(),
-      stockSchema: this.seedStockSchema(),
+      locations: seedLocations(),
+      locationTypes: seedLocationTypes(),
+      taxSchedules: seedTaxSchedules(),
+      overheads: seedOverheads(),
+      pricing: seedPricing(),
+      receiving: seedReceiving(),
+      stockSchema: seedStockSchema(),
     },
-    tenants: this.seedTenants(),
-    users: this.seedUsers(),
+    tenants: seedTenants(),
+    users: seedUsers(),
     session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID },
     yard: { name: 'Main Yard — Buckhead Hub', lat: 33.749, lng: -84.388 },
-    parties: this.seedParties(),
-    priceCards: this.seedPriceCards(),
-    orders: this.seedOrders(),
+    parties: seedParties(),
+    priceCards: seedPriceCards(),
+    orders: seedOrders(),
     items: this.seedItems(),
     /** Filled by `seedStockLevels()` in the constructor: a level row needs the
      *  item it belongs to, and every seeded quantity has to be placed. */
@@ -380,21 +326,21 @@ export class DataService {
      *  derived from the unit's own seeded placement, which exists only once
      *  `items` above has been initialised. */
     movements: [],
-    purchaseOrders: this.seedPurchaseOrders(),
+    purchaseOrders: seedPurchaseOrders(),
     /** Posted by `seedReceipts()` in the constructor (see below). */
     receipts: [],
-    inspections: this.seedInspections(),
-    workOrders: this.seedWorkOrders(),
-    timesheets: this.seedTimesheets(),
-    rentals: this.seedRentals(),
-    vehicles: this.seedVehicles(),
-    dispatches: this.seedDispatches(),
-    invoices: this.seedInvoices(),
-    formSchemas: this.seedFormSchemas(),
-    verticals: this.seedVerticals(),
-    assetCategories: this.seedAssetCategories(),
+    inspections: seedInspections(),
+    workOrders: seedWorkOrders(),
+    timesheets: seedTimesheets(),
+    rentals: seedRentals(),
+    vehicles: seedVehicles(),
+    dispatches: seedDispatches(),
+    invoices: seedInvoices(),
+    formSchemas: seedFormSchemas(),
+    verticals: seedVerticals(),
+    assetCategories: seedAssetCategories(),
     countSessions: [],
-    documents: this.seedDocuments(),
+    documents: seedDocuments(),
   };
 
   constructor() {
@@ -4008,68 +3954,6 @@ export class DataService {
     return 'FS-' + String(max + 1).padStart(3, '0');
   }
 
-  /**
-   * The default form schemas: one per catalog type, naming the extra facts that
-   * industry records carry beyond the fixed columns. A tenant may edit or extend
-   * these — the *fields* are the flexible layer; a fact that has to be queried
-   * still becomes a column (see `docs/PLAN-B.md`, §1).
-   */
-  private seedFormSchemas(): FormSchema[] {
-    const item = (type: CatalogType, name: string, seededFrom: VerticalKey, fields: FormField[]): FormSchema => ({
-      id: `FS-item-${type}`,
-      name,
-      scope: 'item',
-      type,
-      seededFrom,
-      active: true,
-      version: 1,
-      fields,
-    });
-    return [
-      item('serialized', 'Equipment details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.serialized),
-      item('bulk', 'Material details', 'Lumberyard', ASSET_FIELD_DEFAULTS.bulk),
-      item('consumable', 'Supply details', 'Warehouse', ASSET_FIELD_DEFAULTS.consumable),
-      // The clinic's supply schema (B3): the same catalog type, a different set of
-      // fields — a vertical's tab names it explicitly (`formSchema`).
-      {
-        id: 'FS-item-consumable-clinic',
-        name: 'Clinical supply details',
-        scope: 'item',
-        type: 'consumable',
-        seededFrom: 'Healthcare',
-        active: true,
-        version: 1,
-        fields: [
-          { key: 'manufacturerPartNo', label: 'Manufacturer Part No.', kind: 'text' },
-          { key: 'lot', label: 'Lot', kind: 'text' },
-          { key: 'expiry', label: 'Expiry', kind: 'date' },
-          { key: 'storageTemp', label: 'Storage Temp', kind: 'measurement', unit: '°C', min: -50, max: 60 },
-        ],
-      },
-      item('part', 'Part details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.part),
-      item('labor', 'Personnel details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.labor),
-      item('attachment', 'Attachment details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.attachment),
-      item('kit', 'Kit details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.kit),
-      // The default inspection checklist (B7): the five condition checks that used
-      // to be a fixed union, now data a tenant can edit or replace.
-      {
-        id: 'FS-inspection-default',
-        name: 'Yard in/out inspection',
-        scope: 'inspection',
-        seededFrom: 'HeavyEquipment',
-        active: true,
-        version: 1,
-        fields: [
-          { key: 'tires', label: 'Tires / Tracks', kind: 'select', options: ['Good', 'Worn', 'Damaged'] },
-          { key: 'fluids', label: 'Fluids', kind: 'select', options: ['Full', 'Low', 'Leaking'] },
-          { key: 'guards', label: 'Safety Guards', kind: 'select', options: ['In place', 'Loose', 'Missing'] },
-          { key: 'lights', label: 'Lights', kind: 'select', options: ['Working', 'Faulty'] },
-          { key: 'engine', label: 'Engine', kind: 'select', options: ['Normal', 'Noisy', 'Fault'] },
-        ],
-      },
-    ];
-  }
-
   private nextOverheadId(): string {
     return 'OH-' + String(this.db.settings.overheads.length + 1).padStart(3, '0');
   }
@@ -4121,324 +4005,6 @@ export class DataService {
         return sum + li.qty * (value * annual / 365) * days;
       }, 0),
     );
-  }
-
-
-  /* -------------------------------- seeds ------------------------------- */
-
-  private seedParties(): Party[] {
-    return [
-      {
-        id: 'PTY-001',
-        name: 'Halstead Construction',
-        contact: 'M. Halstead',
-        phone: '(404) 555-0134',
-        email: 'projects@halstead.com',
-        billingAddress: '100 Peachtree Pkwy NE, Atlanta, GA',
-        billingCycle: 'weekly',
-        notes: 'Boom & aerial work; weekly cadence.',
-        active: true,
-      },
-      {
-        id: 'PTY-002',
-        name: 'Meridian Civil Works',
-        contact: 'L. Bishop',
-        phone: '(678) 555-0192',
-        email: 'ops@meridiancivil.com',
-        billingAddress: '88 River Rd, Atlanta, GA',
-        billingCycle: 'bi-weekly',
-        notes: 'Bridge / heavy civil. Net-30 terms.',
-        active: true,
-      },
-      {
-        id: 'PTY-003',
-        name: 'Coastal Energy Group',
-        contact: 'R. Vance',
-        phone: '(404) 555-0117',
-        email: 'supply@coastalenergy.com',
-        billingAddress: '1 Fuel Pier, Savannah, GA',
-        billingCycle: 'monthly',
-        notes: 'Refinery/hazmat; risk premium applies.',
-        active: true,
-      },
-      {
-        id: 'PTY-004',
-        name: 'Port Authority',
-        contact: 'T. Nguyen',
-        phone: '(912) 555-0165',
-        email: 'facilities@portauthority.gov',
-        billingAddress: 'Terminal Way, Savannah, GA',
-        billingCycle: 'quarterly',
-        notes: 'Public works; coastal surcharge.',
-        active: true,
-      },
-      {
-        id: 'PTY-005',
-        name: 'Brightleaf General Contracting',
-        contact: 'S. Rawlins',
-        phone: '(770) 555-0149',
-        email: 'pm@brightleafgc.com',
-        billingAddress: '1200 Piedmont Ave, Atlanta, GA',
-        billingCycle: 'monthly',
-        notes: 'Small jobs; no active orders.',
-        active: true,
-      },
-      /*
-       * Suppliers are the same kind of row as a customer — one partner table
-       * with roles on the row (`Party.kinds`) — so the buying side has a FK to
-       * point at from the day it exists: a purchase order names a *party*, not
-       * the vendor string the prototype's sub-rentals carried. A row seeded
-       * without `kinds` is a customer (every pre-A5 row), which is why only the
-       * suppliers below spell it out.
-       */
-      {
-        id: 'PTY-006',
-        name: 'United Rentals — Southeast',
-        contact: 'D. Whitfield',
-        phone: '(404) 555-0210',
-        email: 'orders@ur-southeast.com',
-        billingAddress: '4400 Buford Hwy, Norcross, GA',
-        billingCycle: 'net-30',
-        kinds: ['supplier'],
-        notes: 'Equipment purchases; fleet pricing.',
-        active: true,
-      },
-      {
-        id: 'PTY-007',
-        name: 'Fastenal Industrial Supply',
-        contact: 'Inside Sales',
-        phone: '(770) 555-0188',
-        email: 'atlanta@fastenal.com',
-        billingAddress: '2100 Industrial Blvd, Atlanta, GA',
-        billingCycle: 'net-30',
-        kinds: ['supplier'],
-        notes: 'Filters, hoses, hardware; weekly van stock.',
-        active: true,
-      },
-      {
-        id: 'PTY-008',
-        name: 'Wacker Neuson Southeast',
-        contact: 'P. Adeyemi',
-        phone: '(678) 555-0133',
-        email: 'sales@wackerneuson-se.com',
-        billingAddress: '900 Commerce Dr, McDonough, GA',
-        billingCycle: 'net-45',
-        kinds: ['supplier'],
-        notes: 'OEM dealer: compact equipment and OEM parts.',
-        active: true,
-      },
-      {
-        id: 'PTY-009',
-        name: 'SafetyMart Direct',
-        contact: 'R. Ivey',
-        phone: '(800) 555-0142',
-        email: 'orders@safetymartdirect.com',
-        billingAddress: '77 Distribution Ct, Savannah, GA',
-        billingCycle: 'prepaid',
-        kinds: ['supplier'],
-        notes: 'PPE consumables; prepaid card on file.',
-        active: true,
-      },
-      /*
-       * The three partners the sub-rental ledger draws from (`seedRentals`): we
-       * don't own their machines, we rent them to fill an order and bill the
-       * customer — "in" rentals rather than "out". They carry the supplier kind
-       * because that is what they are to us: a counterparty we buy from.
-       */
-      {
-        id: 'PTY-010',
-        name: 'PowerGen Rentals',
-        contact: 'A. Kowalski',
-        phone: '(912) 555-0173',
-        email: 'dispatch@powergen-rentals.com',
-        billingAddress: '19 Turbine Rd, Savannah, GA',
-        billingCycle: 'net-30',
-        kinds: ['supplier'],
-        notes: 'Temporary power / generators; same-day delivery.',
-        active: true,
-      },
-      {
-        id: 'PTY-011',
-        name: 'Forklift Fleet Co',
-        contact: 'J. Marchetti',
-        phone: '(770) 555-0197',
-        email: 'rentals@forkliftfleet.com',
-        billingAddress: '620 Industrial Park Dr, Marietta, GA',
-        billingCycle: 'net-30',
-        kinds: ['supplier'],
-        notes: 'Material handling; sub-rentals billed weekly.',
-        active: true,
-      },
-      {
-        id: 'PTY-012',
-        name: 'Meridian Tools Supply',
-        contact: 'D. Osei',
-        phone: '(678) 555-0151',
-        email: 'hire@meridiantools.com',
-        billingAddress: '410 Foundry St, Atlanta, GA',
-        billingCycle: 'net-15',
-        kinds: ['supplier'],
-        notes: 'Compaction & small plant hire.',
-        active: true,
-      },
-    ];
-  }
-
-
-  /**
-   * Negotiated rates, one card per counterparty (see `PriceCard`).
-   *
-   * The fixture is a set of *cases* rather than a set of prices, because the card
-   * is read rather than copied and the interesting questions are which card wins
-   * and when:
-   *
-   *  - `PC-001` is **in force** and reprices a live order — CT-2024-001
-   *    (Halstead, from 2026-08-20) now bills at the negotiated rates;
-   *  - `PC-002` is in force for a second customer, so an order priced by one
-   *    party's card shows whether the other's leaked into it;
-   *  - `PC-003` is **expired** (2025) for Meridian, whose CT-2024-002 starts in
-   *    2026: the order must keep the catalog rates. That window is the whole
-   *    reason a card carries dates — a renewal is a new card, so an old contract
-   *    keeps the price it was written at;
-   *  - `PC-004` is a **supplier's** card. Its `unitCost` is the cost side: the PO
-   *    editor's default, while PO-2026-001 still states the price it was ordered
-   *    at (the document's own fact beats the default it was seeded from).
-   */
-  private seedPriceCards(): PriceCard[] {
-    return [
-      {
-        id: 'PC-001',
-        partyId: 'PTY-001',
-        name: '2026 Master Agreement',
-        active: true,
-        effectiveFrom: '2026-01-01',
-        effectiveTo: '2026-12-31',
-        note: 'Volume rates on the aerial fleet; agreed hourly and PPE prices.',
-        lines: [
-          { type: 'serialized', refId: 'BL-119', rateDaily: 465, baseWeekly: 2325, baseMonthly: 6975 },
-          { type: 'serialized', refId: 'FL-401', rateDaily: 195, baseWeekly: 975, baseMonthly: 2925 },
-          { type: 'consumable', refId: 'SG-LFT-001', unitPrice: 4.6 },
-          { type: 'labor', refId: 'EMP-001', unitPrice: 62 },
-        ],
-      },
-      {
-        id: 'PC-002',
-        partyId: 'PTY-003',
-        name: 'Refinery Hazmat Rates 2026',
-        active: true,
-        effectiveFrom: '2026-01-01',
-        effectiveTo: '2026-12-31',
-        note: 'Hazmat-rated units sit above list; the barriers are capped.',
-        lines: [
-          { type: 'serialized', refId: 'GN-511', rateDaily: 155, baseWeekly: 775, baseMonthly: 2325 },
-          { type: 'bulk', refId: 'BR-010', rateDaily: 5.75, baseWeekly: 23, baseMonthly: 69 },
-          { type: 'labor', refId: 'EMP-002', unitPrice: 78 },
-        ],
-      },
-      {
-        id: 'PC-003',
-        partyId: 'PTY-002',
-        name: '2025 Rates (superseded)',
-        active: true,
-        effectiveFrom: '2025-01-01',
-        effectiveTo: '2025-12-31',
-        note: 'Superseded 2025 agreement — kept for history, no longer in force.',
-        lines: [
-          { type: 'serialized', refId: 'SS-204', rateDaily: 199, baseWeekly: 995, baseMonthly: 2985 },
-          { type: 'serialized', refId: 'TL-605', rateDaily: 355 },
-        ],
-      },
-      {
-        id: 'PC-004',
-        partyId: 'PTY-007',
-        name: 'FY26 Supply Agreement',
-        active: true,
-        effectiveFrom: '2026-01-01',
-        effectiveTo: '2026-12-31',
-        note: 'Consumable/filter pricing agreed for the year.',
-        lines: [
-          { type: 'part', refId: 'PRT-001', unitCost: 16.1 },
-          { type: 'part', refId: 'PRT-002', unitCost: 19.4 },
-        ],
-      },
-    ];
-  }
-
-
-  /** Orders + line items + job-site geofences (prototype `IMS.orders`). */
-  private seedOrders(): Order[] {
-    return [
-      {
-        orderId: 'CT-2024-001',
-        partyId: 'PTY-001',
-        jobSite: 'Downtown Plaza, 245 Peachtree St',
-        geofenceRadius: 300,
-        projectName: 'Downtown Plaza Renovation',
-        startDate: '2026-08-20',
-        endDate: '2026-09-10',
-        status: 'active',
-        siteLat: 33.756,
-        siteLng: -84.3905,
-        lineItems: [
-          { id: 'LI-101', type: 'serialized', refId: 'BL-119', qty: 1, weekendPolicy: 'bill', riskPremium: 'standard' },
-          { id: 'LI-102', type: 'serialized', refId: 'FL-401', qty: 1, weekendPolicy: 'bill', riskPremium: 'standard' },
-          { id: 'LI-103', type: 'bulk', refId: 'CN-018', qty: 50, weekendPolicy: 'bill', riskPremium: 'standard' },
-          { id: 'LI-104', type: 'consumable', refId: 'SG-LFT-001', qty: 20, weekendPolicy: 'bill', riskPremium: 'standard' },
-          { id: 'LI-105', type: 'labor', refId: 'EMP-001', qty: 40, weekendPolicy: 'bill', riskPremium: 'standard' },
-        ],
-      },
-      {
-        orderId: 'CT-2024-002',
-        partyId: 'PTY-002',
-        jobSite: 'Riverside Bridge, 88 River Rd',
-        geofenceRadius: 500,
-        projectName: 'Riverside Bridge Repair',
-        startDate: '2026-09-01',
-        endDate: '2026-09-20',
-        status: 'active',
-        siteLat: 33.731,
-        siteLng: -84.43,
-        lineItems: [
-          { id: 'LI-201', type: 'serialized', refId: 'SS-204', qty: 1, weekendPolicy: 'skip', riskPremium: 'standard' },
-          { id: 'LI-202', type: 'serialized', refId: 'TL-605', qty: 1, weekendPolicy: 'skip', riskPremium: 'standard' },
-          { id: 'LI-203', type: 'bulk', refId: 'SCF-040', qty: 30, weekendPolicy: 'skip', riskPremium: 'standard' },
-          { id: 'LI-204', type: 'labor', refId: 'EMP-003', qty: 24, weekendPolicy: 'bill', riskPremium: 'standard' },
-        ],
-      },
-      {
-        orderId: 'CT-2024-003',
-        partyId: 'PTY-003',
-        jobSite: 'Bayport Refinery, 1 Fuel Pier',
-        geofenceRadius: 400,
-        projectName: 'Refinery Catalyst Swap',
-        startDate: '2026-09-02',
-        endDate: '2026-09-30',
-        status: 'active',
-        siteLat: 33.72,
-        siteLng: -84.36,
-        lineItems: [
-          { id: 'LI-301', type: 'serialized', refId: 'GN-511', qty: 1, weekendPolicy: 'overtime', riskPremium: 'hazmat' },
-          { id: 'LI-302', type: 'bulk', refId: 'BR-010', qty: 20, weekendPolicy: 'overtime', riskPremium: 'hazmat' },
-          { id: 'LI-303', type: 'consumable', refId: 'FL-DSL-005', qty: 8, weekendPolicy: 'bill', riskPremium: 'standard' },
-          { id: 'LI-304', type: 'labor', refId: 'EMP-002', qty: 30, weekendPolicy: 'bill', riskPremium: 'standard' },
-        ],
-      },
-      {
-        orderId: 'CT-2024-004',
-        partyId: 'PTY-004',
-        jobSite: 'Pier 12 Bulkhead, Terminal Way',
-        geofenceRadius: 250,
-        projectName: 'Pier 12 Bulkhead Repair',
-        startDate: '2026-08-01',
-        endDate: '2026-08-25',
-        status: 'closed',
-        siteLat: 33.742,
-        siteLng: -84.352,
-        lineItems: [
-          { id: 'LI-401', type: 'serialized', refId: 'ET-310', qty: 1, weekendPolicy: 'bill', riskPremium: 'coastal' },
-        ],
-      },
-    ];
   }
 
 
@@ -4739,70 +4305,6 @@ export class DataService {
   }
 
   /**
-   * Purchase-order seed — one PO per state the page has to render: an order still
-   * waiting, one delivered in full, and one part-delivered. The last two become
-   * delivered/partial by *posting* the receipts below, not by being written that
-   * way: there is no stored "received" column to seed (see `poProgress`).
-   */
-  private seedPurchaseOrders(): PurchaseOrder[] {
-    return [
-      {
-        id: 'PO-2026-001',
-        supplierId: 'PTY-007',
-        status: 'ordered',
-        orderedAt: '2026-09-04',
-        expectedAt: '2026-09-12',
-        reference: 'FAS-88214',
-        notes: 'Monthly filter and hose restock.',
-        lines: [
-          { id: 'PO-2026-001-1', type: 'part', refId: 'PRT-001', description: 'Hydraulic Filter 40um', qty: 12, unitCost: 17.25 },
-          { id: 'PO-2026-001-2', type: 'part', refId: 'PRT-002', description: 'Air Filter Element', qty: 6, unitCost: 20.4 },
-        ],
-      },
-      {
-        id: 'PO-2026-002',
-        supplierId: 'PTY-006',
-        status: 'ordered',
-        orderedAt: '2026-08-18',
-        expectedAt: '2026-08-28',
-        reference: 'UR-PO-55901',
-        notes: 'Two compact loaders for the Riverside Bridge job.',
-        lines: [
-          {
-            id: 'PO-2026-002-1',
-            type: 'serialized',
-            description: 'CAT 259D3 Compact Track Loader',
-            qty: 2,
-            unitCost: 78500,
-            rateDaily: 385,
-          },
-          { id: 'PO-2026-002-2', type: 'attachment', refId: 'ACC-002', description: '36" Ditch Bucket', qty: 2, unitCost: 41 },
-        ],
-      },
-      {
-        id: 'PO-2026-003',
-        supplierId: 'PTY-008',
-        status: 'ordered',
-        orderedAt: '2026-09-02',
-        expectedAt: '2026-09-15',
-        reference: 'WN-Q-33120',
-        notes: 'Excavator plus OEM hose stock.',
-        lines: [
-          {
-            id: 'PO-2026-003-1',
-            type: 'serialized',
-            description: 'Wacker Neuson ET42 Mini Excavator',
-            qty: 1,
-            unitCost: 62000,
-            rateDaily: 320,
-          },
-          { id: 'PO-2026-003-2', type: 'part', refId: 'PRT-005', description: 'Hydraulic Hose 1in x 6ft', qty: 12, unitCost: 33.5 },
-        ],
-      },
-    ];
-  }
-
-  /**
    * Post the fixture receipts through the *same* path the page uses, with the
    * clock and the actor pinned: a fixture that ran `receiveAgainst` at seed time
    * can't describe stock the store doesn't have. By the time the app renders,
@@ -4826,353 +4328,6 @@ export class DataService {
       at: '2026-09-08T14:05:00',
       byUserId: DEMO_OWNER_ID,
     });
-  }
-
-  /**
-   * User-defined location types. These are the vocabulary the location editor
-   * offers and the levels a ragged hierarchy is usually built from.
-   */
-  private seedLocationTypes(): LocationType[] {
-    return ['Site', 'Yard', 'Zone', 'Warehouse', 'Rack', 'Shelf', 'Bin', 'Dock', 'Office', 'Customer Site', 'Vehicle']
-      .map((name) => ({ name, active: true }));
-  }
-
-  /**
-   * Location hierarchy (ragged / adjacency list). Demonstrates that any node
-   * may be a parent and that depth is unbounded. `parentId: null` = top level.
-   */
-  private seedLocations(): Location[] {
-    return [
-      { id: 'LOC-01', name: 'Atlanta Main Campus', type: 'Site', parentId: null, address: '1200 Logistics Dr, Atlanta GA', phone: '(404) 555-0100', tz: 'America/New_York' },
-      { id: 'LOC-02', name: 'Main Yard', type: 'Yard', parentId: 'LOC-01', address: '1200 Logistics Dr, Atlanta GA', phone: '(404) 555-0101', tz: 'America/New_York' },
-      { id: 'LOC-03', name: 'Yard A — Equipment Staging', type: 'Zone', parentId: 'LOC-02', address: '1200 Logistics Dr, Atlanta GA', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-04', name: 'Yard B — Trailer Parking', type: 'Zone', parentId: 'LOC-02', address: '1200 Logistics Dr, Atlanta GA', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-05', name: 'Warehouse 1', type: 'Warehouse', parentId: 'LOC-01', address: '1210 Logistics Dr, Atlanta GA', phone: '(404) 555-0120', tz: 'America/New_York' },
-      { id: 'LOC-06', name: 'Aisle 1', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-07', name: 'Bay A1-01', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-08', name: 'Bay A1-02', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-09', name: 'Aisle 2', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-10', name: 'Savannah Port Depot', type: 'Site', parentId: null, address: '8 Terminal Way, Savannah GA', phone: '(912) 555-0177', tz: 'America/New_York' },
-      { id: 'LOC-11', name: 'Dock 4', type: 'Dock', parentId: 'LOC-10', address: '8 Terminal Way, Savannah GA', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-12', name: 'Bonded Warehouse', type: 'Warehouse', parentId: 'LOC-10', address: '10 Terminal Way, Savannah GA', phone: '(912) 555-0178', tz: 'America/New_York' },
-      { id: 'LOC-13', name: 'Secure Cage C', type: 'Zone', parentId: 'LOC-12', address: '', phone: '', tz: 'America/New_York' },
-      /* The bins the prototype's parts carried as free text (`bin: 'A-03'`, …)
-         now live in the hierarchy they always described — a part's `locationId`
-         points at one of these rows instead of repeating its label. */
-      { id: 'LOC-14', name: 'Bay A-03', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-15', name: 'Bay A-07', type: 'Bin', parentId: 'LOC-06', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-16', name: 'Bay B-01', type: 'Bin', parentId: 'LOC-09', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-17', name: 'Bay B-12', type: 'Bin', parentId: 'LOC-09', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-18', name: 'Aisle 3', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-19', name: 'Bay C-04', type: 'Bin', parentId: 'LOC-18', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-20', name: 'Aisle 4', type: 'Rack', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' },
-      { id: 'LOC-21', name: 'Bay D-02', type: 'Bin', parentId: 'LOC-20', address: '', phone: '', tz: 'America/New_York' },
-    ];
-  }
-
-  /** Sales-tax schedules (prototype `IMS.settings.taxSchedules`). */
-  private seedTaxSchedules(): TaxSchedule[] {
-    return [
-      { code: 'GA', state: 'Georgia', county: 'Fulton', city: 'Atlanta', rate: 0.08, note: 'State + county combined' },
-      { code: 'AL', state: 'Alabama', county: '', city: '', rate: 0.07, note: 'Standard state rate' },
-      { code: 'TN', state: 'Tennessee', county: 'Davidson', city: 'Nashville', rate: 0.0925, note: 'Highest local rate' },
-    ];
-  }
-
-  /** Overhead / service-fee configurations (prototype `IMS.settings.overheads`). */
-  private seedOverheads(): Overhead[] {
-    return [
-      { id: 'OH-ENV', name: 'Environmental Fee Surcharge', category: 'Freight/Logistics', chargeType: 'Percent of Equipment Total', cost: 0, retail: 0, pct: 2.5, locked: true },
-      { id: 'OH-MOB', name: 'Standard Mobilization / Delivery', category: 'Freight/Logistics', chargeType: 'Flat Fee', cost: 150, retail: 250, pct: 0, locked: true },
-      { id: 'OH-PMT', name: 'Oversized Transport Permit', category: 'Compliance', chargeType: 'Flat Fee', cost: 75, retail: 110, pct: 0, locked: false },
-      { id: 'OH-STR', name: 'Warehouse Storage Slot B', category: 'Facility', chargeType: 'Per Day', cost: 40, retail: 95, pct: 0, locked: false },
-    ];
-  }
-
-  /** Pricing rules engine defaults (prototype `IMS.settings.pricing`). */
-  private seedPricing(): PricingSettings {
-    return {
-      dailyMinHours: 8,
-      weeklyHours: 40,
-      cycleDays: 28,
-      weekendPolicyDefault: 'bill',
-      riskPremiums: { standard: 0, coastal: 0.15, hazmat: 0.25 },
-      envFeePct: 5,
-      depreciationAnnual: 0.1,
-    };
-  }
-
-  /** Receiving desk defaults (B6): an exact receipt, no PO reference required. */
-  private seedReceiving(): ReceivingSettings {
-    return {
-      overReceiptTolerancePct: 0,
-      requirePoReference: false,
-      quarantineLocationId: null,
-      defaultPutAwayLocationId: null,
-      requireInspection: false,
-    };
-  }
-
-  /** The fields every asset carries (Phase C) — none against the core columns to start. */
-  private seedStockSchema(): StockSchema {
-    return { fields: [] };
-  }
-
-  /**
-   * A workspace's default verticals: the compiled registry's five (Phase C). They
-   * are *seed* data — the tenant edits and adds to them from Admin.
-   */
-  private seedVerticals(): Vertical[] {
-    return VERTICAL_KEYS.map((key, i) => ({
-      id: `VT-${pad3(i + 1)}`,
-      name: verticalLabel(key),
-      slug: key.toLowerCase(),
-      active: true,
-      isDefault: key === 'HeavyEquipment',
-    }));
-  }
-
-  /**
-   * A workspace's default categories: each vertical's tabs become **its** categories
-   * — named by the tab, stocked by the tab's behaviour, in the tab's order — with the
-   * type's default fields copied on. Seeded from the registry so the demo workspace
-   * works out of the box, then owned by the tenant.
-   */
-  private seedAssetCategories(): Category[] {
-    const out: Category[] = [];
-    let n = 0;
-    VERTICAL_KEYS.forEach((key, vi) => {
-      const meta = VERTICAL_METADATA[key];
-      const verticalId = `VT-${pad3(vi + 1)}`;
-      meta.tabs.forEach((tab, sort) => {
-        const type = tab.key;
-        out.push({
-          id: `CAT-${pad3(++n)}`,
-          verticalId,
-          name: tab.label,
-          icon: tab.icon,
-          behaviour: behaviourOfType(type),
-          type,
-          active: true,
-          sort,
-          fields: (ASSET_FIELD_DEFAULTS[type] ?? []).map((f) => ({ ...f })),
-        });
-      });
-    });
-    return out;
-  }
-
-  /** Yard in/out inspections (prototype `IMS.inspections`), template-driven (B7). */
-  private seedInspections(): Inspection[] {
-    const ok = (value: string): InspectionResult => ({ value, outcome: 'pass' });
-    const allOk = () => ({
-      tires: ok('Good'),
-      fluids: ok('Full'),
-      guards: ok('In place'),
-      lights: ok('Working'),
-      engine: ok('Normal'),
-    });
-    return [
-      {
-        id: 'INSP-001',
-        itemId: 'BL-119',
-        orderId: 'CT-2024-001',
-        direction: 'Check-Out',
-        date: '2026-08-20',
-        meterOut: 2210,
-        meterIn: null,
-        fuelOut: 85,
-        fuelIn: null,
-        templateId: 'FS-inspection-default',
-        results: allOk(),
-        status: 'Open',
-      },
-      {
-        id: 'INSP-002',
-        itemId: 'SS-204',
-        orderId: 'CT-2024-002',
-        direction: 'Check-Out',
-        date: '2026-09-01',
-        meterOut: 4150,
-        meterIn: null,
-        fuelOut: 78,
-        fuelIn: null,
-        templateId: 'FS-inspection-default',
-        results: {
-          ...allOk(),
-          lights: { value: 'Faulty', outcome: 'fail', severity: 'major', note: 'Right lamp out' },
-        },
-        status: 'Open',
-      },
-      {
-        id: 'INSP-003',
-        itemId: 'BL-120',
-        orderId: null,
-        direction: 'Check-In',
-        date: '2026-08-28',
-        meterOut: 3190,
-        meterIn: 3200,
-        fuelOut: 60,
-        fuelIn: 40,
-        templateId: 'FS-inspection-default',
-        results: allOk(),
-        status: 'Closed',
-      },
-    ];
-  }
-
-
-  /**
-   * Evidence rows (B8): the photos a check-in took, a receipt's packing slip, an
-   * item's certificate. `url` is left off where the port has no file to point at —
-   * the rows are real and a record's count is derived from them.
-   */
-  private seedDocuments(): Document[] {
-    return [
-      { id: 'DOC-001', scope: 'inspection', refId: 'INSP-002', kind: 'photo', caption: 'Right lamp out', mime: 'image/jpeg', size: 184320 },
-      { id: 'DOC-002', scope: 'inspection', refId: 'INSP-003', kind: 'photo', caption: 'Check-in — front', mime: 'image/jpeg', size: 210944 },
-      { id: 'DOC-003', scope: 'inspection', refId: 'INSP-003', kind: 'photo', caption: 'Check-in — rear', mime: 'image/jpeg', size: 198656 },
-      { id: 'DOC-004', scope: 'inspection', refId: 'INSP-003', kind: 'photo', caption: 'Check-in — meter', mime: 'image/jpeg', size: 176128 },
-      { id: 'DOC-005', scope: 'receipt', refId: 'RC-2026-001', kind: 'packing-slip', caption: 'Supplier packing slip' },
-      { id: 'DOC-006', scope: 'item', refId: 'BL-119', kind: 'certificate', caption: 'Annual inspection certificate' },
-    ];
-  }
-
-  /** Service work orders (prototype `IMS.workOrders`). */
-  private seedWorkOrders(): WorkOrder[] {
-    return [
-      { id: 'WO-401', itemId: 'SS-205', type: 'Repair', meterReading: 8400, status: 'In Progress', parts: [{ kind: 'consumable', refId: 'FL-HYD-010', qty: 2 }], laborHours: 3, date: '2026-08-30' },
-      { id: 'WO-402', itemId: 'GN-510', type: 'Preventive', meterReading: 1220, status: 'Completed', parts: [{ kind: 'consumable', refId: 'BP-ENG-020', qty: 2 }, { kind: 'consumable', refId: 'GN-GRL-001', qty: 2 }], laborHours: 1.5, date: '2026-08-28' },
-      { id: 'WO-403', itemId: 'BL-120', type: 'Inspection', meterReading: 3200, status: 'Completed', parts: [], laborHours: 1, date: '2026-08-25' },
-      { id: 'WO-404', itemId: 'FL-402', type: 'Repair', meterReading: 2980, status: 'Scheduled', parts: [{ kind: 'consumable', refId: 'BP-ENG-020', qty: 1 }], laborHours: 2, date: '2026-09-01' },
-    ];
-  }
-
-  /**
-   * Labour clock segments (prototype `IMS.timesheets`): two days of punches
-   * across the six employees, with the shop / overhead / idle buckets.
-   */
-  private seedTimesheets(): Timesheet[] {
-    const rows: [string, string, string, string, string, number, Timesheet['targetType'], string | null][] = [
-      /* 2026-08-31 (Monday) */
-      ['TS-0001', 'EMP-001', '2026-08-31', '07:00', '11:30', 4.5, 'order', 'CT-2024-001'],
-      ['TS-0002', 'EMP-001', '2026-08-31', '11:30', '12:30', 1, 'overhead', null],
-      ['TS-0003', 'EMP-001', '2026-08-31', '12:30', '16:00', 3.5, 'order', 'CT-2024-001'],
-      ['TS-0004', 'EMP-002', '2026-08-31', '08:00', '12:00', 4, 'workorder', 'WO-402'],
-      ['TS-0005', 'EMP-002', '2026-08-31', '12:30', '16:30', 4, 'workorder', 'WO-402'],
-      ['TS-0006', 'EMP-005', '2026-08-31', '09:00', '12:00', 3, 'workorder', 'WO-401'],
-      ['TS-0007', 'EMP-005', '2026-08-31', '13:00', '15:00', 2, 'idle', null],
-      /* 2026-09-01 (Tuesday) */
-      ['TS-0008', 'EMP-001', '2026-09-01', '07:00', '12:00', 5, 'order', 'CT-2024-001'],
-      ['TS-0009', 'EMP-001', '2026-09-01', '12:00', '13:00', 1, 'idle', null],
-      ['TS-0010', 'EMP-001', '2026-09-01', '13:00', '17:00', 4, 'order', 'CT-2024-001'],
-      ['TS-0011', 'EMP-002', '2026-09-01', '08:00', '12:00', 4, 'workorder', 'WO-401'],
-      ['TS-0012', 'EMP-002', '2026-09-01', '13:00', '17:00', 4, 'shop', null],
-      ['TS-0013', 'EMP-003', '2026-09-01', '06:30', '10:30', 4, 'order', 'CT-2024-002'],
-      ['TS-0014', 'EMP-003', '2026-09-01', '10:30', '11:30', 1, 'overhead', null],
-      ['TS-0015', 'EMP-003', '2026-09-01', '11:30', '14:30', 3, 'order', 'CT-2024-002'],
-      ['TS-0016', 'EMP-004', '2026-09-01', '07:00', '12:00', 5, 'order', 'CT-2024-001'],
-      ['TS-0017', 'EMP-004', '2026-09-01', '12:00', '13:00', 1, 'idle', null],
-      ['TS-0018', 'EMP-004', '2026-09-01', '13:00', '16:00', 3, 'order', 'CT-2024-001'],
-      ['TS-0019', 'EMP-005', '2026-09-01', '08:00', '12:00', 4, 'workorder', 'WO-404'],
-      ['TS-0020', 'EMP-005', '2026-09-01', '13:00', '17:00', 4, 'shop', null],
-      ['TS-0021', 'EMP-006', '2026-09-01', '08:00', '12:00', 4, 'order', 'CT-2024-001'],
-      ['TS-0022', 'EMP-006', '2026-09-01', '12:00', '13:00', 1, 'idle', null],
-      ['TS-0023', 'EMP-006', '2026-09-01', '13:00', '16:00', 3, 'order', 'CT-2024-001'],
-    ];
-    return rows.map(([id, empId, date, clockIn, clockOut, hours, targetType, targetId]) => ({
-      id,
-      empId,
-      date,
-      clockIn,
-      clockOut,
-      targetType,
-      targetId,
-      hours,
-      note: TIMESHEET_KIND[targetType].label,
-    }));
-  }
-
-  /** Sub-rentals from third-party vendors (prototype `IMS.rentals`). */
-  /**
-   * Sub-rentals from third-party vendors (prototype `IMS.rentals`). The prototype
-   * stored each vendor as a string; here the vendors are supplier *parties*
-   * (`PTY-010`…`PTY-012`), so the wholesale side of the business points at the
-   * same partner table the purchase orders do.
-   */
-  private seedRentals(): RentalSub[] {
-    return [
-      { id: 'RR-001', itemId: 'GN-510', assetName: 'Generac 100 kW Generator', orderId: 'CT-2024-003', supplierId: 'PTY-010', vendorCost: 110, retailRate: 175, qty: 1 },
-      { id: 'RR-002', itemId: 'FL-402', assetName: 'Toyota Forklift 8FGU25', orderId: 'CT-2024-004', supplierId: 'PTY-011', vendorCost: 95, retailRate: 205, qty: 1 },
-      { id: 'RR-003', itemId: null, assetName: 'Compaction Roller 5T', orderId: 'CT-2024-002', supplierId: 'PTY-012', vendorCost: 140, retailRate: 260, qty: 1 },
-    ];
-  }
-
-  /** Transport fleet (prototype `IMS.vehicles`). */
-  private seedVehicles(): Vehicle[] {
-    return [
-      { id: 'TRK-01', name: 'Freightliner M2 26 ft', plate: 'ABC-4521', status: 'Available' },
-      { id: 'TRK-02', name: 'F-550 Flatbed', plate: 'XYZ-7789', status: 'En Route' },
-      { id: 'TRK-03', name: 'Isuzu NPR Box', plate: 'QRS-9912', status: 'Available' },
-    ];
-  }
-
-  /** Dispatch board (prototype `IMS.dispatches`). */
-  private seedDispatches(): Dispatch[] {
-    return [
-      { id: 'DSP-001', orderId: 'CT-2024-001', assetId: 'BL-119', routeSeq: 1, driverId: 'EMP-003', vehicleId: 'TRK-01', status: 'En Route' },
-      { id: 'DSP-002', orderId: 'CT-2024-001', assetId: 'FL-401', routeSeq: 2, driverId: null, vehicleId: null, status: 'Staged' },
-      { id: 'DSP-003', orderId: 'CT-2024-002', assetId: 'SS-204', routeSeq: 3, driverId: 'EMP-001', vehicleId: 'TRK-02', status: 'Delivered' },
-      { id: 'DSP-004', orderId: 'CT-2024-002', assetId: 'TL-605', routeSeq: 4, driverId: null, vehicleId: null, status: 'Staged' },
-      { id: 'DSP-005', orderId: 'CT-2024-003', assetId: 'GN-511', routeSeq: 5, driverId: 'EMP-003', vehicleId: 'TRK-01', status: 'Pending Return' },
-    ];
-  }
-
-  /** Cycle invoices (prototype `IMS.invoices`). */
-  private seedInvoices(): Invoice[] {
-    return [
-      { id: 'INV-001', orderId: 'CT-2024-001', cycle: 1, cycleStart: '2026-08-20', cycleEnd: '2026-08-27', envFeePct: 5, damageWaiver: false, fuelCharge: 120, taxRate: 0.08, status: 'invoiced' },
-      { id: 'INV-002', orderId: 'CT-2024-002', cycle: 1, cycleStart: '2026-09-01', cycleEnd: '2026-09-15', envFeePct: 5, damageWaiver: true, fuelCharge: 0, taxRate: 0.07, status: 'pending' },
-      { id: 'INV-003', orderId: 'CT-2024-003', cycle: 1, cycleStart: '2026-09-02', cycleEnd: '2026-09-30', envFeePct: 7, damageWaiver: true, fuelCharge: 210, taxRate: 0.07, status: 'paid' },
-    ];
-  }
-
-  /* ----------------------- identity & tenancy seeds ---------------------- */
-
-  /**
-   * The customer workspaces. One is seeded because the UI runs against a single
-   * browser today; the shape is what matters — the API resolves a tenant from
-   * the signed-in user and every query is scoped to it.
-   */
-  private seedTenants(): Tenant[] {
-    return [
-      {
-        id: DEMO_TENANT_ID,
-        name: 'Northline Equipment Co.',
-        slug: 'northline',
-        plan: 'professional',
-        // The business type this workspace is — `VT-001` is the first seeded type
-        // (Heavy Equipment), which is also the default the fallback lands on.
-        verticalId: 'VT-001',
-        disabledModules: [],
-        createdAt: '2024-01-08',
-      },
-    ];
-  }
-
-  /**
-   * Seeded people — one per role, so the shell's user switcher can demonstrate
-   * exactly what each permission set can and cannot do.
-   */
-  private seedUsers(): User[] {
-    return [
-      { id: 'USR-001', tenantId: DEMO_TENANT_ID, name: 'Marcus Alvarez', email: 'marcus@northline.example', role: 'owner', title: 'Managing Director', initials: 'MA', active: true },
-      { id: 'USR-002', tenantId: DEMO_TENANT_ID, name: 'Priya Raman', email: 'priya@northline.example', role: 'admin', title: 'Operations Administrator', initials: 'PR', active: true },
-      { id: 'USR-003', tenantId: DEMO_TENANT_ID, name: 'Dana Reynolds', email: 'dana@northline.example', role: 'manager', title: 'Dispatch Manager', initials: 'DR', active: true },
-      { id: 'USR-004', tenantId: DEMO_TENANT_ID, name: 'Ray Chen', email: 'ray@northline.example', role: 'warehouse', title: 'Warehouse Lead', initials: 'RC', active: true },
-      { id: 'USR-005', tenantId: DEMO_TENANT_ID, name: 'Tunde Okafor', email: 'tunde@northline.example', role: 'field', title: 'Field Technician', initials: 'TO', active: true },
-      { id: 'USR-006', tenantId: DEMO_TENANT_ID, name: 'Sandra Patel', email: 'sandra@northline.example', role: 'viewer', title: 'Accountant', initials: 'SP', active: true },
-    ];
   }
 }
 

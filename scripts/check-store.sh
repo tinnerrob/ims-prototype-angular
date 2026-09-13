@@ -23,7 +23,7 @@ npx tsc src/app/core/data.service.ts src/app/core/session.service.ts src/app/cor
 
 # TypeScript leaves the relative imports extensionless (the Angular bundler
 # resolves them); Node's ESM loader needs the real file name.
-perl -pi -e "s|from '(\./[A-Za-z._-]+)'|from '\$1.js'|g" "$OUT"/*.js
+perl -pi -e "s|from '(\.[^']+)'|from '\$1.js'|g" $(find "$OUT" -name '*.js')
 # The services import @angular/core (signals, @Injectable); point Node at the
 # installed packages rather than installing anything for this.
 ln -s "$ROOT/node_modules" "$OUT/node_modules"

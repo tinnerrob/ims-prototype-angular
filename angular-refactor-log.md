@@ -535,6 +535,36 @@ as current (README, HANDOFF, PLAN.md, PLAN-B.md, and this log's recipe + baselin
 inbound and no external call sites, already scoped in PLAN-B's B1). Bigger, but more mechanical still,
 with the same proof: `check:store` asserts the fixture end to end.
 
+### P6/2 — the seeds move to `core/seed/` · `LOW/MED` · status: **done (2026-09-12)**
+**Done:** the fixture left the store. **24 of the 30 seeders are pure data factories** — measured, not
+assumed (`this.` appears in none of them) — and they now live in `core/seed/`: `tenancy.ts` (3),
+`config.ts` (9), `parties.ts` (4), `operations.ts` (8), plus `fixtures.ts` holding the **8 shared facts**
+both sides need (`DEMO_TENANT_ID`, `DEMO_USER_ID`, `DEMO_OWNER_ID`, `YARD_STAGING`, `WAREHOUSE_1`,
+`SHOP_STATUS`, `CREW_BASE`, `ASSET_FIELD_DEFAULTS`). `pad3` moved into `core/format.ts`.
+**The 6 that stayed, on purpose:** `seedItems`, `seedStockItems`, `seedStockLevels`, `seedMovements`,
+`seedPlacement`, `seedReceipts` — these touch `this.db` or call `receiveAgainst` / `syncStockTotals`,
+i.e. they *post* through the mutators the pages use (the store's own note: "the fixture runs the same
+operation the Purchasing page runs"). Splitting those would mean handing the store back in for no gain,
+so the boundary is drawn at **"pure factory" vs "posts through the store"**.
+**Size:** `core/seed/` = 915 lines in 5 modules · `data.service.ts` **5,179 → 4,333** (−846).
+**The proof — the strongest one available without a browser:** the *entire* seeded store, not a sample
+of it. Boot `DataService`, force a save, dump the persisted JSON: **byte-identical before and after**
+(92,351 bytes, `4903c78c…`, `cmp` clean). Not "the checks still pass" — the fixture is the same store to
+the byte. `check:store` also passes unchanged at **210 ok / 0 FAIL** (it asserts the fixture end to end),
+with build 0 warnings · `lint:ctor` OK · `lint:styles` 0 unused · `lint:dead` 0/0.
+**A latent bug in the harness runner surfaced and is fixed:** `scripts/check-store.sh` appends `.js` to
+the compiled core's import specifiers with `perl`, and its pattern was `from '(\./[A-Za-z._-]+)'` — a
+literal `./` followed by a class *without* `/`. It had therefore only ever handled `./x`, so as soon as
+the core gained a subdirectory (`core/seed/*`, whose files import `../models`) the harnesses could not
+load at all. The pattern is now `from '(\.[^']+)'` and the fix-up **recurses** (`find`), so `./x`, `../x`
+and nested paths all work. Worth knowing before the next extraction.
+**How it was done:** mechanically, by a throwaway script — cut each span by brace matching, de-indent the
+member bodies, rewrite `private seedX` → `export function seedX`, and generate each module's imports from
+the store's own import map. 846 lines by hand would have been 846 chances to typo a fixture row; the
+compiler and the snapshot diff then policed the result, which is why the three mistakes the generator
+made (a missing `m` flag, the store's `pad3` left unexported, `ASSET_FIELD_DEFAULTS` not identified as
+shared) cost minutes instead of a corrupted fixture.
+
 ### P7 — Routing & bundle shape · `HIGH` · status: **done (2026-09-12) — every feature page is now its own chunk**
 **Done:** `app.routes.ts` keeps **two** pages eager — the dashboard (the landing page a fresh load
 renders, so a chunk round-trip buys nothing) and the Administration shell (the frame its children move
@@ -725,6 +755,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
 | 6a | 2026-09-12 | **P6a** — Extract `format` → `core/format.ts` | The store's only 0-inbound section moved to a module; six one-line delegates keep 187 call sites working; `check25` extended to drive the module and assert the delegates agree | `LOW` | **done** — store diff: 6 bodies → 6 delegates; `check:store` **210 ok / 0 FAIL**; docs + counts updated |
+| 6/2 | 2026-09-12 | **P6/2** — Seeds → `core/seed/` | 24 pure data factories into 5 modules + the 8 shared fixture facts + `pad3` → `format.ts`; the 6 store-coupled seeders stay; generated mechanically and policed by a snapshot diff | `LOW/MED` | **done** — store **5,179 → 4,333** lines, `core/seed/` 915; **whole seeded store byte-identical** (92,351 B, `cmp` clean); check:store 210/0; also fixed a latent `check-store.sh` import-rewrite bug that broke on nested paths |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; identified `field-editor` as the only safe pilot | `HIGH` | **done (study)** — no sweep recommended and none applied: a stale view is invisible to every gate here. Pilot (one line) ready on request; the real fix is signals in the store |
 | 9 | 2026-09-12 | **P9** — Component/template test gap | Added `check25.mjs` (7 checks) over the previously untested pure helpers; registered it; updated the count everywhere | `HIGH` | **done** — `check:store` **209 ok / 0 FAIL in 25 harnesses**; two contract facts pinned by the new checks; template/visual verification still blocked (no browser) with three options recorded |
@@ -760,7 +791,8 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | No unit tests | 0 `*.spec.ts` | **P9 ✔** (partly) — `check25` covers the pure helpers (209 checks in 25 harnesses); templates/visuals still need a browser: options (a) Karma+browser, (b) Playwright smoke flows, (c) more pure-function harnesses |
 | No `OnPush` | 0 of 27 components | **P8 ✔** (study) — 18 templates read the mutable store inline; no sweep; `field-editor` is the one safe pilot, unapplied pending a browser look |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
-| Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound — **done in P6a**) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |
+| Store & component size | `data.service.ts` was 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** measured → **P6a/P6/2 ✔ done**: `format` → `core/format.ts` and the fixture → `core/seed/`; the store is now **4,333** lines with 915 in `core/seed/`. Component extraction still filed for P9. |
+| Harness runner import rewrite | `check-store.sh` only ever appended `.js` to `./x` specifiers (pattern `(\./[A-Za-z._-]+)`), so a nested core directory broke the whole suite | **P6/2 ✔** — pattern is now `(\.[^']+)` and the fix-up recurses over `find` |
 | The `format` section | 6 pure methods, 0 inbound cross-section calls, 187 call sites outside the store | **P6a ✔** — moved to `core/format.ts` behind six delegates; check25 (8 checks) drives the module and pins the delegate agreement |
 | Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |

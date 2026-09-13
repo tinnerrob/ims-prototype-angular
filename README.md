@@ -41,6 +41,7 @@ src/app/
 │   ├── modules.service.ts   # Module licence flags (+ module.guard.ts: requireModule)
 │   ├── session.service.ts   # Who the app is acting as (workspace + person) + can() permissions
 │   ├── format.ts period.ts pricing.ts # Pure value/date formatting, date-period and money helpers
+│   ├── seed/                # The demo fixture in modules: 24 pure data factories + the shared fixture facts
 │   └── views.ts page-search.service.ts telemetry.service.ts
 ├── features/
 │   ├── admin/           # Administration: Locations · Business type & Categories · Feature Modules
