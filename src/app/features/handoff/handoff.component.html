@@ -58,13 +58,20 @@
       } @else {
         <span></span>
       }
-      <span class="text-muted2">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
+      <span class="d-flex align-items-center gap-2">
+        @if (boardTab()) {
+          <ims-print-menu text="Pick List" label="Print a pick list for this day" (action)="printPickList($event)"></ims-print-menu>
+        }
+        @if (tab === 'log') {
+          <ims-print-menu text="Custody Log" label="Print the custody log" (action)="printCustodyLog($event)"></ims-print-menu>
+        }
+      </span>
     </div>
 
     <!-- ============================ OUTBOUND ============================ -->
     @if (tab === 'outbound') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="handoff-outbound">
           <thead>
             <tr>
               <th>Asset</th><th>Model</th><th>Order</th><th>Rental window</th>
@@ -97,7 +104,7 @@
     <!-- ============================ INCOMING ============================ -->
     @if (tab === 'incoming') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="handoff-incoming">
           <thead>
             <tr>
               <th>Asset</th><th>Model</th><th>Order</th><th>Rental window</th>
@@ -138,7 +145,7 @@
     <!-- ============================ IN CUSTODY ============================ -->
     @if (tab === 'custody') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="handoff-custody">
           <thead>
             <tr>
               <th>Asset</th><th>Model</th><th>Custodian</th><th>Order</th>
@@ -175,7 +182,7 @@
     <!-- ============================ CUSTODY LOG ============================ -->
     @if (tab === 'log') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="handoff-log">
           <thead>
             <tr>
               <th>Movement</th><th>Kind</th><th>Item</th><th>Order / party</th>

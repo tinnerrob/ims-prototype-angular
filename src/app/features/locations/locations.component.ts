@@ -9,6 +9,7 @@ import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } fr
 import { tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
 
 /** A location plus its depth in the ragged hierarchy (drives table indentation). */
 interface LocationRow {
@@ -46,7 +47,7 @@ const BLANK_LOCATION_FORM: Omit<Location, 'id'> & { id: string } = {
 @Component({
   selector: 'ims-locations',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './locations.component.html',
   styleUrl: './locations.component.scss',
 })

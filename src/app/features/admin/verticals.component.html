@@ -23,7 +23,7 @@
     </p>
     @if (notice) { <div class="form-hint text-danger mb-2">{{ notice }}</div> }
     <div class="table-wrap">
-      <table class="table">
+      <table class="table" imsPaged="verticals">
         <thead>
           <tr>
             <th></th><th>Business type</th><th>URL</th><th class="num">Categories</th>
@@ -95,7 +95,7 @@
     </p>
     @if (categoryNotice) { <div class="form-hint text-danger mb-2">{{ categoryNotice }}</div> }
     <div class="table-wrap">
-      <table class="table">
+      <table class="table" imsPaged="categories">
         <thead>
           <tr>
             <th class="fe-idx"></th><th>Category</th><th>Behaviour</th>

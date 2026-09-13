@@ -3,6 +3,8 @@ import { Component } from '@angular/core';
 import { DataService } from '../../core/data.service';
 import { Invoice, InvoiceStatus, INVOICE_STATUS_LABEL } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget } from '../../shared/record-view/record-view.component';
 import { stampDayRange } from '../../shared/tip/tip-format';
@@ -15,10 +17,12 @@ import { TipDirective } from '../../shared/tip/tip.directive';
  * (js/pages/invoicing.js): KPI tiles, the invoice ledger with a status filter,
  * "Run Next Cycle", CSV export and the per-invoice detail breakdown.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-invoicing',
   standalone: true,
-  imports: [ModalDismissDirective, TipDirective],
+  imports: [ModalDismissDirective, PrintMenuComponent, TipDirective, TablePagerDirective],
   templateUrl: './invoicing.component.html',
   styleUrl: './invoicing.component.scss',
 })
@@ -33,6 +37,7 @@ export class InvoicingComponent {
   constructor(
     readonly data: DataService,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // The topbar search box is this page's search: report how much of the ledger
     // survives it (the shell shows "shown of total" next to the box).
@@ -48,7 +53,7 @@ export class InvoicingComponent {
     return this.filter === 'all' ? all : all.filter((i) => i.status === this.filter);
   }
 
-  /** Does the topbar page search match this invoice (its contract, customer)? */
+  /** Does the topbar page search match this invoice (its order, customer)? */
   private searchHits(inv: Invoice): boolean {
     const o = this.data.getOrder(inv.orderId);
     return this.search.matches(
@@ -162,7 +167,7 @@ export class InvoicingComponent {
   exportCsv(): void {
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const header = [
-      'Invoice', 'Contract', 'Customer', 'Project', 'Cycle', 'Period', 'Status',
+      'Invoice', 'Order', 'Customer', 'Project', 'Cycle', 'Period', 'Status',
       'Item Type', 'Item', 'Qty', 'Rate', 'Amount',
     ].map(esc).join(',');
     const lines: string[] = [];
@@ -189,6 +194,59 @@ export class InvoicingComponent {
     URL.revokeObjectURL(url);
   }
 
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable invoice and open the print dialog.
+   *
+   * The document is *data* (`PrintDocument`), assembled from the same
+   * `detailLines()` the modal shows and the same `invoiceTotals()` the ledger
+   * sums — so what prints cannot disagree with what is on screen.
+   */
+  printInvoice(inv: Invoice, mode: PrintMode = 'print'): void {
+    const order = this.data.getOrder(inv.orderId);
+    const party = order ? this.data.getParty(order.partyId) : undefined;
+    const t = this.totals(inv);
+    const money = (n: number) => this.data.money(n);
+    this.printer.print({
+      heading: 'Invoice',
+      number: inv.id,
+      status: this.label[inv.status],
+      party: order
+        ? {
+            title: 'Bill To',
+            name: this.customer(inv),
+            lines: [party?.contact, party?.email, party?.billingAddress].filter((l): l is string => !!l),
+          }
+        : undefined,
+      meta: [
+        { label: 'Order', value: inv.orderId },
+        { label: 'Project', value: order?.projectName ?? '—' },
+        { label: 'Job Site', value: order?.jobSite ?? '—' },
+        { label: 'Cycle', value: String(inv.cycle) },
+        { label: 'Period', value: `${this.data.fmtDate(inv.cycleStart)} → ${this.data.fmtDate(inv.cycleEnd)}` },
+      ],
+      columns: ['Item', 'Type', 'Qty', 'Rate', 'Amount'],
+      align: ['left', 'left', 'right', 'right', 'right'],
+      rows: this.detailLines(inv).map((li) => [
+        li.label,
+        li.type,
+        this.data.int(li.qty),
+        `${li.basis.basis} @ ${money(li.basis.rate)}`,
+        money(li.amount),
+      ]),
+      totals: [
+        { label: 'Base', value: money(t.base) },
+        { label: `Environmental Fee (${inv.envFeePct}%)`, value: money(t.envFee) },
+        { label: 'Fuel Charge', value: money(t.fuel) },
+        { label: 'Damage Waiver', value: money(t.waiver) },
+        { label: 'Tax', value: money(t.tax) },
+        { label: 'Invoice Total', value: money(t.total), strong: true },
+      ],
+      notes: 'Payment is due on receipt unless terms are stated on the agreement.',
+    }, mode);
+  }
+
   /* ------------------------------ tooltips ------------------------------ */
 
   /** Invoice row: the customer, its cycle window, the breakdown and the total. */
@@ -196,7 +254,7 @@ export class InvoicingComponent {
     const t = this.totals(inv);
     return tip(`${inv.id} - ${this.customer(inv)}`, [
       stampDayRange(inv.cycleStart, inv.cycleEnd),
-      { label: 'Contract', value: inv.orderId },
+      { label: 'Order', value: inv.orderId },
       { label: 'Cycle', value: String(inv.cycle) },
       { label: 'Base', value: this.data.money(t.base) },
       inv.envFeePct ? { label: 'Environmental', value: this.data.money(t.envFee) } : null,

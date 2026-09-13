@@ -63,13 +63,12 @@
           </div>
         }
       }
-      <span class="text-muted2 ms-auto">{{ count(tab) }} of {{ totalCount(tab) }} record(s)</span>
     </div>
 
     <!-- ============================ SUPPLIERS ============================ -->
     @if (tab === 'suppliers') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="po-suppliers">
           <thead>
             <tr>
               <th>Supplier</th><th>Contact</th><th>Phone</th><th>Terms</th>
@@ -122,7 +121,7 @@
     <!-- ========================= PURCHASE ORDERS ========================= -->
     @if (tab === 'orders') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="po-orders">
           <thead>
             <tr>
               <th>PO</th><th>Supplier</th><th>Ordered</th><th>Expected</th>
@@ -158,6 +157,7 @@
                           (click)="openReceive(po)">
                     <i class="bi bi-box-arrow-in-down"></i> Receive
                   </button>
+                  <ims-print-menu label="Print purchase order" (action)="printPo(po, $event)"></ims-print-menu>
                   <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openPo(po)">
                     <i class="bi bi-pencil"></i>
                   </button>
@@ -180,11 +180,12 @@
     <!-- ============================= RECEIPTS ============================ -->
     @if (tab === 'receipts') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="po-receipts">
           <thead>
             <tr>
               <th>Receipt</th><th>Purchase Order</th><th>Supplier</th><th>Put away at</th>
               <th class="num">Items</th><th class="num">Value</th><th>Posted</th><th>By</th>
+              <th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -198,9 +199,12 @@
                 <td class="num">{{ data.money(receiptValue(r)) }}</td>
                 <td class="mono text-muted2 text-12">{{ data.fmtDT(r.at) }}</td>
                 <td class="text-12">{{ data.userName(r.createdBy) }}</td>
+                <td class="text-end text-nowrap">
+                  <ims-print-menu label="Print goods receipt" (action)="printReceipt(r, $event)"></ims-print-menu>
+                </td>
               </tr>
             } @empty {
-              <tr><td colspan="8" class="text-center text-muted2 py-4">{{ emptyLabel('receipts') }}</td></tr>
+              <tr><td colspan="9" class="text-center text-muted2 py-4">{{ emptyLabel('receipts') }}</td></tr>
             }
           </tbody>
         </table>
@@ -258,7 +262,7 @@
               </div>
               <div class="form-hint">
                 A supplier is a partner row — the same table the customers live in, carrying the
-                <strong>supplier</strong> role. Purchase orders name partners, never a typed-in vendor string.
+                <strong>supplier</strong> role. Purchase orders name partners, never a typed-in supplier string.
               </div>
             </div>
           </div>

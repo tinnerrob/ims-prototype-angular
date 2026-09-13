@@ -1,18 +1,13 @@
 import { Component, ElementRef, effect, signal, viewChild } from '@angular/core';
 
+import { PanelPlacement, placePanel } from '../panel-position';
 import { TipLine, TipService } from './tip.service';
-
-/** Where the panel ended up, and whether it had to flip above its anchor. */
-interface TipPos {
-  top: number;
-  left: number;
-  above: boolean;
-}
 
 /**
  * The single tooltip panel, mounted once in the app shell next to the confirm
  * dialog. It renders whatever `TipService` holds, positioned against the
- * anchor's viewport rect:
+ * anchor's viewport rect (`placePanel()` — the shared rule, also used by the
+ * print menu):
  *
  *   - below the trigger, biased to its left edge, clamped to the viewport;
  *   - flipped above when there is no room below (calendar rows near the bottom);
@@ -32,7 +27,7 @@ export class TipHostComponent {
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
 
   /** Panel placement; null until measured. */
-  readonly pos = signal<TipPos | null>(null);
+  readonly pos = signal<PanelPlacement | null>(null);
 
   constructor(readonly tips: TipService) {
     effect(() => {
@@ -52,23 +47,6 @@ export class TipHostComponent {
 
   private place(anchor: DOMRect): void {
     const el = this.panel()?.nativeElement;
-    if (!el) return;
-    const gap = 8;
-    const pad = 10;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-
-    const left = Math.max(pad, Math.min(anchor.left, vw - w - pad));
-    let top = anchor.bottom + gap;
-    let above = false;
-    if (top + h + pad > vh && anchor.top - gap - h >= pad) {
-      top = anchor.top - gap - h;
-      above = true;
-    } else {
-      top = Math.max(pad, Math.min(top, vh - h - pad));
-    }
-    this.pos.set({ top, left, above });
+    if (el) this.pos.set(placePanel(el, anchor));
   }
 }

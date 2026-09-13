@@ -27,6 +27,8 @@ export class AdminComponent {
   readonly menus: AdminMenu[] = [
     { id: 'locations', label: 'Locations', icon: 'bi-buildings' },
     { id: 'verticals', label: 'Business type & Categories', icon: 'bi-diagram-3' },
+    { id: 'dashboard', label: 'Dashboard', icon: 'bi-grid-1x2' },
     { id: 'modules', label: 'Feature Modules', icon: 'bi-toggles' },
+    { id: 'sample-data', label: 'Sample data', icon: 'bi-database-gear' },
   ];
 }

@@ -185,7 +185,7 @@ export function seedParties(): Party[] {
  *    party's card shows whether the other's leaked into it;
  *  - `PC-003` is **expired** (2025) for Meridian, whose CT-2024-002 starts in
  *    2026: the order must keep the catalog rates. That window is the whole
- *    reason a card carries dates — a renewal is a new card, so an old contract
+ *    reason a card carries dates — a renewal is a new card, so an old order
  *    keeps the price it was written at;
  *  - `PC-004` is a **supplier's** card. Its `unitCost` is the cost side: the PO
  *    editor's default, while PO-2026-001 still states the price it was ordered

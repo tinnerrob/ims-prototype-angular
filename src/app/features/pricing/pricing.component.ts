@@ -20,6 +20,8 @@ import {
 } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
 /**
@@ -59,10 +61,12 @@ const CARD_STATUS_CLASS: Record<ReturnType<DataService['cardStatus']>, string> =
  * fee configuration grid, the sales-tax schedule grid and the counterparty rate
  * cards (A11, which the prototype had no equivalent of).
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-pricing',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TablePagerDirective],
   templateUrl: './pricing.component.html',
   styleUrl: './pricing.component.scss',
 })
@@ -110,7 +114,10 @@ export class PricingComponent {
   /** Record behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: { kind: 'overhead' | 'tax' | 'card'; id: string } | null = null;
 
-  constructor(readonly data: DataService) {
+  constructor(
+    readonly data: DataService,
+    private readonly printer: PrintService,
+  ) {
     this.form = { ...data.pricing, riskPremiums: { ...data.pricing.riskPremiums } };
   }
 
@@ -504,6 +511,39 @@ export class PricingComponent {
     if (l.unitPrice != null) parts.push(`${this.data.money(l.unitPrice)} each`);
     if (l.unitCost != null) parts.push(`${this.data.money(l.unitCost)} cost`);
     return parts.join(' · ') || '—';
+  }
+
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable rate card and open the print dialog.
+   *
+   * Each line prints its negotiated figures beside the catalog's own, because what
+   * a card *changes* is the only thing worth reading on it — the same argument the
+   * record viewer makes for showing them side by side.
+   */
+  printCard(c: PriceCard, mode: PrintMode = 'print'): void {
+    const party = this.data.getParty(c.partyId);
+    this.printer.print({
+      heading: 'Rate Card',
+      number: c.id,
+      status: this.cardStatusLabel(c),
+      party: {
+        title: 'Counterparty',
+        name: this.cardParty(c),
+        lines: [party?.billingAddress].filter((l): l is string => !!l),
+      },
+      meta: [
+        { label: 'Agreement', value: c.name },
+        { label: 'In Force', value: this.cardWindow(c) },
+        { label: 'Standing', value: this.cardStatusLabel(c) },
+        { label: 'Negotiated Rates', value: `${c.lines.length} item(s)` },
+      ],
+      columns: ['Item', 'Type', 'Negotiated', 'Catalog'],
+      align: ['left', 'left', 'right', 'right'],
+      rows: c.lines.map((l) => [this.itemLabel(l), l.type, this.cardLineRate(l), this.catalogRate(l)]),
+      notes: 'The rates shown replace the catalog figures for the items listed; anything not listed bills at the catalog rate.',
+    }, mode);
   }
 
   editFromViewer(): void {

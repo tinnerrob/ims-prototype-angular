@@ -4,7 +4,7 @@
   <div class="kpi">
     <div class="kpi-icon kpi-blue"><i class="bi bi-cart"></i></div>
     <div>
-      <div class="kpi-label">Vendor Wholesale Cost</div>
+      <div class="kpi-label">Supplier Wholesale Cost</div>
       <div class="kpi-value">{{ data.money(totalCost()) }}</div>
     </div>
   </div>
@@ -29,17 +29,20 @@
   <!-- controls only — the page header already names this view ("Rentals /
        Sub-Rentals"); the list is the page's only pane. -->
   <div class="card-header controls-only">
-    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
-      <i class="bi bi-plus-lg"></i> New Sub-Rental
-    </button>
+    <div class="d-flex align-items-center gap-2">
+      <ims-print-menu text="Register" label="Print the sub-rental register" (action)="printRegister($event)"></ims-print-menu>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
+        <i class="bi bi-plus-lg"></i> New Sub-Rental
+      </button>
+    </div>
   </div>
   <div class="card-body">
     <div class="table-wrap">
-      <table class="table">
+      <table class="table" imsPaged="sub-rentals">
         <thead>
           <tr>
-            <th>Asset</th><th>Contract</th><th>Vendor Source</th>
-            <th class="num">Vendor Cost</th><th class="num">Retail Rate</th>
+            <th>Asset</th><th>Order</th><th>Supplier</th><th>Window</th><th>Status</th>
+            <th class="num">Supplier Cost</th><th class="num">Retail Rate</th>
             <th class="num">Qty</th><th class="num">Net Spread</th><th class="text-end">Actions</th>
           </tr>
         </thead>
@@ -52,18 +55,25 @@
               </td>
               <td class="strong mono">{{ r.orderId || '—' }}</td>
               <td>{{ supplierName(r) }}</td>
+              <td class="mono text-muted2 text-xs2">{{ windowLabel(r) }}</td>
+              <td><span [class]="statusBadge(r)">{{ statusLabel(r) }}</span></td>
               <td class="num">{{ data.money(r.vendorCost) }}</td>
               <td class="num">{{ data.money(r.retailRate) }}</td>
               <td class="num">{{ r.qty }}</td>
               <td class="num strong">{{ data.money(data.rentalSpread(r)) }}</td>
               <td class="text-end text-nowrap">
+                @if (data.rentalOut(r)) {
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Record the return to the supplier" (click)="returnRow(r)">
+                    <i class="bi bi-box-arrow-in-down"></i>
+                  </button>
+                }
                 <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(r)">
                   <i class="bi bi-x-lg"></i>
                 </button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="8" class="text-center text-muted2 py-4">No sub-rentals.</td></tr>
+            <tr><td colspan="10" class="text-center text-muted2 py-4">No sub-rentals.</td></tr>
           }
         </tbody>
       </table>
@@ -94,16 +104,31 @@
             <input class="form-control" [(ngModel)]="form.assetName" [disabled]="form.itemId !== ''" />
           </div>
           <div class="field-group">
-            <label class="form-label">Customer Contract</label>
+            <label class="form-label">Customer Order</label>
             <select class="form-select" [(ngModel)]="form.orderId">
               @for (o of orders(); track o.orderId) {
                 <option [value]="o.orderId">{{ o.orderId }} — {{ o.projectName }}</option>
               }
             </select>
           </div>
+          <!-- The window we hold it for: a sub-rental is taken in to be re-let, so
+               the two dates are what say whether it can cover the order above. -->
+          <div class="row g-2">
+            <div class="col-6 field-group">
+              <label class="form-label">Rent from</label>
+              <input class="form-control" type="date" [(ngModel)]="form.rentFrom" />
+            </div>
+            <div class="col-6 field-group">
+              <label class="form-label">Rent to (due back)</label>
+              <input class="form-control" type="date" [(ngModel)]="form.rentTo" />
+            </div>
+          </div>
+          <div class="form-hint">
+            The window we hold it for — it should cover the customer order it is re-let on.
+          </div>
           <div class="field-group">
-            <label class="form-label">Vendor Source *</label>
-            <!-- The vendor is a supplier party, not a typed name (see
+            <label class="form-label">Supplier *</label>
+            <!-- The supplier is a party, not a typed name (see
                  `RentalSub.supplierId`): one partner table, so "what else have we
                  bought from them?" is a join. -->
             <select class="form-select" [(ngModel)]="form.supplierId">
@@ -115,7 +140,7 @@
           </div>
           <div class="row g-2">
             <div class="col-4 field-group">
-              <label class="form-label">Wholesale Vendor Cost ($)</label>
+              <label class="form-label">Wholesale Supplier Cost ($)</label>
               <input class="form-control" type="number" [(ngModel)]="form.vendorCost" />
             </div>
             <div class="col-4 field-group">

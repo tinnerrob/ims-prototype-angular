@@ -1011,7 +1011,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
-| No unit tests | 0 `*.spec.ts` | **P9 ✔** — 26 harnesses (**224 checks**) now cover the store *and* the Scheduler's derived view/geometry math (P9b made the component instantiable in Node; P6/3–P6/4 extracted the math), and `npm run e2e` renders the built app headless (6 lazy routes, clean console, the field-editor grid, screenshots) |
+| No unit tests | 0 `*.spec.ts` | **P9 ✔** — 32 harnesses (**286 checks**) now cover the store *and* the Scheduler's derived view/geometry math (P9b made the component instantiable in Node; P6/3–P6/4 extracted the math), and `npm run e2e` renders the built app headless (6 lazy routes, clean console, the field-editor grid, the grouped reports, the sample-data buttons over all 19 routes on an emptied workspace, screenshots) |
 | No `OnPush` | 0 of 27 components | **P8 ✔** — 18 templates read the mutable store inline, so no sweep; the one pilot (`field-editor`) is applied and needs a two-minute browser confirmation; the real fix is signals in the store |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` was 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** measured → **P6a/P6/2 ✔ done**: `format` → `core/format.ts` and the fixture → `core/seed/`; the store is now **4,333** lines with 915 in `core/seed/`. Component extraction still filed for P9. |
@@ -1031,5 +1031,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 2026-09-12 | User approved **pushing P5**, then **P2b** (dead-code audit gate) + **P4c** (Scheduler resize). P2c (the `lint:styles` fix) and P5c (the 15 declarations) are reported but **not** started | chat |
 | 2026-09-12 | User approved **P2c** (fix the detector) and **P5c** (delete the dead declarations), verified against the compiled CSS's winning values | chat |
 | 2026-09-12 | User approved continuing through **P5b, P6, P7, P8, P9** | chat |
+| 2026-09-13 | User asked for the two calendar printouts to be **grouped reports** — the timesheet by employee (then order), the schedule by order (then asset) — each carrying a total for its **primary** (Phase G) | chat |
+| 2026-09-13 | User asked for **two workspace-wide buttons** — load all the sample data, and remove *all* of it (the existing "Start clean" keeps partners/locations/settings, so it does not count) (Phase H) | chat |
 
 

@@ -6,6 +6,8 @@ import { Item, Order, Timesheet, TIMESHEET_KIND, TimesheetTarget, WorkOrder } fr
 import { PageSearchService } from '../../core/page-search.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintGroup, PrintService, wantsExpanded } from '../../shared/print/print.service';
 import { employeeTip, orderRecordTip, segmentTip, workOrderTip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
@@ -65,7 +67,7 @@ interface DragState {
 @Component({
   selector: 'ims-timesheet',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, TipDirective],
   templateUrl: './timesheet.component.html',
   styleUrl: './timesheet.component.scss',
 })
@@ -122,6 +124,7 @@ export class TimesheetComponent implements OnDestroy {
     readonly data: DataService,
     private readonly cdr: ChangeDetectorRef,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // The topbar search box is this page's search: report how many employees it
     // keeps on the board (the shell shows "shown of total" next to the box).
@@ -129,6 +132,15 @@ export class TimesheetComponent implements OnDestroy {
       shown: this.matchingEmployees(this.data.listTimesheets()).length,
       total: this.employees().length,
     }));
+    // Anchor the calendar on the week the store's segments actually sit in — the
+    // same "open where the data is" move the scheduler makes with its first active
+    // order. Without it the board opens on today, and whenever the seeded dates do
+    // not land in this week the page (and now its printout) reads as empty.
+    const dates = this.data.listTimesheets().map((ts) => ts.date).sort();
+    const keys = new Set(this.dayKeys());
+    if (dates.length && !dates.some((date) => keys.has(date))) {
+      this.anchor = new Date(`${dates[dates.length - 1]}T00:00:00`);
+    }
   }
 
   ngOnDestroy(): void {
@@ -286,7 +298,7 @@ export class TimesheetComponent implements OnDestroy {
 
   /**
    * Employees the page search keeps: their own fields, or any segment they have
-   * logged — so searching a contract or work-order id keeps the people who
+   * logged — so searching an order or work-order id keeps the people who
    * worked it. The segments are passed in because `lanes()` already read them.
    */
   private matchingEmployees(segments: Timesheet[]): Item[] {
@@ -419,7 +431,7 @@ export class TimesheetComponent implements OnDestroy {
     return employeeTip(this.data, lane.emp, this.rounded(lane.logged));
   }
 
-  /** Contract chip: the whole order record, since the chip only shows the id. */
+  /** Order chip: the whole order record, since the chip only shows the id. */
   tipOrderChip(o: Order): Tip {
     return orderRecordTip(this.data, o);
   }
@@ -438,6 +450,125 @@ export class TimesheetComponent implements OnDestroy {
   }
 
   /** Now-marker position in Day view (%). */
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable **timesheet** and open the print dialog.
+   *
+   * The period is whatever the board is showing (Day / Week / Month — the screen
+   * picks it). The document is **grouped by employee**, and each employee prints
+   * their own total (hours, bill, cost) before the detail under it: contracted
+   * lists the **orders** they clocked into (one row each, aggregated), expanded
+   * adds a second level — one block per order with a row per logged segment. Both
+   * read the store's own `segmentHours` / `segmentBill` / `segmentCost`, so the
+   * sheet adds up to what the board shows.
+   */
+  printTimesheet(mode: PrintMode = 'print'): void {
+    const expanded = wantsExpanded(mode);
+    const segments = this.segmentsInView();
+    const lanes = this.lanes();
+    const money = (n: number) => this.data.money(n);
+    const employee = (emp: Item) => `${emp.id} · ${emp.name}`;
+    const hours = (list: Timesheet[]) => list.reduce((s, ts) => s + this.data.segmentHours(ts), 0);
+    const bill = (list: Timesheet[]) => list.reduce((s, ts) => s + this.data.segmentBill(ts), 0);
+    const cost = (list: Timesheet[]) => list.reduce((s, ts) => s + this.data.segmentCost(ts), 0);
+    const targetLabel = (ts: Timesheet): string => {
+      // The store's own segment label names an order and the non-job kinds
+      // (Shop / Overhead / Idle); a work order reads better with its asset.
+      if (ts.targetType === 'workorder' && ts.targetId) {
+        const w = this.data.getWorkOrder(ts.targetId);
+        return w ? `${w.id} · ${this.data.itemLabel('serialized', w.itemId)}` : ts.targetId;
+      }
+      return this.data.segmentLabel(ts);
+    };
+
+    const groups: PrintGroup[] = lanes.map((lane) => {
+      const mine = segments.filter((ts) => ts.empId === lane.emp.id);
+      // The second level: the order / work order each segment was clocked into.
+      const byTarget = new Map<string, Timesheet[]>();
+      for (const ts of mine) {
+        const k = `${ts.targetType}:${ts.targetId ?? ''}`;
+        byTarget.set(k, [...(byTarget.get(k) ?? []), ts]);
+      }
+      const targets = [...byTarget.values()];
+      return {
+        title: employee(lane.emp),
+        meta: [lane.emp.role, `${this.data.int(lane.logged)} hr`].filter(Boolean).join(' · '),
+        rows: expanded
+          ? undefined
+          : targets.map((group) => [
+              targetLabel(group[0]),
+              this.data.int(group.length),
+              this.data.int(hours(group)),
+              money(bill(group)),
+              money(cost(group)),
+            ]),
+        subgroups: expanded
+          ? targets.map((group) => ({
+              title: targetLabel(group[0]),
+              meta: `${group.length} segment(s)`,
+              rows: group.map((ts) => [
+                this.data.fmtDate(ts.date),
+                ts.clockIn ?? '—',
+                ts.clockOut ?? 'running',
+                this.data.int(this.data.segmentHours(ts)),
+                money(this.data.segmentBill(ts)),
+                money(this.data.segmentCost(ts)),
+              ]),
+              subtotals: [
+                { label: 'Hours', value: this.data.int(hours(group)) },
+                { label: 'Bill', value: money(bill(group)) },
+              ],
+            }))
+          : undefined,
+        subtotals: [
+          { label: 'Hours', value: this.data.int(lane.logged) },
+          { label: 'Bill', value: money(bill(mine)), strong: true },
+          { label: 'Cost', value: money(cost(mine)) },
+        ],
+      };
+    });
+
+    this.printer.print({
+      heading: expanded ? 'Timesheet — Expanded' : 'Timesheet',
+      number: this.rangeLabel(),
+      meta: [
+        { label: 'View', value: this.view === 'day' ? 'Day' : this.view === 'week' ? 'Week' : 'Month' },
+        { label: 'Period', value: this.rangeLabel() },
+        { label: 'Employees', value: String(groups.length) },
+        { label: 'Segments', value: String(segments.length) },
+        { label: 'Grouped', value: expanded ? 'By employee → order → segment' : 'By employee → order' },
+      ],
+      columns: expanded
+        ? ['Date', 'In', 'Out', 'Hours', 'Bill', 'Cost']
+        : ['Order / Task', 'Segments', 'Hours', 'Bill', 'Cost'],
+      align: expanded
+        ? ['left', 'right', 'right', 'right', 'right', 'right']
+        : ['left', 'right', 'right', 'right', 'right'],
+      groups,
+      totals: [
+        { label: 'Employees', value: String(lanes.length) },
+        { label: 'Logged Hours', value: this.data.int(lanes.reduce((s, l) => s + l.logged, 0)) },
+        { label: 'Billable', value: money(bill(segments)), strong: true },
+        { label: 'Cost', value: money(cost(segments)) },
+      ],
+      notes: expanded
+        ? 'Grouped by employee, then by the order they clocked into, with one row per segment.'
+        : 'Grouped by employee, one row per order or task. Print expanded for the segments.',
+    }, mode);
+  }
+
+  /** Segments inside the period on screen, for the employees the board shows. */
+  private segmentsInView(): Timesheet[] {
+    const keys = new Set(this.dayKeys());
+    const shown = new Set(this.lanes().map((l) => l.emp.id));
+    const order = (ts: Timesheet) => `${ts.date}${String(ts.clockIn ?? 0).padStart(4, '0')}`;
+    return this.data
+      .listTimesheets()
+      .filter((ts) => keys.has(ts.date) && shown.has(ts.empId))
+      .sort((a, b) => order(a).localeCompare(order(b)));
+  }
+
   nowLeft(): number {
     const n = new Date();
     return ((n.getHours() * 60 + n.getMinutes() - DAY_A) / (DAY_B - DAY_A)) * 100;

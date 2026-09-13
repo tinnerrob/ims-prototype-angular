@@ -40,6 +40,36 @@ export function dISO(d: Date): string {
 export type PeriodView = 'day' | 'week' | 'month';
 
 /**
+ * A list/log **period filter**: one of the three periods, or `all` for no filter.
+ *
+ * The inspection log, the work-order grid and both purchasing lists show the same
+ * All / Day / Week / Month chips over the same ‹ › pager, so the vocabulary lives
+ * here rather than being re-declared per page. `all` is a *filter* state, not a
+ * period, which is why it is not part of `PeriodView`.
+ */
+export type RangeFilter = 'all' | PeriodView;
+
+/** The chips, in render order (`All` leads). */
+export const RANGE_FILTERS: RangeFilter[] = ['all', 'day', 'week', 'month'];
+
+/** Chip label for a filter. */
+export const RANGE_FILTER_LABEL: Record<RangeFilter, string> = {
+  all: 'All',
+  day: 'Day',
+  week: 'Week',
+  month: 'Month',
+};
+
+/**
+ * The `PeriodView` a filter pages through: `all` has no pager of its own, so it
+ * reads as a single day (its bounds are the cursor's day, and its label is that
+ * day) — exactly what the three pages did inline.
+ */
+export function rangeView(range: RangeFilter): PeriodView {
+  return range === 'all' ? 'day' : range;
+}
+
+/**
  * Label for a period in the date navigators, anchored on its first day — one
  * wording for every pager in the app: "Monday, Aug 17, 2026", "Week of Aug 17, 2026"
  * or "Month of August 2026". Week/month name the period and its first day only
@@ -101,6 +131,27 @@ export function periodBounds(view: PeriodView, anchor: Date): { start: string; e
     return { start: dISO(start), end: dISO(dayAt(start, 6)) };
   }
   return { start: dISO(anchor), end: dISO(anchor) };
+}
+
+/**
+ * Anchor a period cursor inside the window its view shows: a month on its 1st and
+ * a week on its Monday (a day is already a day). The three period pages ran this
+ * branch themselves after a chip change; it lives here so they cannot drift.
+ */
+export function alignPeriod(view: PeriodView, anchor: Date): Date {
+  if (view === 'month') return new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  if (view === 'week') return mondayOf(anchor);
+  return anchor;
+}
+
+/**
+ * Page a period cursor one step: a month moves by calendar month, a week by seven
+ * days and a day by one — always from the anchored cursor, so ‹ › from a month is
+ * the 1st of the previous/next month.
+ */
+export function shiftPeriod(view: PeriodView, anchor: Date, dir: number): Date {
+  if (view === 'month') return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
+  return dayAt(anchor, dir * (view === 'week' ? 7 : 1));
 }
 
 /** Calendar days spanned by [a, b], minimum 1 (prototype `daysBetween`). */

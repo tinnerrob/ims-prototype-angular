@@ -12,6 +12,8 @@ import { SessionService } from './core/session.service';
 import { TelemetryService } from './core/telemetry.service';
 import { NAV_GROUPS, ViewDef, viewFor } from './core/views';
 import { ConfirmDialogComponent } from './shared/confirm/confirm-dialog.component';
+import { PrintMenuHostComponent } from './shared/print/print-menu-host.component';
+import { PrintDocumentComponent } from './shared/print/print-document.component';
 import { TipHostComponent } from './shared/tip/tip-host.component';
 
 /**
@@ -29,7 +31,7 @@ import { TipHostComponent } from './shared/tip/tip-host.component';
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, ConfirmDialogComponent, TipHostComponent],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, ConfirmDialogComponent, PrintDocumentComponent, PrintMenuHostComponent, TipHostComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })

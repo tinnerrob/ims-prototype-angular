@@ -41,7 +41,7 @@ const check = (label, fn) => {
 };
 
 const d = new DataService();
-const c = new SchedulerComponent(d, { detectChanges() {}, markForCheck() {} }, { ask: async () => false });
+const c = new SchedulerComponent(d, { detectChanges() {}, markForCheck() {} }, { ask: async () => false }, { print() {} });
 const orderIds = () => d.listOrders().map((o) => o.orderId);
 
 check('opening the New Order editor seeds a complete form and is not an edit', () => {

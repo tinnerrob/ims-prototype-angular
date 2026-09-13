@@ -49,7 +49,7 @@ const check = (label, fn) => {
 const d = new DataService();
 const cdr = { detectChanges() {}, markForCheck() {} };
 const confirm = { ask: async () => false };
-const c = new SchedulerComponent(d, cdr, confirm);
+const c = new SchedulerComponent(d, cdr, confirm, { print() {} });
 const DAY = 86400000;
 
 check('the calendar is Monday-anchored and agrees with its own anchor', () => {

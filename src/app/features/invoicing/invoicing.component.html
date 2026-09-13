@@ -59,10 +59,10 @@
       <p class="text-muted2 small">Created {{ lastRun }} invoice(s).</p>
     }
     <div class="table-wrap">
-      <table class="table">
+      <table class="table" imsPaged="invoices">
         <thead>
           <tr>
-            <th>Invoice</th><th>Contract</th><th>Customer</th><th class="num">Cycle</th>
+            <th>Invoice</th><th>Order</th><th>Customer</th><th class="num">Cycle</th>
             <th>Period</th><th class="num">Total</th><th>Status</th><th class="text-end">Actions</th>
           </tr>
         </thead>
@@ -80,6 +80,7 @@
                 <button class="btn btn-ims-outline btn-sm2" type="button" title="Details" (click)="openDetail(inv)">
                   <i class="bi bi-eye"></i>
                 </button>
+                <ims-print-menu label="Print invoice" (action)="printInvoice(inv, $event)"></ims-print-menu>
                 @if (inv.status !== 'paid') {
                   <button class="btn btn-ims-outline btn-sm2" type="button" title="Mark paid" (click)="markPaid(inv)">
                     <i class="bi bi-check2"></i>
@@ -134,7 +135,7 @@
           <div class="divider"></div>
           <div class="strong mb-2"><i class="bi bi-box-seam me-1"></i>Invoiced Items</div>
           <div class="table-wrap">
-            <table class="table">
+            <table class="table" imsPaged="invoice-lines">
               <thead><tr><th>Item</th><th class="num">Qty</th><th>Rate</th><th class="num">Amount</th></tr></thead>
               <tbody>
                 @for (li of detailLines(detail); track li.label) {
@@ -163,6 +164,7 @@
           <button type="button" class="btn btn-ims-outline" (click)="exportCsv()">
             <i class="bi bi-download"></i> Download CSV
           </button>
+          <ims-print-menu text="Print Invoice" label="Print invoice" [primary]="true" (action)="printInvoice(detail, $event)"></ims-print-menu>
         </div>
       </div>
     </div>

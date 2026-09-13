@@ -1,0 +1,22 @@
+@if (menus.menu()) {
+  <div class="print-menu-layer" (click)="close()"></div>
+  <div
+    #panel
+    class="print-menu"
+    role="menu"
+    aria-label="Print"
+    [class.ready]="!!pos()"
+    [style.top.px]="pos()?.top"
+    [style.left.px]="pos()?.left"
+  >
+    @for (item of items(); track item.mode) {
+      <button class="print-menu-item" type="button" role="menuitem" (click)="pick(item.mode)">
+        <i class="bi {{ item.icon }}"></i>
+        <span class="print-menu-text">
+          <span class="print-menu-label">{{ item.label }}</span>
+          <span class="print-menu-hint">{{ item.hint }}</span>
+        </span>
+      </button>
+    }
+  </div>
+}

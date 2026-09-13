@@ -49,7 +49,7 @@ const check = (label, fn) => {
 };
 
 const d = new DataService();
-const c = new SchedulerComponent(d, { detectChanges() {}, markForCheck() {} }, { ask: async () => false });
+const c = new SchedulerComponent(d, { detectChanges() {}, markForCheck() {} }, { ask: async () => false }, { print() {} });
 
 /* ============================ the tooltip builders ============================
  * Run first: the gesture checks below move real dates, and these read the fixture. */

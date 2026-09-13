@@ -4,6 +4,33 @@
   <!-- controls only — the page header already names this view ("Field Service &
        Maintenance") and this card is the page's only pane. -->
   <div class="card-header controls-only">
+    <!-- Period (the inspection log's chips + pager) · status · the action. -->
+    <div class="log-filter">
+      <div class="btn-group">
+        @for (v of logRanges; track v) {
+          <button
+            class="btn btn-sm2"
+            type="button"
+            [class.btn-ims]="logRange === v"
+            [class.btn-ims-outline]="logRange !== v"
+            (click)="setLogRange(v)"
+          >
+            {{ logRangeLabelOf(v) }}
+          </button>
+        }
+      </div>
+    </div>
+    @if (logFiltered()) {
+      <div class="period-pager log-pager end">
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Previous period" (click)="shiftLog(-1)">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <span class="tl-range">{{ logRangeLabel() }}</span>
+        <button class="btn btn-ims-outline btn-sm2" type="button" title="Next period" (click)="shiftLog(1)">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+    }
     <div class="d-flex align-items-center gap-2">
       <select class="form-select form-select-sm w-auto" [value]="filter" (change)="filter = $any($event.target).value">
         <option value="all">All</option>
@@ -18,7 +45,7 @@
     </div>
   </div>
   <div class="card-body table-wrap">
-    <table class="table">
+    <table class="table" imsPaged="work-orders">
       <thead>
         <tr>
           <th>WO #</th><th>Asset</th><th>Service Type</th><th class="num">Meter Reading</th>
@@ -48,14 +75,17 @@
             <td class="num strong">{{ data.money(cost(w).total) }}</td>
             <td class="mono text-muted2">{{ data.fmtDate(w.date) }}</td>
             <td class="text-end text-nowrap">
-              <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
-                @for (s of statuses; track s) {
-                  <option [value]="s">{{ s }}</option>
-                }
-              </select>
-              <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(w)">
-                <i class="bi bi-x-lg"></i>
-              </button>
+              <span class="d-inline-flex align-items-center gap-1">
+                <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
+                  @for (s of statuses; track s) {
+                    <option [value]="s">{{ s }}</option>
+                  }
+                </select>
+                <ims-print-menu label="Print work order" (action)="printWorkOrder(w, $event)"></ims-print-menu>
+                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(w)">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </span>
             </td>
           </tr>
         } @empty {

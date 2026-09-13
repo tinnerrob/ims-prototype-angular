@@ -67,6 +67,8 @@
   color: inherit;
 }
 
+/* `!important` is load-bearing: `.admin-nav-item i` (0,2,0) out-specifies this
+   one-class rule and would repaint the chevron at 13px. */
 .admin-nav-chev {
   margin-left: auto;
   font-size: 11px !important;

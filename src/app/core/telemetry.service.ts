@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 
 import { DataService } from './data.service';
 import { Item } from './models';
+import { pad2 } from './period';
 
 /** One entry in the geofence alert log (prototype `App.breachAlerts`). */
 export interface GeoAlert {
@@ -31,8 +32,6 @@ export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: 
     Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a));
 }
-
-const pad2 = (n: number) => String(n).padStart(2, '0');
 
 /**
  * IMS — TelemetryService.

@@ -331,7 +331,7 @@ carried unremarked since its first commit.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 246 runtime checks in 28 harnesses, against the real store, no browser
+npm run check:store    # 286 runtime checks in 32 harnesses, against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -548,6 +548,46 @@ hand-roll `localStorage` and assert on the store's own output:
   with the documented fallbacks, `07:00`/`17:00` land as minutes, an unticked order is created closed, the
   category name is derived from the category row while its id is what is stored, the per-type fields
   follow the pool tab, and an opening count only lands when the row has a place to sit in.
+- `check29.mjs` — **10 checks, the Operations Dashboard's arrangement** (Phase C): the default layout
+  is every registry widget in registry order; a stored order leads, and a widget it never named is
+  appended rather than dropped; an unknown key is ignored; a switch off removes exactly one widget and
+  puts it in the hidden list; switching it back returns it to its place; a move swaps two visible
+  widgets and leaves a hidden one off; the arrows stop at the ends of the visible list; a widget whose
+  module is off is not rendered (and is not a layout change); reset restores the registry default; and
+  the arrangement persists on the workspace row.
+- `check30.mjs` — **15 checks, the printable documents' content** (Phase E, + the grouped
+  reports, Phase G): each of the eight
+  builders (`printInvoice`, `printPo`, `printReceipt`, `printOrder`, `printPickList`,
+  `printWorkOrder`, `printCard`, `printDispatch`) is driven against the real store with a
+  capturing printer, so the harness reads the `PrintDocument` itself. Every document has a
+  heading, a number, columns and rows that are all exactly as wide as the header (and `align`
+  parallels them) — flat *or* grouped, both levels. No meta fact is undefined; and the money
+  a document prints is the *store's
+  own* figure — the invoice's strong row is `invoiceTotals().total`, the PO's is `poValue()`,
+  the order's is `orderAmount()`, the receipt's is the sum of its landings, and the work
+  order's parts + labour equal `workOrderCost().total`. The dispatch note carries its order's
+  lines and names the driver and truck; the rate card has one row per negotiated rate and no
+  totals block; the pick list is the board day on screen (`Pick List` outbound, `Return Pick
+  List` incoming). The two calendars are instantiated too: the **schedule** groups by order
+  and gives each a strong subtotal, and expanded adds the asset level under every order; the
+  **timesheet** groups by employee with a strong subtotal each, and expanded adds the order
+  level — so the "grouped by the primary, totalled by the primary" claim is held to account.
+- `check31.mjs` — **7 checks, a sub-rental's window and its return** (Phase F): every seeded
+  sub-rental carries an ISO `rentFrom` → `rentTo` that runs forwards; a row can be created
+  with its window; an open end is allowed (a missing `rentFrom` is not an error); a return
+  stamps `returnedAt` without touching either end of the window and takes the row out of the
+  "out" set; the return defaults to today; `rentalOverdue()` reads the two dates and stops
+  being true once the row is back; and an unknown id is refused rather than invented.
+
+- `check32.mjs` — **8 checks, the two workspace-wide buttons** (Phase H): the fixture is a
+  full workspace table by table; `clearAllData()` empties every one of them and keeps the
+  workspace itself (tenant, people, session, and no dangling `vertical_id`); a wiped store
+  that is then re-loaded persists **the same bytes** as a store nobody has touched (the
+  `cmp`-clean proof, with a readable first-difference dump when it fails); the loaded rows
+  keep the fixture's own author and clock rather than being stamped with today; a row
+  written after a reload belongs to the session; the id sequences keep their place; both
+  buttons are idempotent; and an emptied workspace can still be built up from nothing —
+  a business type, a category and an asset created from zero.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.

@@ -7,25 +7,25 @@
        from the search row below. -->
   <div class="card-header">
     <div class="subtabs">
-      <button class="subtab" type="button" [class.active]="tab === 'customers'" (click)="setTab('customers')">
-        <i class="bi bi-people"></i>Customers<span class="count-pill">{{ parties().length }}</span>
+      <button class="subtab" type="button" [class.active]="tab === 'parties'" (click)="setTab('parties')">
+        <i class="bi bi-people"></i>Parties<span class="count-pill">{{ parties().length }}</span>
       </button>
       <button class="subtab" type="button" [class.active]="tab === 'orders'" (click)="setTab('orders')">
-        <i class="bi bi-folder2-open"></i>Contracts<span class="count-pill">{{ orderMatches().length }}</span>
+        <i class="bi bi-folder2-open"></i>Orders<span class="count-pill">{{ orderMatches().length }}</span>
       </button>
     </div>
-    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="tab === 'customers' ? openCustomer() : newOrder()">
-      <i class="bi bi-plus-lg"></i> {{ tab === 'customers' ? 'New Customer' : 'New Contract' }}
+    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="tab === 'parties' ? openCustomer() : newOrder()">
+      <i class="bi bi-plus-lg"></i> {{ tab === 'parties' ? 'New Customer' : 'New Order' }}
     </button>
   </div>
   <div class="card-body">
-    @if (tab === 'customers') {
+    @if (tab === 'parties') {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="order-parties">
           <thead>
             <tr>
               <th>Customer</th><th>Contact</th><th>Phone</th><th class="num">Active</th>
-              <th class="num">Contracts</th><th>Status</th><th class="text-end">Actions</th>
+              <th class="num">Orders</th><th>Status</th><th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -73,16 +73,16 @@
         </div>
       </div>
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="orders">
           <thead>
             <tr>
-              <th>Contract</th><th>Customer</th><th>Project</th><th>Job Site</th>
+              <th>Order</th><th>Customer</th><th>Project</th><th>Job Site</th>
               <th>Window</th><th class="num">Lines</th><th class="num">Gross</th><th>Status</th><th class="text-end">Actions</th>
             </tr>
           </thead>
           <tbody>
             @for (o of orders(); track o.orderId) {
-              <tr class="row-open" (click)="showContractView($event, o)" [imsTip]="tipContract(o)">
+              <tr class="row-open" (click)="showOrderView($event, o)" [imsTip]="tipOrder(o)">
                 <td class="strong mono">{{ o.orderId }}</td>
                 <td>{{ data.partyName(o.partyId) }}</td>
                 <td>{{ o.projectName }}</td>
@@ -95,10 +95,11 @@
                   <button class="btn btn-ims-outline btn-sm2" type="button" title="View" (click)="openDetail(o)">
                     <i class="bi bi-eye"></i>
                   </button>
+                  <ims-print-menu label="Print order" (action)="printOrder(o, $event)"></ims-print-menu>
                 </td>
               </tr>
             } @empty {
-              <tr><td colspan="9" class="text-center text-muted2 py-4">No {{ filter }} contracts.</td></tr>
+              <tr><td colspan="9" class="text-center text-muted2 py-4">No {{ filter }} orders.</td></tr>
             }
           </tbody>
         </table>
@@ -168,13 +169,13 @@
 }
 
 
-<!-- new contract -->
+<!-- new order -->
 @if (orderOpen) {
   <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="orderDirty()" (dismiss)="closeOrderForm()">
     <div class="modal-dialog">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-folder2-open"></i>New Contract</h5>
+          <h5 class="modal-title"><i class="bi bi-folder2-open"></i>New Order</h5>
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -207,7 +208,7 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-ims" [disabled]="!orderForm.projectName.trim()" (click)="saveOrder()">
-            <i class="bi bi-check2"></i> Save Contract
+            <i class="bi bi-check2"></i> Save Order
           </button>
         </div>
       </div>
@@ -216,13 +217,13 @@
   <div class="modal-backdrop show d-block"></div>
 }
 
-<!-- contract detail -->
+<!-- order detail -->
 @if (detail) {
   <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="closeDetail()">
     <div class="modal-dialog modal-lg">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="bi bi-eye"></i>Contract — {{ detail.orderId }}</h5>
+          <h5 class="modal-title"><i class="bi bi-eye"></i>Order — {{ detail.orderId }}</h5>
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -274,6 +275,9 @@
           } @empty {
             <p class="text-muted2 py-2">No line items staged.</p>
           }
+        </div>
+        <div class="modal-footer">
+          <ims-print-menu text="Print Order" label="Print order" [primary]="true" (action)="printOrder(detail, $event)"></ims-print-menu>
         </div>
       </div>
     </div>

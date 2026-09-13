@@ -1,0 +1,81 @@
+/* The print menu panel — a fixed panel at the app root, so no pane or modal can
+   clip it. Deliberately light-on-card: the sidebar's dark dropdown is the
+   `user-menu`, and this one hangs over content. */
+
+.print-menu-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+}
+
+.print-menu {
+  position: fixed;
+  z-index: 2001;
+  min-width: 224px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .12s var(--ease);
+}
+
+.print-menu.ready {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.print-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.print-menu-item:hover {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+
+.print-menu-item i {
+  width: 18px;
+  flex: none;
+  text-align: center;
+  font-size: 15px;
+  color: var(--brand);
+}
+
+.print-menu-item:hover i {
+  color: var(--brand-deep);
+}
+
+.print-menu-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.print-menu-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.print-menu-hint {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.print-menu-item:hover .print-menu-hint {
+  color: var(--brand-deep);
+  opacity: .8;
+}

@@ -1,7 +1,19 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
+import {
+  DataService,
+  PeriodView,
+  RANGE_FILTER_LABEL,
+  RANGE_FILTERS,
+  RangeFilter,
+  alignPeriod,
+  periodBounds,
+  periodLabel,
+  periodPhrase,
+  rangeView,
+  shiftPeriod,
+} from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
 import {
   FormField,
@@ -14,6 +26,8 @@ import {
 } from '../../core/models';
 import { FormsService } from '../../core/forms.service';
 import { EvidenceComponent } from '../../shared/evidence/evidence.component';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { stampDate } from '../../shared/tip/tip-format';
@@ -21,19 +35,7 @@ import { tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
 
-/** Period filter of the inspection log. */
-type LogRange = 'all' | 'day' | 'week' | 'month';
-
-const LOG_RANGES: LogRange[] = ['all', 'day', 'week', 'month'];
-
-const LOG_RANGE_LABEL: Record<LogRange, string> = {
-  all: 'All',
-  day: 'Day',
-  week: 'Week',
-  month: 'Month',
-};
-
-/** Meter readings against the contract allowance (prototype `meterOverage`). */
+/** Meter readings against the order allowance (prototype `meterOverage`). */
 interface Overage {
   used: number;
   allowed: number;
@@ -50,21 +52,23 @@ interface Overage {
  * `data-edit` row. The header's "Log Inspection" button opens that same editor on
  * a blank draft, so a new record is captured with the fields an edit exposes.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-inspections',
   standalone: true,
-  imports: [EvidenceComponent, FormsModule, ModalDismissDirective, TipDirective],
+  imports: [EvidenceComponent, FormsModule, ModalDismissDirective, PrintMenuComponent, TipDirective, TablePagerDirective],
   templateUrl: './inspections.component.html',
   styleUrl: './inspections.component.scss',
 })
 export class InspectionsComponent {
   readonly outcomes = INSPECTION_OUTCOMES;
   readonly severities = INSPECTION_SEVERITIES;
-  readonly logRanges = LOG_RANGES;
-  readonly logRangeLabelOf = (v: LogRange): string => LOG_RANGE_LABEL[v];
+  readonly logRanges = RANGE_FILTERS;
+  readonly logRangeLabelOf = (v: RangeFilter): string => RANGE_FILTER_LABEL[v];
 
   /** Log period filter + the cursor date the day/week/month window is built on. */
-  logRange: LogRange = 'all';
+  logRange: RangeFilter = 'all';
   logAnchor = new Date();
 
   editOpen = false;
@@ -77,6 +81,7 @@ export class InspectionsComponent {
     readonly data: DataService,
     readonly forms: FormsService,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // The topbar search box is this page's search: report how much of the log
     // survives it (the shell shows "shown of total" next to the box).
@@ -151,22 +156,18 @@ export class InspectionsComponent {
 
   /** View + first day of the window the log is showing (`all` has no pager, so it reads as a day). */
   private logWindow(): { view: PeriodView; date: Date } {
-    const view: PeriodView = this.logRange === 'all' ? 'day' : this.logRange;
-    return { view, date: new Date(this.logBounds().start + 'T00:00:00') };
+    return { view: rangeView(this.logRange), date: new Date(this.logBounds().start + 'T00:00:00') };
   }
 
   /** Switch the log period, keeping the cursor date inside the new window. */
-  setLogRange(v: LogRange): void {
+  setLogRange(v: RangeFilter): void {
     this.logRange = v;
-    if (v === 'month') this.logAnchor = new Date(this.logAnchor.getFullYear(), this.logAnchor.getMonth(), 1);
-    else if (v === 'week') this.logAnchor = mondayOf(this.logAnchor);
+    this.logAnchor = alignPeriod(rangeView(v), this.logAnchor);
   }
 
   /** Page the log cursor one day / week / month (scheduler `shift`). */
   shiftLog(dir: number): void {
-    const a = this.logAnchor;
-    if (this.logRange === 'month') this.logAnchor = new Date(a.getFullYear(), a.getMonth() + dir, 1);
-    else this.logAnchor = dayAt(a, dir * (this.logRange === 'week' ? 7 : 1));
+    this.logAnchor = shiftPeriod(rangeView(this.logRange), this.logAnchor, dir);
   }
 
   /* ------------------------------- editor ------------------------------- */
@@ -320,6 +321,74 @@ export class InspectionsComponent {
     this.editSnap = '';
   }
 
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable **inspection log** and open the print dialog: the rows the
+   * period filter and the page search are showing, with their meter/fuel readings
+   * and any overage — not the whole ledger behind them.
+   */
+  printLog(mode: PrintMode = 'print'): void {
+    const rows = this.logEntries();
+    const period = this.logFiltered() ? this.logRangeLabel() : 'All dates';
+    this.printer.print({
+      heading: 'Inspection Log',
+      number: period,
+      meta: [
+        { label: 'Period', value: period },
+        { label: 'Inspections', value: String(rows.length) },
+      ],
+      columns: ['Inspection', 'Asset', 'Direction', 'Date', 'Meter Out', 'Meter In', 'Fuel Out', 'Fuel In', 'Status', 'Overage'],
+      align: ['left', 'left', 'left', 'left', 'right', 'right', 'right', 'right', 'left', 'right'],
+      rows: rows.map((r) => [
+        r.id,
+        r.itemId,
+        r.direction,
+        this.data.fmtDate(r.date),
+        r.meterOut == null ? '—' : this.data.int(r.meterOut),
+        r.meterIn == null ? '—' : this.data.int(r.meterIn),
+        r.fuelOut == null ? '—' : String(r.fuelOut),
+        r.fuelIn == null ? '—' : String(r.fuelIn),
+        r.status,
+        this.overageOf(r) ? `${this.data.int(this.overageOf(r)?.overage)} hr` : '—',
+      ]),
+      notes: 'Every inspection the log is showing for the period and search above.',
+    }, mode);
+  }
+
+  /**
+   * Build the printable **inspection report** for one record and open the print
+   * dialog: the checklist as captured, pass/fail per item with any severity, and
+   * the meter/fuel pair. Reads the stored results without touching them.
+   */
+  printInspection(r: Inspection, mode: PrintMode = 'print'): void {
+    const s = this.summary(r);
+    const fields = this.templateFor(r)?.fields ?? [];
+    const reading = (n: number | null | undefined) => (n == null ? '—' : this.data.int(n));
+    this.printer.print({
+      heading: 'Inspection Report',
+      number: r.id,
+      status: r.status,
+      meta: [
+        { label: 'Asset', value: `${r.itemId} · ${this.data.itemLabel('serialized', r.itemId)}` },
+        { label: 'Direction', value: r.direction },
+        { label: 'Date', value: this.data.fmtDate(r.date) },
+        { label: 'Order', value: r.orderId || '—' },
+        { label: 'Meter Out', value: reading(r.meterOut) },
+        { label: 'Meter In', value: reading(r.meterIn) },
+        { label: 'Fuel Out', value: r.fuelOut == null ? '—' : String(r.fuelOut) },
+        { label: 'Fuel In', value: r.fuelIn == null ? '—' : String(r.fuelIn) },
+        { label: 'Pass / Fail / N-A', value: `${s.pass} / ${s.fail} / ${s.na}` },
+      ],
+      columns: ['Check', 'Result', 'Severity', 'Note'],
+      rows: fields.map((f) => {
+        const res = r.results?.[f.key];
+        return [f.label, res?.outcome ?? 'pass', res?.severity ?? '—', res?.note || '—'];
+      }),
+      notes: r.notes,
+    }, mode);
+  }
+
   /* --------------------------- meter overage ---------------------------- */
 
   /** Overage badge for a logged row — only when it exceeds the allowance. */
@@ -366,7 +435,7 @@ export class InspectionsComponent {
    * Monday-based weeks and month lengths every navigator in the app words).
    */
   private logBounds(): { start: string; end: string } {
-    return periodBounds(this.logRange === 'all' ? 'day' : this.logRange, this.logAnchor);
+    return periodBounds(rangeView(this.logRange), this.logAnchor);
   }
 
   /* ------------------------------ tooltips ------------------------------ */

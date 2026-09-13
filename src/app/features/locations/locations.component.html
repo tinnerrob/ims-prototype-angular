@@ -30,11 +30,10 @@
     @if (tab === 'locations') {
       <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
         <input class="filter-input search" placeholder="Search ID, name, type, address…" [(ngModel)]="search" />
-        <span class="text-muted2">{{ rows().length }} of {{ locations().length }} locations</span>
       </div>
 
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="locations">
           <thead>
             <tr>
               <th>Location</th>
@@ -110,7 +109,7 @@
       </div>
     } @else {
       <div class="table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="location-types">
           <thead>
             <tr>
               <th>Location Type</th>

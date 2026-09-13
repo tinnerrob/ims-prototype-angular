@@ -6,7 +6,7 @@
     <div class="ts-side">
       <div class="card">
         <div class="card-header">
-          <span class="card-title"><i class="bi bi-briefcase"></i> Active Contracts</span>
+          <span class="card-title"><i class="bi bi-briefcase"></i> Active Orders</span>
           <span class="badge-status st-onrent">{{ activeOrders().length }}</span>
         </div>
         <div class="card-body ts-order-list">
@@ -69,7 +69,7 @@
       </div>
 
       <div class="text-muted2 ts-side-note">
-        Drag a contract or task onto an employee's row to clock them in. Click an
+        Drag an order or task onto an employee's row to clock them in. Click an
         employee's name on the calendar to punch (includes Lunch).
       </div>
     </div>
@@ -114,11 +114,12 @@
       >
         Today
       </button>
+      <ims-print-menu text="Timesheet" label="Print this timesheet" [expandable]="true" (action)="printTimesheet($event)"></ims-print-menu>
     </div>
 
     <div class="ts-hint">
       <i class="bi bi-arrow-down-left-circle"></i>
-      Drag a contract or task onto an employee row to clock in · drag a bar to move/resize · click a bar to edit ·
+      Drag an order or task onto an employee row to clock in · drag a bar to move/resize · click a bar to edit ·
       click an employee name to punch · the chevron contracts / expands a day's stacked items
     </div>
 

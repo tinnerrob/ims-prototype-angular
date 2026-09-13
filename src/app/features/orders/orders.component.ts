@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { DataService } from '../../core/data.service';
 import { Order, ORDER_STATUS_LABEL, OrderLine, Party, statusClass } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -15,13 +17,15 @@ const BILLING_CYCLES = ['daily', 'weekly', 'bi-weekly', 'monthly', 'quarterly'];
 
 /**
  * Parties & Orders (core) — port of the prototype's `renderOrdersParties`
- * (js/pages/contracts.js): Customers / Contracts sub-tabs with counts, the
- * active/closed contract filter, and the customer / contract editors.
+ * (js/pages/contracts.js): Parties / Orders sub-tabs with counts, the
+ * active/closed order filter, and the party / order editors.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-orders',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './orders.component.html',
   styleUrl: './orders.component.scss',
 })
@@ -29,7 +33,7 @@ export class OrdersComponent {
   readonly cycles = BILLING_CYCLES;
   readonly statusLabel = ORDER_STATUS_LABEL;
 
-  tab: 'customers' | 'orders' = 'customers';
+  tab: 'parties' | 'orders' = 'parties';
   filter: 'active' | 'closed' = 'active';
 
   customerOpen = false;
@@ -50,7 +54,7 @@ export class OrdersComponent {
   private orderSnap = '';
   detail: Order | null = null;
 
-  /** Read-only record viewer (customer rows; contract rows reuse `detail`). */
+  /** Read-only record viewer (party rows; order rows reuse `detail`). */
   viewer: ViewModel | null = null;
   /** Customer behind the open viewer, so the footer Edit can reopen the editor. */
   private viewing: Party | null = null;
@@ -58,12 +62,13 @@ export class OrdersComponent {
   constructor(
     readonly data: DataService,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // The topbar search box is this page's search: it spans both sub-tabs (and
     // the active/closed filter), so report what the open tab is showing.
     this.search.report(() => ({
-      shown: this.tab === 'customers' ? this.parties().length : this.orderMatches().length,
-      total: this.tab === 'customers' ? this.data.customerParties().length : this.data.listOrders().length,
+      shown: this.tab === 'parties' ? this.parties().length : this.orderMatches().length,
+      total: this.tab === 'parties' ? this.data.customerParties().length : this.data.listOrders().length,
     }));
   }
 
@@ -88,15 +93,15 @@ export class OrdersComponent {
   }
 
   /**
-   * Contracts matching the page search, before the active/closed filter — so a
-   * search reaches closed contracts too and the pill says how many there are.
+   * Orders matching the page search, before the active/closed filter — so a
+   * search reaches closed orders too and the pill says how many there are.
    */
   orderMatches(): Order[] {
     return this.data.listOrders().filter((o) =>
       this.search.matches(
         o.orderId,
         // The customer's name is a join, so the search reads it the same way the
-        // grid prints it — a search for "Halstead" has to find the contract.
+        // grid prints it — a search for "Halstead" has to find the order.
         this.data.partyName(o.partyId),
         o.projectName,
         o.jobSite,
@@ -107,7 +112,7 @@ export class OrdersComponent {
     );
   }
 
-  /** Contracts on the active/closed filter, narrowed by the page search. */
+  /** Orders on the active/closed filter, narrowed by the page search. */
   orders(): Order[] {
     return this.orderMatches().filter((o) => o.status === this.filter);
   }
@@ -197,7 +202,7 @@ export class OrdersComponent {
     this.orderOpen = true;
   }
 
-  /** True when the contract editor holds edits that Save has not written yet. */
+  /** True when the order editor holds edits that Save has not written yet. */
   orderDirty(): boolean {
     return formChanged(this.orderForm, this.orderSnap);
   }
@@ -229,8 +234,49 @@ export class OrdersComponent {
     this.detail = null;
   }
 
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable order and open the print dialog.
+   *
+   * The lines, the rate beside each one and the Gross all come from the same
+   * readers the detail modal uses, so the sheet and the screen cannot disagree.
+   */
+  printOrder(o: Order, mode: PrintMode = 'print'): void {
+    const party = this.data.getParty(o.partyId);
+    const money = (n: number) => this.data.money(n);
+    this.printer.print({
+      heading: 'Order',
+      number: o.orderId,
+      status: this.statusLabel[o.status],
+      party: {
+        title: 'Customer',
+        name: this.data.partyName(o.partyId),
+        lines: [party?.contact, party?.email, party?.billingAddress].filter((l): l is string => !!l),
+      },
+      meta: [
+        { label: 'Project', value: o.projectName },
+        { label: 'Job Site', value: o.jobSite || '—' },
+        { label: 'Start', value: this.data.fmtDate(o.startDate) },
+        { label: 'Expected Return', value: this.data.fmtDate(o.endDate) },
+        { label: 'Rate Card', value: this.rateCardNote(o) },
+      ],
+      columns: ['Item', 'Type', 'Qty', 'Rate', 'Amount'],
+      align: ['left', 'left', 'right', 'right', 'right'],
+      rows: o.lineItems.map((li) => [
+        this.data.itemLabel(li.type, li.refId),
+        li.type,
+        this.data.int(li.qty),
+        money(this.lineRate(li, o)),
+        money(this.data.lineTotal(li, o)),
+      ]),
+      totals: [{ label: 'Order Gross', value: money(this.gross(o)), strong: true }],
+      notes: 'Rates are read from the customer’s price card in force on the booking date.',
+    }, mode);
+  }
+
   /** Switch sub-tab — closing any open viewer/detail so a stale modal can't linger. */
-  setTab(t: 'customers' | 'orders'): void {
+  setTab(t: 'parties' | 'orders'): void {
     this.tab = t;
     this.closeViewer();
     this.closeDetail();
@@ -263,8 +309,8 @@ export class OrdersComponent {
           fields: [
             { label: 'Billing Address', value: p.billingAddress || '—' },
             { label: 'Billing Cycle', value: p.billingCycle },
-            { label: 'Contracts', value: String(this.data.orderCount(p.id)) },
-            { label: 'Active Contracts', value: String(this.data.activeOrderCount(p.id)) },
+            { label: 'Orders', value: String(this.data.orderCount(p.id)) },
+            { label: 'Active Orders', value: String(this.data.activeOrderCount(p.id)) },
             { label: 'Notes', value: p.notes || '—' },
           ],
         },
@@ -275,8 +321,8 @@ export class OrdersComponent {
     };
   }
 
-  /** Contract row click → the page's existing read-only contract detail modal. */
-  showContractView(e: Event, o: Order): void {
+  /** Order row click → the page's existing read-only order detail modal. */
+  showOrderView(e: Event, o: Order): void {
     if (isInteractiveTarget(e)) return;
     this.openDetail(o);
   }
@@ -327,7 +373,7 @@ export class OrdersComponent {
   }
 
   /**
-   * The card this contract prices at, named on the detail modal. It is read on the
+   * The card this order prices at, named on the detail modal. It is read on the
    * order's *own* start date, the way the Gross was, so the note can never name a
    * different agreement from the one the money came from.
    */
@@ -376,8 +422,8 @@ export class OrdersComponent {
     return partyTip(this.data, p);
   }
 
-  /** Contract row: the whole order record — window, site, size and value. */
-  tipContract(o: Order): Tip {
+  /** Order row: the whole order record — window, site, size and value. */
+  tipOrder(o: Order): Tip {
     return orderRecordTip(this.data, o);
   }
 }

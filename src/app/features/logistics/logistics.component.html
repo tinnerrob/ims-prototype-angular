@@ -38,7 +38,7 @@
         </button>
       </div>
       <div class="card-body table-wrap">
-        <table class="table">
+        <table class="table" imsPaged="dispatches">
           <thead>
             <tr>
               <th class="num">Route</th><th>Dispatch</th><th>Asset</th><th>Site</th>
@@ -76,6 +76,7 @@
                   </select>
                 </td>
                 <td class="text-end text-nowrap">
+                  <ims-print-menu label="Print dispatch note" (action)="printDispatch(d, $event)"></ims-print-menu>
                   <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(d)">
                     <i class="bi bi-x-lg"></i>
                   </button>

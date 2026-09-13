@@ -7,6 +7,7 @@ import {
   Category,
   CategoryDraft,
   CountSession,
+  DashboardLayout,
   Dispatch,
   DispatchStatus,
   Document,
@@ -97,9 +98,12 @@ import { seedDispatches, seedDocuments, seedInspections, seedInvoices, seedRenta
 import { CREW_BASE, DEMO_OWNER_ID, DEMO_TENANT_ID, DEMO_USER_ID, SHOP_STATUS, WAREHOUSE_1, YARD_STAGING } from './seed/fixtures';
 
 
-/** The public helper surface, unchanged (period pagers, logs, purchasing lists). */
-export { hmMin, minHM, snap15, dISO, periodLabel, periodPhrase, mondayOf, dayAt, periodBounds } from './period';
-export type { PeriodView } from './period';
+/** The public helper surface: period pagers and the list/log range filters. */
+export {
+  hmMin, minHM, snap15, dISO, periodLabel, periodPhrase, mondayOf, dayAt, periodBounds,
+  RANGE_FILTERS, RANGE_FILTER_LABEL, rangeView, alignPeriod, shiftPeriod,
+} from './period';
+export type { PeriodView, RangeFilter } from './period';
 
 /**
  * What `logMovement` is written from. `at` / `byUserId` default to now and the
@@ -196,6 +200,80 @@ function contentSignature(row: object): string {
   return JSON.stringify(row, (k, v) => (AUDIT_KEYS.includes(k) ? undefined : v));
 }
 
+/**
+ * The whole store, as one named shape — every table the accessors read.
+ *
+ * It is named rather than written inline at the field because the store has to be
+ * assembled **twice**: once for a first load, once for **Load sample data**. One
+ * shape, two factories (`DataService.fixture()` and `DataService.emptyDb()`), which
+ * is what lets a re-loaded fixture be *identical* to a fresh one rather than merely
+ * similar.
+ */
+interface StoreDb {
+  settings: {
+    /** Location hierarchy (ragged / adjacency list — see `Location`). */
+    locations: Location[];
+    /** User-defined location types (Site, Yard, Bin, …). */
+    locationTypes: LocationType[];
+    taxSchedules: TaxSchedule[];
+    overheads: Overhead[];
+    pricing: PricingSettings;
+    /** The receiving desk's rules (B6) — tolerance, quarantine, short-close. */
+    receiving: ReceivingSettings;
+    /** The fields every asset carries (Phase C) — the "stock set". */
+    stockSchema: StockSchema;
+  };
+  /** Customer workspaces — the tenancy root (one today, many via the API). */
+  tenants: Tenant[];
+  /** People who may sign in, scoped to a tenant. */
+  users: User[];
+  /** Who the current session is acting as. */
+  session: {
+    tenantId: string;
+    userId: string;
+  };
+  yard: Yard;
+  parties: Party[];
+  /**
+   * Negotiated rates per counterparty (see `PriceCard`). Configuration, not a
+   * document: nothing references a card, it is *read* when an order's amount is
+   * derived.
+   */
+  priceCards: PriceCard[];
+  orders: Order[];
+  items: Record<string, Item[]>;
+  /**
+   * Stock held per place — one row per (row, location) while it holds
+   * something (see `StockLevel`). The truth for a counted row's quantities;
+   * `Item.qty*` and its `locationId` are this table's sum and its biggest
+   * holding, refreshed by `syncStockTotals()`.
+   */
+  stockLevels: StockLevel[];
+  movements: Movement[];
+  /** What was ordered from suppliers (no copy of what arrived — see models). */
+  purchaseOrders: PurchaseOrder[];
+  /** Posted goods receipts: the documents that created the stock. */
+  receipts: Receipt[];
+  inspections: Inspection[];
+  workOrders: WorkOrder[];
+  timesheets: Timesheet[];
+  rentals: RentalSub[];
+  vehicles: Vehicle[];
+  dispatches: Dispatch[];
+  invoices: Invoice[];
+  /** Tenant-owned form schemas (B2) — the extra fields a record type captures. */
+  formSchemas: FormSchema[];
+  /** Tenant-authored industry verticals (Phase C) — groups of categories. */
+  verticals: Vertical[];
+  /** Tenant-authored asset categories (Phase C) — a vertical's tabs. */
+  assetCategories: Category[];
+  /** Posted count sheets (B5) — a place's levels, reviewed then adjusted. */
+  countSessions: CountSession[];
+  /** Evidence attached to records (B8) — photos, packing slips, certificates. */
+  documents: Document[];
+}
+
+
 
 /**
  * IMS — DataService (the JSON store / API seam).
@@ -239,69 +317,16 @@ export class DataService {
   /** False until the seed/restored rows have been attributed once. */
   private attributed = false;
 
-  private db: {
-    settings: {
-      /** Location hierarchy (ragged / adjacency list — see `Location`). */
-      locations: Location[];
-      /** User-defined location types (Site, Yard, Bin, …). */
-      locationTypes: LocationType[];
-      taxSchedules: TaxSchedule[];
-      overheads: Overhead[];
-      pricing: PricingSettings;
-      /** The receiving desk's rules (B6) — tolerance, quarantine, short-close. */
-      receiving: ReceivingSettings;
-      /** The fields every asset carries (Phase C) — the "stock set". */
-      stockSchema: StockSchema;
-    };
-    /** Customer workspaces — the tenancy root (one today, many via the API). */
-    tenants: Tenant[];
-    /** People who may sign in, scoped to a tenant. */
-    users: User[];
-    /** Who the current session is acting as. */
-    session: {
-      tenantId: string;
-      userId: string;
-    };
-    yard: Yard;
-    parties: Party[];
-    /**
-     * Negotiated rates per counterparty (see `PriceCard`). Configuration, not a
-     * document: nothing references a card, it is *read* when an order's amount is
-     * derived.
-     */
-    priceCards: PriceCard[];
-    orders: Order[];
-    items: Record<string, Item[]>;
-    /**
-     * Stock held per place — one row per (row, location) while it holds
-     * something (see `StockLevel`). The truth for a counted row's quantities;
-     * `Item.qty*` and its `locationId` are this table's sum and its biggest
-     * holding, refreshed by `syncStockTotals()`.
-     */
-    stockLevels: StockLevel[];
-    movements: Movement[];
-    /** What was ordered from suppliers (no copy of what arrived — see models). */
-    purchaseOrders: PurchaseOrder[];
-    /** Posted goods receipts: the documents that created the stock. */
-    receipts: Receipt[];
-    inspections: Inspection[];
-    workOrders: WorkOrder[];
-    timesheets: Timesheet[];
-    rentals: RentalSub[];
-    vehicles: Vehicle[];
-    dispatches: Dispatch[];
-    invoices: Invoice[];
-    /** Tenant-owned form schemas (B2) — the extra fields a record type captures. */
-    formSchemas: FormSchema[];
-    /** Tenant-authored industry verticals (Phase C) — groups of categories. */
-    verticals: Vertical[];
-    /** Tenant-authored asset categories (Phase C) — a vertical's tabs. */
-    assetCategories: Category[];
-    /** Posted count sheets (B5) — a place's levels, reviewed then adjusted. */
-    countSessions: CountSession[];
-    /** Evidence attached to records (B8) — photos, packing slips, certificates. */
-    documents: Document[];
-  } = {
+  /**
+   * The demo fixture — every row the seed factories describe, in the shape
+   * `StoreDb` names.
+   *
+   * It is a *field holding a factory*, not just the initial value, so **Load sample
+   * data** runs the very assembly a first load ran: one literal, one provenance.
+   * Nothing in it reads another field, so calling it from the initializer below is
+   * safe (`lint:ctor`).
+   */
+  private readonly fixture = (): StoreDb => ({
     settings: {
       locations: seedLocations(),
       locationTypes: seedLocationTypes(),
@@ -341,7 +366,82 @@ export class DataService {
     assetCategories: seedAssetCategories(),
     countSessions: [],
     documents: seedDocuments(),
-  };
+  });
+
+  /** The store the app reads and writes (see `fixture` for what it starts as). */
+  private db: StoreDb = this.fixture();
+
+  /**
+   * The workspace **empty**: every table present and nothing in it.
+   *
+   * The tables are all there — an empty catalog still has a key per catalog type, so
+   * a list page reads `[]` rather than tripping over a missing table — and the rows
+   * are gone. What it does *not* do is decide which tables to keep: that is
+   * `clearAllData()`'s job, and it keeps the workspace itself by re-applying the
+   * spine afterwards.
+   */
+  private emptyDb(): StoreDb {
+    const items: Record<string, Item[]> = {};
+    for (const type of CATALOG_TYPE_KEYS) items[type] = [];
+    return {
+      settings: {
+        locations: [],
+        locationTypes: [],
+        taxSchedules: [],
+        overheads: [],
+        // Behaviour, not content: a workspace still has a currency and a receiving
+        // tolerance when it holds nothing, so these reset to their defaults rather
+        // than being blanked (`receiving` has no sensible "empty").
+        pricing: seedPricing(),
+        receiving: seedReceiving(),
+        stockSchema: { fields: [] },
+      },
+      tenants: [],
+      users: [],
+      session: { tenantId: DEMO_TENANT_ID, userId: DEMO_USER_ID },
+      yard: { name: '', lat: 0, lng: 0 },
+      parties: [],
+      priceCards: [],
+      orders: [],
+      items,
+      stockLevels: [],
+      movements: [],
+      purchaseOrders: [],
+      receipts: [],
+      inspections: [],
+      workOrders: [],
+      timesheets: [],
+      rentals: [],
+      vehicles: [],
+      dispatches: [],
+      invoices: [],
+      formSchemas: [],
+      verticals: [],
+      assetCategories: [],
+      countSessions: [],
+      documents: [],
+    };
+  }
+
+  /**
+   * Forget the write-diff baseline, so the rows now in hand are re-attributed from
+   * scratch by the next `attributeSeed()`.
+   *
+   * `save()` decides who *changed* a row by diffing it against the content it
+   * remembered last time. Swapping the whole store out makes every one of those
+   * memories wrong — every row would read as brand new — so the baseline is dropped
+   * and re-taken. The next edit a user makes is then a one-row diff, as it should
+   * be, instead of the workspace's first save after a wipe stamping thousands of
+   * seeded rows with the person who pressed the button, at the moment they did.
+   *
+   * It has to run *before* the rows are re-laid, not after: seeding posts the
+   * fixture's deliveries through the real purchasing operation, and that calls
+   * `save()` on its way through.
+   */
+  private forgetAttribution(): void {
+    this.shadow.clear();
+    this.attributed = false;
+  }
 
   constructor() {
     // The chain-of-custody seed is derived from the units it moved, so it runs
@@ -1212,7 +1312,7 @@ export class DataService {
     const premium = this.db.settings.pricing.riskPremiums[li.riskPremium ?? 'standard'] ?? 0;
     const days = this.lineDays(li, order);
     // The card is read on the day the booking starts, so a later renewal prices
-    // the contracts that start under it and leaves the earlier ones alone.
+    // the orders that start under it and leaves the earlier ones alone.
     const rates = this.cardRateFor(order.partyId, item, this.lineStart(li, order));
     if (li.type === 'labor' || li.type === 'consumable' || li.type === 'part') {
       return round2(qty * (rates.unitPrice ?? rates.rateDaily));
@@ -2483,7 +2583,7 @@ export class DataService {
       kind: 'return-to-vendor',
       qty: -n,
       locationId,
-      note: note || `Returned to vendor from ${this.locationPath(locationId)}`,
+      note: note || `Returned to supplier from ${this.locationPath(locationId)}`,
     });
     this.save();
     return rec;
@@ -3123,7 +3223,7 @@ export class DataService {
 
   /**
    * Record a sub-rental. The supplier is required and must be a partner we
-   * know: a sub-rental with no vendor is an asset from nowhere, and the
+   * know: a sub-rental with no supplier is an asset from nowhere, and the
    * wholesale cost side of the ledger has to point at a row (`supplierParties()`
    * feeds the picker).
    */
@@ -3155,6 +3255,28 @@ export class DataService {
 
   rentalSpread(r: RentalSub): number {
     return round2((r.retailRate - r.vendorCost) * r.qty);
+  }
+
+  /**
+   * Mark a sub-rental returned to its supplier. See `RentalSub.returnedAt` — a
+   * *date*, not a status flag, so a late return is still visible afterwards.
+   */
+  returnRental(id: string, at = new Date().toISOString().slice(0, 10)): RentalSub | null {
+    const r = this.db.rentals.find((x) => x.id === id);
+    if (!r) return null;
+    r.returnedAt = at;
+    this.save();
+    return r;
+  }
+
+  /** True while the unit is still with us (not yet back with the supplier). */
+  rentalOut(r: RentalSub): boolean {
+    return !r.returnedAt;
+  }
+
+  /** True when it is still out and its due-back date has passed. */
+  rentalOverdue(r: RentalSub, on = new Date().toISOString().slice(0, 10)): boolean {
+    return this.rentalOut(r) && !!r.rentTo && r.rentTo < on;
   }
 
   private nextRentalId(): string {
@@ -3547,6 +3669,24 @@ export class DataService {
     this.save();
   }
 
+  /**
+   * The active workspace's dashboard arrangement (Phase C), or undefined for the
+   * registry default. The store persists the tenant's choice; it does not know
+   * what a widget *is* — the registry lives in `core/dashboard.ts`.
+   */
+  dashboardLayout(): DashboardLayout | undefined {
+    return this.activeTenant?.dashboard;
+  }
+
+  /** Persist a dashboard arrangement (undefined restores the registry default). */
+  setDashboardLayout(layout: DashboardLayout | undefined): void {
+    const t = this.activeTenant;
+    if (!t) return;
+    if (layout) t.dashboard = { order: [...layout.order], hidden: [...(layout.hidden ?? [])] };
+    else delete t.dashboard;
+    this.save();
+  }
+
   /* --------------------------- policies / pricing ------------------------ */
 
   /**
@@ -3779,6 +3919,64 @@ export class DataService {
     this.save();
   }
 
+  /**
+   * **Load sample data** (Phase H): put the demo fixture back — every party and
+   * supplier, price card, asset, shelf, ledger movement, order, purchase order and
+   * receipt, inspection, work order, timesheet, sub-rental, vehicle, dispatch,
+   * invoice, document, count sheet, business type, category and form schema the seed
+   * describes.
+   *
+   * It runs the **same** steps a first load runs, in the same order: the fixture
+   * literal, the two passes that need it in hand (`seedStockLevels()` places every
+   * counted quantity, `seedReceipts()` posts the deliveries through the real
+   * purchasing operation), the Phase C category link, and last the attribution
+   * baseline. So this is not "a store that looks like the demo" — it is *the* store
+   * a fresh browser has, down to the byte, which is what `check32` asserts by
+   * comparing the two persisted snapshots.
+   */
+  loadSampleData(): void {
+    this.forgetAttribution();
+    this.db = this.fixture();
+    this.db.movements = this.seedMovements();
+    this.seedStockLevels();
+    this.seedReceipts();
+    this.linkItemsToCategories();
+    this.attributeSeed();
+    this.save();
+  }
+
+  /**
+   * **Remove all sample data** (Phase H): the workspace, holding nothing.
+   *
+   * This is the "show me it empty" button. Everything the demo supplied goes: parties
+   * and suppliers, price cards, locations and their types, tax schedules, overheads,
+   * the whole catalog and every shelf it sits on, the movement ledger, orders,
+   * purchase orders and their receipts, inspections, work orders, timesheets,
+   * sub-rentals, the fleet, dispatches, invoices, documents, count sheets, business
+   * types, categories and form schemas.
+   *
+   * What stays is the workspace **itself**, because the app cannot render without
+   * one: the tenant, its people, the session, the yard, and the settings that say how
+   * a workspace behaves (pricing, the receiving rules, the stock set's shape). The
+   * tenant's chosen business type is cleared along with the row it named, so
+   * `activeVertical()` falls back the same way it does after `removeVertical()` —
+   * `vertical_id` never points at a row that is gone.
+   */
+  clearAllData(): void {
+    const spine = {
+      tenants: this.db.tenants,
+      users: this.db.users,
+      session: this.db.session,
+      yard: this.db.yard,
+    };
+    this.forgetAttribution();
+    this.db = this.emptyDb();
+    Object.assign(this.db, spine);
+    for (const tenant of this.db.tenants) tenant.verticalId = '';
+    this.attributeSeed();
+    this.save();
+  }
+
   createVertical(data: Omit<Vertical, 'id'>): Vertical {
     const rec: Vertical = { ...data, id: this.nextVerticalId() };
     this.db.verticals.push(rec);
@@ -3833,6 +4031,11 @@ export class DataService {
     return this.db.assetCategories
       .filter((c) => c.verticalId === verticalId && (!activeOnly || c.active))
       .sort((a, b) => a.sort - b.sort || (a.name < b.name ? -1 : 1));
+  }
+
+  /** Every category the workspace has authored, whatever vertical it hangs on. */
+  listCategories(): Category[] {
+    return [...this.db.assetCategories];
   }
 
   getCategory(id: string): Category | undefined {

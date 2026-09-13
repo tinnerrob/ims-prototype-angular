@@ -81,8 +81,8 @@ export const VIEWS: ViewDef[] = [
   {
     id: 'orders',
     title: 'Parties & Orders',
-    desc: 'Counterparties (customers, vendors, sites) and the orders placed against inventory.',
-    search: 'Search customers, contracts, projects…',
+    desc: 'Counterparties (customers and suppliers) and the orders placed against inventory.',
+    search: 'Search customers, orders, projects…',
     nav: 'Parties & Orders',
     icon: 'bi-folder2-open',
     group: 'movement',
@@ -153,7 +153,7 @@ export const VIEWS: ViewDef[] = [
   {
     id: 'rentals',
     title: 'Rentals / Sub-Rentals',
-    desc: 'Module: rentals and sub-rental loans sourced from third-party vendors.',
+    desc: 'Module: rentals and sub-rental loans sourced from third-party suppliers.',
     nav: 'Rentals / Sub-Rentals',
     icon: 'bi-arrow-repeat',
     group: 'module',
@@ -164,7 +164,7 @@ export const VIEWS: ViewDef[] = [
     id: 'invoicing',
     title: 'Billing & Invoicing',
     desc: 'Module: billing derived from priced orders.',
-    search: 'Search invoices, contracts, customers…',
+    search: 'Search invoices, orders, customers…',
     nav: 'Billing & Invoicing',
     icon: 'bi-receipt',
     group: 'module',
@@ -176,7 +176,7 @@ export const VIEWS: ViewDef[] = [
   {
     id: 'admin',
     title: 'Administration',
-    desc: 'Administration: locations & their types, your business type’s categories, and feature modules.',
+    desc: 'Administration: locations & their types, your business type’s categories, the dashboard layout, and feature modules.',
     nav: 'Admin',
     icon: 'bi-gear',
     group: 'admin',

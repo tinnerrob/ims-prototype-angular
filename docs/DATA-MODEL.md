@@ -63,6 +63,7 @@ tenants(
   plan              tenant_plan   NOT NULL,
   vertical_id       text          NULL REFERENCES verticals(id), -- Phase C: the business type this workspace is
   disabled_modules  module_key[]  NOT NULL DEFAULT '{}',
+  dashboard         jsonb         NULL, -- Phase C: the Operations Dashboard's arrangement (`DashboardLayout`)
   created_at        timestamptz   NOT NULL
 )
 ```
@@ -78,6 +79,15 @@ grid columns and statuses still come from until C6) is **derived** from its `slu
 that can set the industry. `disabled_modules` is the licence: absent = enabled,
 which is why the column is the *disabled* list rather than the enabled one (a new
 module shipped later is on for everyone unless a tenant says otherwise).
+
+`dashboard` is the workspace's Operations Dashboard arrangement (`DashboardLayout`:
+`order` = every widget key in the workspace's order, `hidden` = the keys switched
+off). `NULL` means the registry default in `core/dashboard.ts` — every widget, in
+registry order. Like `disabled_modules` it is **tenant** data rather than a browser
+preference, so everyone on the workspace sees the same board. The widget registry
+itself is compile-time (a `DASHBOARD_WIDGETS` constant), not a table: a widget a
+later release adds is simply absent from a stored `order`, and the read appends it,
+so a new panel shows up rather than being silently missing.
 
 ### `tenant_modules` — licence flags (from `Tenant.disabledModules`)
 
@@ -1109,6 +1119,9 @@ rental_subs(
   vendor_cost  numeric(14,2) NOT NULL,
   retail_rate  numeric(14,2) NOT NULL,
   qty          numeric(14,3) NOT NULL CHECK (qty > 0),
+  rent_from    date          NULL, -- the day we take it from the supplier
+  rent_to      date          NULL, -- the day it is due back with them
+  returned_at  date          NULL, -- the day it actually went back (NULL = still with us)
   note         text          NULL
 )
 ```
@@ -1120,6 +1133,14 @@ deleted — "what else have we rented from them?" is a join, not a string.
 `item_id` is optional because a sub-rental may not map to a catalog row;
 `asset_name` is then the only name it has. The spread (`retail_rate -
 vendor_cost`) is derived.
+
+`rent_from` / `rent_to` are the **window we hold it for** and `returned_at` the day
+it actually went back (`NULL` while it is still with us). A sub-rental exists to be
+*re-let*, so the window is the point: it is what says whether the unit can cover
+the customer order named by `order_id`, and when it has to come off it. A return is
+a **date**, not a status flag, so "did it go back late?" stays answerable after the
+fact — the derived helpers (`rentalOut()`, `rentalOverdue()`) read the two, they do
+not store them.
 
 ### `vehicles` — `Vehicle`
 

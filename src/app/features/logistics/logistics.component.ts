@@ -5,6 +5,8 @@ import { DataService } from '../../core/data.service';
 import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { stampDayRange } from '../../shared/tip/tip-format';
 import { tip } from '../../shared/tip/tip-builders';
@@ -16,10 +18,12 @@ import { TipDirective } from '../../shared/tip/tip.directive';
  * (js/pages/logistics.js): a pending-dispatch board beside the driver /
  * truck / status assignment grid with an "Apply Assignments" commit.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-logistics',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './logistics.component.html',
   styleUrl: './logistics.component.scss',
 })
@@ -37,7 +41,52 @@ export class LogisticsComponent {
   /** Staged (uncommitted) edits from the assignment grid, keyed by dispatch id. */
   private draft: Record<string, { driverId: string; vehicleId: string; status: DispatchStatus }> = {};
 
-  constructor(readonly data: DataService) {}
+  constructor(
+    readonly data: DataService,
+    private readonly printer: PrintService,
+  ) {}
+
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable dispatch **delivery note** and open the print dialog.
+   *
+   * A dispatch has no lines of its own — its cargo is the order it carries — so
+   * the document is that order's lines under this trip's assignment: what the
+   * driver is delivering, to where, on which truck.
+   */
+  printDispatch(d: Dispatch, mode: PrintMode = 'print'): void {
+    const order = this.data.getOrder(d.orderId);
+    const driver = this.drivers().find((x) => x.id === this.driverValue(d));
+    const vehicle = this.vehicles().find((x) => x.id === this.vehicleValue(d));
+    this.printer.print({
+      heading: 'Dispatch Note',
+      number: d.id,
+      status: this.statusValue(d),
+      party: order
+        ? {
+            title: 'Deliver To',
+            name: this.data.partyName(order.partyId),
+            lines: [order.projectName, order.jobSite, this.coords(d)].filter((l): l is string => !!l),
+          }
+        : undefined,
+      meta: [
+        { label: 'Order', value: d.orderId },
+        { label: 'Route', value: `#${d.routeSeq}` },
+        { label: 'Asset', value: d.assetId || '—' },
+        { label: 'Driver (CDL)', value: driver ? `${driver.id} — ${driver.name}` : '— none —' },
+        { label: 'Truck', value: vehicle ? `${vehicle.id} — ${vehicle.name}` : '— none —' },
+      ],
+      columns: ['Item', 'Type', 'Qty'],
+      align: ['left', 'left', 'right'],
+      rows: (order?.lineItems ?? []).map((li) => [
+        this.data.itemLabel(li.type, li.refId),
+        li.type,
+        this.data.int(li.qty),
+      ]),
+      notes: 'Deliver the items listed above to the site shown, and obtain a signature on release.',
+    }, mode);
+  }
 
   dispatches(): Dispatch[] {
     return this.data.listDispatches();
@@ -192,7 +241,7 @@ export class LogisticsComponent {
             { label: 'Dispatch ID', value: d.id, mono: true },
             { label: 'Route Sequence', value: String(d.routeSeq) },
             { label: 'Asset', value: d.assetId || '—', mono: true },
-            { label: 'Contract', value: d.orderId, mono: true },
+            { label: 'Order', value: d.orderId, mono: true },
             { label: 'Site', value: this.siteOf(d) || '—' },
             { label: 'Job Site', value: this.jobSiteOf(d) || '—' },
             { label: 'Coordinates', value: this.coords(d) || '—', mono: true },
@@ -220,12 +269,12 @@ export class LogisticsComponent {
 
   /* ------------------------------ tooltips ------------------------------ */
 
-  /** Dispatch row: the contract behind it, the unit, the driver and its route. */
+  /** Dispatch row: the order behind it, the unit, the driver and its route. */
   tipDispatch(d: Dispatch): Tip {
     const order = this.data.getOrder(d.orderId);
     return tip(`${d.id} - ${order ? order.projectName : d.orderId}`, [
       order ? stampDayRange(order.startDate, order.endDate) : '',
-      { label: 'Contract', value: d.orderId },
+      { label: 'Order', value: d.orderId },
       d.assetId ? { label: 'Asset', value: d.assetId } : null,
       { label: 'Driver', value: this.driverValue(d) || 'unassigned' },
       { label: 'Vehicle', value: this.vehicleValue(d) || 'unassigned' },

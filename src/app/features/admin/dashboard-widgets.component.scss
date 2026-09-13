@@ -1,0 +1,11 @@
+/* Administration → Dashboard: the widget rows ride the global `.list-line`
+   pattern; the only local rules are the widget glyph and its muted "off" state. */
+.dash-w-icon {
+  width: 20px;
+  text-align: center;
+  color: var(--brand);
+}
+
+.dash-w-off {
+  opacity: .5;
+}

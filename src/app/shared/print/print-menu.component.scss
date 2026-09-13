@@ -1,0 +1,21 @@
+/* The print action: the icon every row already had, plus a down chevron that
+   says it opens a menu. Sits inline with the row's other action buttons. */
+:host {
+  display: inline-block;
+}
+
+.print-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.print-menu-chev {
+  font-size: 9px;
+  opacity: .7;
+  line-height: 1;
+}
+
+.print-menu-btn:hover .print-menu-chev {
+  opacity: 1;
+}

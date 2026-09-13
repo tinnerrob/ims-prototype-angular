@@ -75,7 +75,7 @@ export function assetTip(data: DataService, item: Item, extra: (TipLine | null |
   );
 }
 
-/** Customer / vendor / site card. */
+/** Customer / supplier card. */
 export function partyTip(data: DataService, p: Party): Tip {
   return tip(
     p.name,
@@ -84,7 +84,7 @@ export function partyTip(data: DataService, p: Party): Tip {
       p.phone ? { label: 'Phone', value: p.phone } : null,
       p.email ? { label: 'Email', value: p.email } : null,
       p.billingCycle ? { label: 'Billing', value: p.billingCycle } : null,
-      { label: 'Contracts', value: `${data.orderCount(p.id)}` },
+      { label: 'Orders', value: `${data.orderCount(p.id)}` },
       { label: 'Active now', value: `${data.activeOrderCount(p.id)}` },
     ],
     { subtitle: p.billingAddress || undefined, badge: p.active === false ? 'Inactive' : 'Active', badgeClass: p.active === false ? 'st-out' : 'st-active' },

@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 
+import { DashboardService } from '../../core/dashboard.service';
 import { DataService } from '../../core/data.service';
 import { ModulesService } from '../../core/modules.service';
 import { CatalogType, Order, statusClass } from '../../core/models';
@@ -20,11 +21,20 @@ interface OrderTotalRow {
  * Operations Dashboard — port of the prototype's `renderDashboard`
  * (js/pages/dashboard.js): a bento grid of fleet KPIs, the active-order margin
  * table, live geofence alerts, reorder warnings, fleet status and bulk out.
+ *
+ * **The grid is the workspace's, not the page's (Phase C).** Each panel is a
+ * widget in `core/dashboard.ts`; the tenant stores their order and which are on
+ * (`Tenant.dashboard`), and `DashboardService` joins the two. This component
+ * renders whatever the service returns and `@switch`es on the widget key to draw
+ * it — so Admin → Dashboard can reorder or switch panels off without this page
+ * changing, and a new widget is one registry entry plus one `@case`.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-dashboard',
   standalone: true,
-  imports: [RecordViewComponent],
+  imports: [RecordViewComponent, TablePagerDirective],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
@@ -38,8 +48,14 @@ export class DashboardComponent {
     readonly data: DataService,
     readonly telemetry: TelemetryService,
     readonly mods: ModulesService,
+    readonly dash: DashboardService,
     private readonly router: Router,
   ) {}
+
+  /** The widgets this workspace shows, in its order (see `DashboardService`). */
+  widgets() {
+    return this.dash.widgets();
+  }
 
   kpis() {
     return this.data.fleetKpis();
@@ -98,7 +114,7 @@ export class DashboardComponent {
 
   /* --------------------------- record viewer ---------------------------- */
 
-  /** Margin-table row click → read-only viewer for that active contract. */
+  /** Margin-table row click → read-only viewer for that active order. */
   showView(e: Event, row: OrderTotalRow): void {
     if (isInteractiveTarget(e)) return;
     const o = row.order;
@@ -110,9 +126,9 @@ export class DashboardComponent {
       badgeClass: 'st-' + statusClass(o.status),
       sections: [
         {
-          title: 'Contract',
+          title: 'Order',
           fields: [
-            { label: 'Contract', value: o.orderId, mono: true },
+            { label: 'Order', value: o.orderId, mono: true },
             { label: 'Customer', value: this.data.partyName(o.partyId) },
             { label: 'Project', value: o.projectName },
             { label: 'Job Site', value: o.jobSite || '—' },

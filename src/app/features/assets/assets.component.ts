@@ -13,6 +13,7 @@ import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } fr
 import { assetTip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
 
 
 const MONEY_KEYS = ['purchaseValue', 'rateDaily', 'baseMonthly', 'costPrice', 'retailPrice', 'hourlyCost', 'hourlyBillable'];
@@ -64,7 +65,7 @@ const BLANK_ITEM_FORM = {
 @Component({
   selector: 'ims-assets',
   standalone: true,
-  imports: [FormsModule, DynamicFormComponent, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, DynamicFormComponent, ModalDismissDirective, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './assets.component.html',
   styleUrl: './assets.component.scss',
 })

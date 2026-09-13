@@ -152,6 +152,7 @@
 .st-inprogress { background: #dbeafe; color: #1d4ed8; }
 
 /* ---------- Tables ---------- */
+
 .table-wrap { overflow: auto; }
 /* separate collapse so position:sticky on the header works reliably (collapse+sticky is buggy) */
 .table-wrap .table { border-collapse: separate; border-spacing: 0; }
@@ -714,10 +715,6 @@
 }
 .mini-alert .bi { color: var(--danger); }
 
-/* ---------- Photo drop ---------- */
-
-/* ---------- Checkbox list (pick lists) ---------- */
-
 /* ---------- Overhead rows (order modal) ---------- */
 
 .oh-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
@@ -1055,7 +1052,10 @@ i.ts-lunch { color: var(--tcol); }
 :root {
   /* color */
   --brand: #4f46e5;
-  --brand-2: #6366f1;
+  /* The light end of every brand gradient (buttons, the brand mark). White text
+     on #6366f1 was 4.47:1 — a hair under AA — so the stop is a shade deeper:
+     4.47 -> 4.71. Same hue, same gradient, legible label. */
+  --brand-2: #5c60e8;
   --brand-deep: #4338ca;
   --brand-ink: #1e1b4b;
   --brand-soft: #e9e9fc;
@@ -1063,8 +1063,15 @@ i.ts-lunch { color: var(--tcol); }
   --accent-2: #38bdf8;
   --ink: #0b1120;
   --ink-2: #334155;
-  --muted: #64748b;
-  --faint: #94a3b8;
+  /* `--muted` is the app's secondary text (`text-muted2`): darkened from the
+     slate-500 #64748b it was so it clears AA (4.5:1) on the *page* tint as well
+     as on a white card — 4.21 -> 4.83 on `--bg`, 4.76 -> 5.51 on `--card`.
+     `npm run lint:contrast` holds that (P-D, docs/CODE-REVIEW.md). */
+  --muted: #5a6a7f;
+  /* `--faint` is only ever an *icon* colour (the topbar search glyph): it needs
+     the 3:1 UI threshold, not 4.5:1 text, and #94a3b8 was under it (2.56 -> 3.52
+     on a card, 2.73 -> 3.11 on the page tint). */
+  --faint: #7a8aa1;
 
   --bg: #eef1f7;
   --bg-grad-1: #eef2fb;
@@ -1077,7 +1084,10 @@ i.ts-lunch { color: var(--tcol); }
   --line-soft: #eef1f7;
 
   --success: #16a34a;
-  --success-soft: #e7f6ec;
+  /* One green tint, not two: this used to be #e7f6ec while `.st-active` painted
+     #dcfce7, so the two "good" chips were a subtly different green. Matching
+     them also lifts `.st-available`'s 10.5px text from 4.49:1 to 4.57:1 (AA). */
+  --success-soft: #dcfce7;
   --warning: #d97706;
   --warning-soft: #fdf3e3;
   --danger: #dc2626;
@@ -1353,6 +1363,10 @@ a { color: var(--brand); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 .strong { font-weight: 700; }
 .text-muted2 { color: var(--muted); }
+/* `!important` is load-bearing, not decoration: Bootstrap 5.3 is loaded from the
+   CDN in index.html and declares `.text-danger` `color: … !important` itself, so
+   only an equally important rule in a later sheet keeps this app's danger hue
+   (#dc2626, not Bootstrap's #dc3545). `lint:contrast` holds its legibility. */
 .text-danger { color: var(--danger) !important; }
 
 /* ---- 9. Badges ---- */
@@ -1419,7 +1433,6 @@ a { color: var(--brand); }
 .mb-1 { margin-bottom: var(--sp-1); } .mb-2 { margin-bottom: var(--sp-2); } .mb-3 { margin-bottom: var(--sp-3); }
 .mb-4 { margin-bottom: var(--sp-4); }
 .gap-1 { gap: var(--sp-1); } .gap-2 { gap: var(--sp-2); } .gap-3 { gap: var(--sp-3); }
-.hidden { display: none !important; }
 .muted { color: var(--muted); }
 
 /* ---- Column-profile grid (grid.js) ---- */
@@ -1434,7 +1447,7 @@ a { color: var(--brand); }
 .kpi { background: var(--card); border: 1px solid var(--line); }
 .kpi-icon { display: grid; place-items: center; color: #fff; }
 .kpi-blue { background: linear-gradient(135deg, var(--accent), var(--brand-2)); box-shadow: 0 8px 16px -6px rgba(37,99,235,.5); }
-.kpi-green { background: linear-gradient(135deg, var(--success), #22c55e); box-shadow: 0 8px 16px -6px rgba(34,197,94,.5); }
+.kpi-green { background: linear-gradient(135deg, #15803d, var(--success)); box-shadow: 0 8px 16px -6px rgba(34,197,94,.5); }
 .kpi-red { background: linear-gradient(135deg, var(--danger), #ef4444); box-shadow: 0 8px 16px -6px rgba(239,68,68,.5); }
 .kpi-purple { background: linear-gradient(135deg, var(--purple), #a855f7); box-shadow: 0 8px 16px -6px rgba(168,85,247,.5); }
 .kpi-label { color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .4px; }
@@ -1926,6 +1939,10 @@ a { color: var(--brand); }
   overflow-x: hidden;
   overflow-y: auto;
 }
+/* `!important` is load-bearing: both calendars bind an inline
+   `[style.min-width.px]="minWidth()"` on this element, and only an important
+   author declaration beats an inline style. The contract it enforces is
+   deliberate — the calendar is fixed-width and does not scroll horizontally. */
 .tl-inner {
   width: 100%;
   min-width: 0 !important;
@@ -2460,4 +2477,38 @@ button:focus-visible,
    header reads `[selector] … [‹ range ›] [action]` with the selector anchored
    left, instead of the pager leading and pushing the selector into the middle. */
 .period-pager.end { justify-content: flex-end; }
+
+/* =========================================================================
+   Print (Phase B) — printable documents.
+   -------------------------------------------------------------------------
+   On paper, only the `<ims-print-document>` host survives: it is mounted at the
+   app root, *outside* the shell, so hiding the shell here leaves the document
+   alone on the page. The document's own styles live in
+   `shared/print/print-document.component.scss`. */
+@media print {
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* the app itself never prints — only the document host does */
+  .app-shell,
+  ims-confirm-dialog,
+  ims-tip {
+    display: none !important;
+  }
+
+  /* keep the letterhead's solids (and any status chip) from being stripped */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}
+
 

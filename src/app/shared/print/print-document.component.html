@@ -1,0 +1,156 @@
+@if (prints.doc(); as d) {
+  <div class="print-doc">
+    <!-- letterhead -->
+    <header class="print-head">
+      <div class="print-brand">
+        <div class="print-brand-mark"><i class="bi bi-layers-half"></i></div>
+        <div>
+          <div class="print-brand-name">IMS</div>
+          <div class="print-brand-sub">{{ tenantName() }}</div>
+        </div>
+      </div>
+      <div class="print-id">
+        <div class="print-heading">{{ d.heading }}</div>
+        <div class="print-number">{{ d.number }}</div>
+        @if (d.status) {
+          <div class="print-status">{{ d.status }}</div>
+        }
+      </div>
+    </header>
+
+    <!-- counterparty + meta -->
+    <section class="print-parties">
+      @if (d.party; as party) {
+        <div class="print-party">
+          <div class="print-party-title">{{ party.title }}</div>
+          <div class="print-party-name">{{ party.name }}</div>
+          @for (line of party.lines; track $index) {
+            <div class="print-party-line">{{ line }}</div>
+          }
+        </div>
+      }
+      <div class="print-meta">
+        @for (m of d.meta; track $index) {
+          <div class="print-meta-row">
+            <span class="print-meta-label">{{ m.label }}</span>
+            <span class="print-meta-value">{{ m.value }}</span>
+          </div>
+        }
+      </div>
+    </section>
+
+    @if (d.groups?.length) {
+      <!-- a grouped report: one block per primary (order / employee), each with
+           its own header and subtotal, and an optional second level under it -->
+      @for (g of d.groups; track $index) {
+        <section class="print-group">
+          <div class="print-group-head">
+            <span class="print-group-title">{{ g.title }}</span>
+            @if (g.meta) {
+              <span class="print-group-meta">{{ g.meta }}</span>
+            }
+          </div>
+          <table class="print-table">
+            <thead>
+              <tr>
+                @for (c of d.columns; track $index) {
+                  <th [class.num]="d.align?.[$index] === 'right'">{{ c }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of g.rows ?? []; track $index) {
+                <tr>
+                  @for (cell of row; track $index) {
+                    <td [class.num]="d.align?.[$index] === 'right'">{{ cell }}</td>
+                  }
+                </tr>
+              }
+              @for (sg of g.subgroups ?? []; track $index) {
+                <tr class="print-subgroup-row">
+                  <td [attr.colspan]="d.columns.length">
+                    <span class="print-subgroup-title">{{ sg.title }}</span>
+                    @if (sg.meta) {
+                      <span class="print-subgroup-meta">{{ sg.meta }}</span>
+                    }
+                  </td>
+                </tr>
+                @for (row of sg.rows ?? []; track $index) {
+                  <tr>
+                    @for (cell of row; track $index) {
+                      <td [class.num]="d.align?.[$index] === 'right'">{{ cell }}</td>
+                    }
+                  </tr>
+                }
+                @if (sg.subtotals?.length) {
+                  <tr class="print-subtotal-row">
+                    <td [attr.colspan]="d.columns.length">
+                      @for (t of sg.subtotals; track $index) {
+                        <span class="print-sub"><span class="print-sub-label">{{ t.label }}</span>{{ t.value }}</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+          @if (g.subtotals?.length) {
+            <section class="print-totals print-group-totals">
+              @for (t of g.subtotals; track $index) {
+                <div class="print-total-row" [class.strong]="t.strong">
+                  <span class="print-total-label">{{ t.label }}</span>
+                  <span class="print-total-value">{{ t.value }}</span>
+                </div>
+              }
+            </section>
+          }
+        </section>
+      }
+    } @else {
+      <!-- a flat table -->
+      <table class="print-table">
+        <thead>
+          <tr>
+            @for (c of d.columns; track $index) {
+              <th [class.num]="d.align?.[$index] === 'right'">{{ c }}</th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of d.rows ?? []; track $index) {
+            <tr>
+              @for (cell of row; track $index) {
+                <td [class.num]="d.align?.[$index] === 'right'">{{ cell }}</td>
+              }
+            </tr>
+          } @empty {
+            <tr>
+              <td [attr.colspan]="d.columns.length" class="print-empty">No line items.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <!-- money footer -->
+    @if (d.totals?.length) {
+      <section class="print-totals">
+        @for (t of d.totals; track $index) {
+          <div class="print-total-row" [class.strong]="t.strong">
+            <span class="print-total-label">{{ t.label }}</span>
+            <span class="print-total-value">{{ t.value }}</span>
+          </div>
+        }
+      </section>
+    }
+
+    @if (d.notes) {
+      <p class="print-notes">{{ d.notes }}</p>
+    }
+
+    <footer class="print-foot">
+      <span>Printed {{ today }}</span>
+      <span>IMS — Universal Inventory Suite</span>
+    </footer>
+  </div>
+}

@@ -1,0 +1,92 @@
+<div class="page-head"></div>
+
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-database-gear"></i> Sample data</span>
+    <span class="d-flex gap-2">
+      <button
+        class="btn btn-ims btn-sm2"
+        type="button"
+        title="Replace everything in this workspace with the demo fixture"
+        (click)="load()"
+      >
+        <i class="bi bi-database-add"></i> Load sample data
+      </button>
+      <button
+        class="btn btn-ims-outline btn-sm2 samp-remove"
+        type="button"
+        title="Delete every row the demo supplied"
+        (click)="remove()"
+      >
+        <i class="bi bi-eraser"></i> Remove all sample data
+      </button>
+    </span>
+  </div>
+  <div class="card-body">
+    <p class="text-muted2 small mb-3">
+      Every page here reads the same store, so the demo's worth of rows is one switch.
+      <strong>Load sample data</strong> lays the whole fixture back down — the same rows a
+      browser that has never been touched starts with. <strong>Remove all sample data</strong>
+      empties the workspace so you can show it holding nothing. Both replace the store
+      outright, so both ask first.
+    </p>
+
+    @if (notice) {
+      <div class="form-hint mb-3">{{ notice }}</div>
+    }
+
+    <div class="divider"></div>
+    <div class="strong mb-2">Holding now · {{ total() }} rows</div>
+    <div class="samp-grid">
+      @for (c of counts(); track c.label) {
+        <div class="samp-cell" [class.samp-zero]="c.count === 0">
+          <span class="samp-count">{{ c.count }}</span>
+          <span class="samp-label">{{ c.label }}</span>
+        </div>
+      }
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-info-circle"></i> What each one does</span>
+  </div>
+  <div class="card-body">
+    <div class="list-line">
+      <span class="l">
+        <span class="strong">Load sample data</span>
+        <div class="text-muted2 small">
+          Parties and suppliers, price cards, locations and their types, tax schedules,
+          overheads, the catalog with its shelves and movement ledger, orders, purchase
+          orders and their receipts, inspections, work orders, timesheets, sub-rentals, the
+          fleet, dispatches, invoices, documents, count sheets, and the business types with
+          their categories and form schemas. The rows are the fixture's own — same ids, same
+          totals — so every page reads exactly as it does on a first load.
+        </div>
+      </span>
+    </div>
+    <div class="list-line">
+      <span class="l">
+        <span class="strong">Remove all sample data</span>
+        <div class="text-muted2 small">
+          Deletes all of that. What stays is the workspace itself: the tenant, its people, the
+          session, the yard, and the settings that say how it behaves — pricing, the receiving
+          rules and the stock set's shape. The business type is cleared with the row it named,
+          so the workspace simply has none until you give it one.
+        </div>
+      </span>
+    </div>
+    <div class="list-line">
+      <span class="l">
+        <span class="strong">Start clean</span>
+        <div class="text-muted2 small">
+          is the narrower one, on
+          <a routerLink="/admin/verticals">Business type &amp; Categories</a>: it drops the
+          catalog and the records that name it but keeps your partners, locations and settings
+          — the move for “keep my workspace, replace its catalog”.
+        </div>
+      </span>
+    </div>
+  </div>
+</div>

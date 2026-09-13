@@ -1,6 +1,6 @@
 # IMS — Angular Port: Handoff / State
 
-**Date:** 2026-09-12 · **Repo:** `https://github.com/tinnerrob/ims-prototype-angular.git` (`main`)
+**Date:** 2026-09-13 · **Repo:** `https://github.com/tinnerrob/ims-prototype-angular.git` (`main`)
 **Purpose:** Everything a fresh session needs to resume work with no guesswork.
 **The documents:** this file is the *state*; `docs/PLAN.md` is the *plan*
 (the increments, their acceptance criteria, the open decisions and the
@@ -21,7 +21,7 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (246 checks across 28 harnesses
+services to JS and drives the real store from Node (294 checks across 33 harnesses
 — tenancy, attribution, the item↔location spine, per-place stock levels, the
 vertical registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
@@ -29,25 +29,35 @@ month windows the purchasing lists filter by, the order↔party join and the
 counterparty rate cards; then Phase B/C: the jsonb form builder, level-tracked
 kits, per-place level facts, the receiving desk's split landings, template-driven
 inspections, documents + hold, the tenant-owned catalog (verticals / categories /
-stock schema) and the field-key rule — see `docs/PLAN.md` → "Verification recipe").
+stock schema) and the field-key rule, the Operations Dashboard's widget
+arrangement (Phase C), the printable documents' content — including the two grouped
+reports, a schedule by order → asset and a timesheet by employee → order, each printing its
+own total per primary (Phase G) — and the
+sub-rental window + return (Phase F) — see `docs/PLAN.md` → "Verification recipe").
 
 Three audits sit beside them, all report-only (`build`, `lint:ctor`, `lint:styles`,
 `lint:dead`): class-field initializer order, stylesheet rules no template mentions and
-declarations a later rule re-sets, and imports/exports nothing references. None of them
-fails the build; they are meant to be read.
+declarations a later rule re-sets, and imports/exports nothing references. `lint:contrast`
+adds a WCAG pass over the design tokens (text 4.5:1, icons/fills 3:1). None of them fails
+the build; they are meant to be read.
 
 A **stylesheet change is proved neutral** rather than eyeballed: `npm run css:equiv`
 takes two built CSS files and prints every selector whose winning value for a property
 changed (workflow in `angular-refactor-log.md` → P5b).
 
 **Rendering is checked too** (P9): `npm run build && npm run e2e` drives the built app in
-headless Chromium — every route, a clean console, the category editor's field grid, and
-screenshots into `dist/e2e/`. `playwright` is a dev dependency; the browsers come from
+headless Chromium — every route, a clean console, the category editor's field grid, the
+printable documents (incl. the grouped schedule and timesheet), the sample-data buttons
+(with a second walk of all nineteen routes on an *emptied* workspace, which is where a page
+quietly assuming the seed shows up), and the dashboard widget
+admin, and screenshots into `dist/e2e/`.
+`playwright` is a dev dependency; the browsers come from
 `npx playwright install chromium`.
 
-Build budgets (`angular.json`): the initial bundle warns at 500 kB and now sits at **~478 kB**
-(the route split made every feature page its own chunk), so that warning is again a real signal
-rather than the expected noise it was at ~830 kB; the `anyComponentStyle` warn threshold is **6 kB**
+Build budgets (`angular.json`): the initial bundle warns at 520 kB and now sits at **~503 kB**
+(raised from 500 kB with the table-footer phase — two app-wide features in a row could not fit
+under it), so the warning is still a real signal rather than the expected noise it was at
+~830 kB; the `anyComponentStyle` warn threshold is **6 kB**
 (raised from 4 kB), because `scheduler.component.scss` — by far the largest component
 stylesheet, everything else lives in `styles.scss` — is ~4.4 kB minified. Builds should
 otherwise be warning-free; a new component-style warning means a component's SCSS has
@@ -71,7 +81,7 @@ than editing a count, and a change of place or a physical count logs a
 | Area | Path | Notes |
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
-| **Administration** | `features/admin` | submenu shell: Locations · Business type & Categories · Feature Modules (licence flags) |
+| **Administration** | `features/admin` | submenu shell: Locations · Business type & Categories · Feature Modules (licence flags) · Sample data (load / remove the fixture) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
 | Business type & Categories | `features/admin` (`verticals.component.*`) | the workspace's own vertical, its categories (one tab each) and the stock fields every asset carries — seeded from the registry, then the tenant's rows |
 | Pricing & Policies | `features/pricing` | the pricing rules engine · overhead / service fees · sales-tax schedules · **counterparty rate cards** (negotiated rates per party, read by the order screens and used as the PO editor's cost default) |
@@ -89,8 +99,10 @@ than editing a count, and a change of place or a physical count logs a
 | Fleet Telemetry | `features/telemetry` | live GPS sim + geofence feed |
 
 Routes: `/admin` redirects to `/admin/modules`; the Admin submenu entries are
-`/admin/locations`, `/admin/verticals` (Business type & Categories) and
-`/admin/modules`. The old `/categories` and `/locations` deep links redirect into
+`/admin/locations`, `/admin/verticals` (Business type & Categories),
+`/admin/dashboard` (the bento's widgets), `/admin/modules` and `/admin/sample-data`
+(the two workspace-wide buttons). The old `/categories` and `/locations` deep links
+redirect into
 the Admin section, `/admin/categories` redirects to `/admin/verticals` (the
 prototype's per-type category list is the tenant's categories now), and
 `/admin/location-types` redirects to `/admin/locations` (its types are now the

@@ -1,7 +1,18 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
+import {
+  DataService,
+  RANGE_FILTER_LABEL,
+  RANGE_FILTERS,
+  RangeFilter,
+  alignPeriod,
+  periodBounds,
+  periodLabel,
+  periodPhrase,
+  rangeView,
+  shiftPeriod,
+} from '../../core/data.service';
 import {
   CatalogType,
   Party,
@@ -16,12 +27,15 @@ import {
   statusClass,
 } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, RecordViewComponent, ViewModel, auditSections } from '../../shared/record-view/record-view.component';
 import { tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
 
 /** Which of the page's three sub-tables is showing. */
 type Tab = 'suppliers' | 'orders' | 'receipts';
@@ -29,21 +43,9 @@ type Tab = 'suppliers' | 'orders' | 'receipts';
 /** The two lists that carry dates, and so carry a period filter. */
 type DatedTab = 'orders' | 'receipts';
 
-/** Period filter of a dated list — the inspection log's All/Day/Week/Month chips. */
-type ListRange = 'all' | 'day' | 'week' | 'month';
-
-const LIST_RANGES: ListRange[] = ['all', 'day', 'week', 'month'];
-
-const LIST_RANGE_LABEL: Record<ListRange, string> = {
-  all: 'All',
-  day: 'Day',
-  week: 'Week',
-  month: 'Month',
-};
-
 /** One list's filter: the period chosen, and the cursor its window is built on. */
 interface ListFilter {
-  range: ListRange;
+  range: RangeFilter;
   anchor: Date;
 }
 
@@ -109,7 +111,7 @@ const BLANK_LINE: LineForm = {
 @Component({
   selector: 'ims-purchasing',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './purchasing.component.html',
   styleUrl: './purchasing.component.scss',
 })
@@ -126,8 +128,8 @@ export class PurchasingComponent {
   tab: Tab = 'suppliers';
 
   /** The period-filter chips, and their labels (the inspection log's pair). */
-  readonly ranges = LIST_RANGES;
-  readonly rangeLabelOf = (v: ListRange): string => LIST_RANGE_LABEL[v];
+  readonly ranges = RANGE_FILTERS;
+  readonly rangeLabelOf = (v: RangeFilter): string => RANGE_FILTER_LABEL[v];
 
   /**
    * The period filter of each dated list, with the cursor date its day/week/month
@@ -176,6 +178,7 @@ export class PurchasingComponent {
   constructor(
     readonly data: DataService,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // One topbar search covers all three sub-tables, so the pill counts what the
     // open one is showing.
@@ -229,7 +232,7 @@ export class PurchasingComponent {
   }
 
   /** The period chip the open list has chosen (the template ticks it). */
-  activeRange(): ListRange {
+  activeRange(): RangeFilter {
     return this.filterOf(this.tab)?.range ?? 'all';
   }
 
@@ -243,8 +246,7 @@ export class PurchasingComponent {
     const f = this.filterOf(this.tab);
     if (!f) return '';
     // `All` is never labelled (the pager is hidden), so it reads as the cursor's day.
-    const view: PeriodView = f.range === 'all' ? 'day' : f.range;
-    return periodLabel(view, f.anchor);
+    return periodLabel(rangeView(f.range), f.anchor);
   }
 
   /**
@@ -252,22 +254,18 @@ export class PurchasingComponent {
    * week anchors on its Monday and a month on its 1st, so the label names the
    * first day of the period it is about to show (the log's `setLogRange`).
    */
-  setRange(v: ListRange): void {
+  setRange(v: RangeFilter): void {
     const f = this.filterOf(this.tab);
     if (!f) return;
     f.range = v;
-    if (v === 'month') f.anchor = new Date(f.anchor.getFullYear(), f.anchor.getMonth(), 1);
-    else if (v === 'week') f.anchor = mondayOf(f.anchor);
+    f.anchor = alignPeriod(rangeView(v), f.anchor);
   }
 
   /** Page the open list's window one day / week / month. */
   shiftRange(dir: number): void {
     const f = this.filterOf(this.tab);
     if (!f || f.range === 'all') return;
-    f.anchor =
-      f.range === 'month'
-        ? new Date(f.anchor.getFullYear(), f.anchor.getMonth() + dir, 1)
-        : dayAt(f.anchor, dir * (f.range === 'week' ? 7 : 1));
+    f.anchor = shiftPeriod(rangeView(f.range), f.anchor, dir);
   }
 
   /**
@@ -278,7 +276,7 @@ export class PurchasingComponent {
   private inRange(t: DatedTab, date: string): boolean {
     const f = this.listFilters[t];
     if (f.range === 'all') return true;
-    const b = periodBounds(f.range, f.anchor);
+    const b = periodBounds(rangeView(f.range), f.anchor);
     return date >= b.start && date <= b.end;
   }
 
@@ -749,6 +747,81 @@ export class PurchasingComponent {
         ...auditSections(po, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
       ],
     };
+  }
+
+  /* ------------------------------- printing ----------------------------- */
+
+  /** Build the printable purchase order and open the print dialog. */
+  printPo(po: PurchaseOrder, mode: PrintMode = 'print'): void {
+    const supplier = this.data.getParty(po.supplierId);
+    const money = (n: number) => this.data.money(n);
+    this.printer.print({
+      heading: 'Purchase Order',
+      number: po.id,
+      status: this.poLabel(po),
+      party: {
+        title: 'Supplier',
+        name: this.data.partyName(po.supplierId),
+        lines: [supplier?.contact, supplier?.email, supplier?.billingAddress].filter((l): l is string => !!l),
+      },
+      meta: [
+        { label: 'Ordered', value: this.data.fmtDate(po.orderedAt) },
+        { label: 'Expected', value: this.data.fmtDate(po.expectedAt) },
+        { label: 'Supplier Ref', value: po.reference || '—' },
+        { label: 'Received Value', value: money(this.data.poReceivedValue(po)) },
+      ],
+      columns: ['Item', 'Description', 'Qty', 'Unit Cost', 'Amount'],
+      align: ['left', 'left', 'right', 'right', 'right'],
+      rows: po.lines.map((l) => [
+        l.refId ? this.data.itemLabel(l.type, l.refId) : l.type,
+        l.description,
+        this.data.int(l.qty),
+        money(l.unitCost),
+        money(l.qty * l.unitCost),
+      ]),
+      totals: [{ label: 'Ordered Total', value: money(this.data.poValue(po)), strong: true }],
+      notes: po.notes,
+    }, mode);
+  }
+
+  /**
+   * Build the printable goods receipt and open the print dialog.
+   *
+   * Each line prints the place *it* landed (`ReceiptLine.locationId`), because a
+   * receipt may split across bins — the header's put-away is only the default.
+   */
+  printReceipt(r: Receipt, mode: PrintMode = 'print'): void {
+    const supplier = this.data.getParty(r.supplierId);
+    const money = (n: number) => this.data.money(n);
+    this.printer.print({
+      heading: 'Goods Receipt',
+      number: r.id,
+      status: 'Posted',
+      party: {
+        title: 'Supplier',
+        name: this.data.partyName(r.supplierId),
+        lines: [supplier?.contact, supplier?.email, supplier?.billingAddress].filter((l): l is string => !!l),
+      },
+      meta: [
+        { label: 'Purchase Order', value: r.poId },
+        { label: 'Put Away At', value: this.data.locationPath(r.locationId) },
+        { label: 'Posted', value: this.data.fmtDT(r.at) },
+        { label: 'Posted By', value: this.data.userName(r.createdBy) },
+        { label: 'Items', value: String(this.receiptQty(r)) },
+      ],
+      columns: ['Item', 'Type', 'Qty', 'Unit Cost', 'Amount', 'Landed At'],
+      align: ['left', 'left', 'right', 'right', 'right', 'left'],
+      rows: r.lines.map((l) => [
+        this.data.itemLabel(l.type, l.refId),
+        l.type,
+        this.data.int(l.qty),
+        money(l.unitCost),
+        money(l.qty * l.unitCost),
+        this.data.locationPath(l.locationId || r.locationId),
+      ]),
+      totals: [{ label: 'Received Total', value: money(this.receiptValue(r)), strong: true }],
+      notes: r.note,
+    }, mode);
   }
 
   /** A receipt opens in the viewer — it is immutable, so there is no editor. */

@@ -142,18 +142,21 @@ export function seedTimesheets(): Timesheet[] {
   }));
 }
 
-/** Sub-rentals from third-party vendors (prototype `IMS.rentals`). */
 /**
- * Sub-rentals from third-party vendors (prototype `IMS.rentals`). The prototype
- * stored each vendor as a string; here the vendors are supplier *parties*
+ * Sub-rentals from third-party suppliers (prototype `IMS.rentals`). The prototype
+ * stored each source as a free-text string; here it is a supplier *party*
  * (`PTY-010`…`PTY-012`), so the wholesale side of the business points at the
  * same partner table the purchase orders do.
+ *
+ * Each carries the window we hold it for (`rentFrom` → `rentTo`), sized to cover
+ * the customer order it is re-let on. `RR-002` is back already, so the ledger
+ * shows both a live and a returned row out of the box.
  */
 export function seedRentals(): RentalSub[] {
   return [
-    { id: 'RR-001', itemId: 'GN-510', assetName: 'Generac 100 kW Generator', orderId: 'CT-2024-003', supplierId: 'PTY-010', vendorCost: 110, retailRate: 175, qty: 1 },
-    { id: 'RR-002', itemId: 'FL-402', assetName: 'Toyota Forklift 8FGU25', orderId: 'CT-2024-004', supplierId: 'PTY-011', vendorCost: 95, retailRate: 205, qty: 1 },
-    { id: 'RR-003', itemId: null, assetName: 'Compaction Roller 5T', orderId: 'CT-2024-002', supplierId: 'PTY-012', vendorCost: 140, retailRate: 260, qty: 1 },
+    { id: 'RR-001', itemId: 'GN-510', assetName: 'Generac 100 kW Generator', orderId: 'CT-2024-003', supplierId: 'PTY-010', vendorCost: 110, retailRate: 175, qty: 1, rentFrom: '2026-08-28', rentTo: '2026-10-02' },
+    { id: 'RR-002', itemId: 'FL-402', assetName: 'Toyota Forklift 8FGU25', orderId: 'CT-2024-004', supplierId: 'PTY-011', vendorCost: 95, retailRate: 205, qty: 1, rentFrom: '2026-07-28', rentTo: '2026-08-28', returnedAt: '2026-08-27' },
+    { id: 'RR-003', itemId: null, assetName: 'Compaction Roller 5T', orderId: 'CT-2024-002', supplierId: 'PTY-012', vendorCost: 140, retailRate: 260, qty: 1, rentFrom: '2026-08-28', rentTo: '2026-09-22' },
   ];
 }
 

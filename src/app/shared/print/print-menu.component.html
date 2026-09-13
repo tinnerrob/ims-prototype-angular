@@ -1,0 +1,17 @@
+<button
+  class="btn btn-sm2 print-menu-btn"
+  [class.btn-ims]="primary"
+  [class.btn-ims-outline]="!primary"
+  type="button"
+  [title]="label"
+  [attr.aria-label]="label"
+  aria-haspopup="menu"
+  [attr.aria-expanded]="open()"
+  (click)="toggle()"
+>
+  <i class="bi bi-printer"></i>
+  @if (text) {
+    <span class="print-menu-text">{{ text }}</span>
+  }
+  <i class="bi bi-chevron-down print-menu-chev"></i>
+</button>

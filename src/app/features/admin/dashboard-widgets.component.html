@@ -1,0 +1,78 @@
+<div class="page-head"></div>
+
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-grid-1x2"></i> Operations Dashboard</span>
+    <div class="d-flex gap-2">
+      <button class="btn btn-ims-outline btn-sm2" type="button" (click)="enableAll()">
+        <i class="bi bi-check2-all"></i> Show All
+      </button>
+      <button class="btn btn-ims-outline btn-sm2" type="button" (click)="reset()">
+        <i class="bi bi-arrow-counterclockwise"></i> Reset Order
+      </button>
+    </div>
+  </div>
+  <div class="card-body">
+    <p class="text-muted2 small mb-3">
+      Switch the dashboard's widgets on or off, and put them in the order you want to read them.
+      The arrangement belongs to <strong>the workspace</strong>, not to this browser — everybody on
+      it sees the same board, exactly like the feature modules next door.
+    </p>
+
+    <div class="strong mb-2">Shown · {{ visible().length }}</div>
+    @for (w of visible(); track w.key) {
+      <div class="list-line">
+        <span class="l d-flex align-items-center gap-2">
+          <i class="bi {{ w.icon }} dash-w-icon"></i>
+          <span>
+            <span class="strong">{{ w.label }}</span>
+            <div class="text-muted2 small">{{ w.desc }}</div>
+          </span>
+          @if (!moduleOn(w)) {
+            <span class="badge-status st-reorder" title="Its feature module is switched off, so the widget stays hidden">module off</span>
+          }
+        </span>
+        <span class="r d-flex align-items-center gap-1">
+          <button class="btn btn-ims-outline btn-sm2" type="button" title="Move up"
+                  [disabled]="!canMove(w.key, -1)" (click)="move(w.key, -1)">
+            <i class="bi bi-arrow-up"></i>
+          </button>
+          <button class="btn btn-ims-outline btn-sm2" type="button" title="Move down"
+                  [disabled]="!canMove(w.key, 1)" (click)="move(w.key, 1)">
+            <i class="bi bi-arrow-down"></i>
+          </button>
+          <div class="form-check form-switch mb-0 ms-2">
+            <input class="form-check-input" type="checkbox" [id]="'dw-' + w.key"
+                   [checked]="on(w.key)" (change)="toggle(w.key)" />
+            <label class="form-check-label small" [for]="'dw-' + w.key">{{ on(w.key) ? 'On' : 'Off' }}</label>
+          </div>
+        </span>
+      </div>
+    } @empty {
+      <p class="text-muted2">Every widget is switched off — the dashboard shows an empty state.</p>
+    }
+
+    @if (hidden().length) {
+      <div class="divider my-3"></div>
+      <div class="strong mb-2">Hidden · {{ hidden().length }}</div>
+      @for (w of hidden(); track w.key) {
+        <div class="list-line">
+          <span class="l d-flex align-items-center gap-2">
+            <i class="bi {{ w.icon }} dash-w-icon dash-w-off"></i>
+            <span>
+              <span class="strong">{{ w.label }}</span>
+              <div class="text-muted2 small">{{ w.desc }}</div>
+            </span>
+          </span>
+          <span class="r">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" [id]="'dwh-' + w.key"
+                     [checked]="on(w.key)" (change)="toggle(w.key)" />
+              <label class="form-check-label small" [for]="'dwh-' + w.key">Off</label>
+            </div>
+          </span>
+        </div>
+      }
+    }
+  </div>
+</div>

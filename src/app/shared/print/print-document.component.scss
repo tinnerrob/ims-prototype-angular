@@ -1,0 +1,274 @@
+/* The printable document.
+   Hidden on screen — the host exists only to print — and shown by the
+   `@media print` rule while the app shell is hidden (see src/styles.scss).
+   Chromeless on purpose: black on white, hairlines, no shadows and none of the
+   app's colour tokens. This is a piece of paper, not a screen. */
+
+:host {
+  display: none;
+}
+
+@media print {
+  :host {
+    display: block;
+  }
+}
+
+.print-doc {
+  color: #111827;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* ---- letterhead ---- */
+.print-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid #111827;
+}
+.print-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.print-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #111827;
+  color: #fff;
+  font-size: 20px;
+}
+.print-brand-name {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: .5px;
+}
+.print-brand-sub {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+  color: #4b5563;
+}
+.print-id {
+  text-align: right;
+}
+.print-heading {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.print-number {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+}
+.print-status {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 2px 10px;
+  border: 1px solid #111827;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+}
+
+/* ---- counterparty + meta ---- */
+.print-parties {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 32px;
+  margin: 18px 0;
+}
+.print-party {
+  max-width: 55%;
+}
+.print-party-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+  color: #6b7280;
+}
+.print-party-name {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.print-party-line {
+  color: #374151;
+}
+.print-meta {
+  min-width: 250px;
+}
+.print-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 3px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+.print-meta-label {
+  font-weight: 600;
+  color: #6b7280;
+}
+.print-meta-value {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ---- line items ---- */
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+.print-table th {
+  padding: 6px 8px;
+  border-bottom: 1.5px solid #111827;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: #374151;
+  text-align: left;
+}
+.print-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+.print-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.print-empty {
+  padding: 16px;
+  text-align: center;
+  color: #6b7280;
+}
+
+/* ---- money footer ---- */
+.print-totals {
+  width: 300px;
+  margin-top: 14px;
+  margin-left: auto;
+}
+.print-total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 4px 0;
+}
+.print-total-row.strong {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 2px solid #111827;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* ---- grouped reports ----------------------------------------------------
+   A grouped document leads each block with the *primary* it belongs to (the order,
+   the employee) and closes it with that primary's subtotal, so the total is read
+   before the detail under it. `page-break-inside: avoid` keeps a small group whole;
+   a large one is allowed to split, and repeats its header because the header lives
+   in the group's own table. */
+.print-group {
+  margin-top: 18px;
+}
+.print-group:first-child {
+  margin-top: 8px;
+}
+.print-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 8px;
+  border-left: 3px solid #111827;
+  background: #f3f4f6;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.print-group-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: .2px;
+}
+.print-group-meta {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4b5563;
+  text-align: right;
+}
+.print-group .print-table {
+  margin-top: 0;
+}
+.print-group-totals {
+  margin-top: 6px;
+}
+/* The second level (a schedule's assets inside an order): a label row inside the
+   group's own table, so it stays with the rows it heads. */
+.print-subgroup-row td {
+  padding: 8px 8px 4px;
+  border-bottom: 1px solid #d1d5db;
+  background: #fafafa;
+}
+.print-subgroup-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.print-subgroup-meta {
+  margin-left: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b7280;
+}
+.print-subtotal-row td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fafafa;
+  text-align: right;
+}
+.print-sub {
+  margin-left: 16px;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.print-sub-label {
+  margin-right: 5px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.print-notes {
+  margin-top: 16px;
+  color: #374151;
+  font-style: italic;
+}
+
+.print-foot {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: #9ca3af;
+}

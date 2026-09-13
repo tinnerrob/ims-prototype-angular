@@ -10,6 +10,7 @@
     "lint:ctor": "node scripts/check-field-init-order.js",
     "lint:styles": "node scripts/audit-styles.js",
     "lint:dead": "node scripts/audit-exports.js",
+    "lint:contrast": "node scripts/audit-contrast.js",
     "css:equiv": "node scripts/css-equivalence.js",
     "serve:dist": "node scripts/serve-dist.mjs",
     "e2e": "node scripts/e2e-smoke.mjs",

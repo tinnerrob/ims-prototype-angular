@@ -224,7 +224,7 @@ export interface PriceCardLine {
  *
  * That is also why the window exists. A renewal is a *new* card with a later
  * `effectiveFrom`, never an edit of the old one: an order prices at the card in
- * force on the day its booking starts, so last year's contracts keep last year's
+ * force on the day its booking starts, so last year's orders keep last year's
  * prices. A card is not referenced by any row (nothing holds a `price_card_id`),
  * so removing one re-prices the orders it priced rather than dangling — the
  * effect is visible on those screens, and `active = false` is how a card is
@@ -472,7 +472,7 @@ export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
   receive: 'Receive',
   transfer: 'Transfer',
   adjust: 'Adjust',
-  'return-to-vendor': 'Return to Vendor',
+  'return-to-vendor': 'Return to Supplier',
 };
 
 /* ------------------------------ purchasing ------------------------------ */
@@ -936,7 +936,7 @@ export const INDUSTRY_MODULES: IndustryModuleDef[] = [
   { key: 'telemetry', label: 'Fleet Telemetry', desc: 'Live fleet telemetry and geofence monitoring.' },
   { key: 'labor', label: 'Labor & Timesheets', desc: 'Labor time records against orders and work orders.' },
   { key: 'service', label: 'Field Service & Maintenance', desc: 'Field service and maintenance work orders on items.' },
-  { key: 'rentals', label: 'Rentals & Sub-Rentals', desc: 'Rental / sub-rental loans from third-party vendors.' },
+  { key: 'rentals', label: 'Rentals & Sub-Rentals', desc: 'Rental / sub-rental loans from third-party suppliers.' },
   { key: 'billing', label: 'Billing & Invoicing', desc: 'Invoice generation derived from priced orders.' },
 ];
 
@@ -1075,6 +1075,21 @@ export const TENANT_PLAN_LABEL: Record<TenantPlan, string> = {
   enterprise: 'Enterprise',
 };
 
+/**
+ * A workspace's Operations Dashboard arrangement (Phase C): the **order** of
+ * every widget and the set switched **off**.
+ *
+ * Stored rather than derived so the arrangement belongs to the workspace, not to
+ * a browser — the same argument `disabledModules` makes. Absent = the registry
+ * default in `core/dashboard.ts` (every widget, registry order).
+ */
+export interface DashboardLayout {
+  /** Every widget key, in the workspace's order (unknown keys are ignored). */
+  order: string[];
+  /** Keys switched off; absent = everything in `order` is shown. */
+  hidden?: string[];
+}
+
 /** A customer workspace — the top of the tenancy tree. */
 export interface Tenant {
   id: string;
@@ -1094,6 +1109,12 @@ export interface Tenant {
   verticalId?: string;
   /** Licence flags: a module absent from this list is enabled (default on). */
   disabledModules: ModuleKey[];
+  /**
+   * The Operations Dashboard's arrangement (Phase C): the order of every widget
+   * and the set switched off. Stored on the workspace, not the browser — the
+   * same argument `disabledModules` makes. Absent = the registry default.
+   */
+  dashboard?: DashboardLayout;
   createdAt: string;
 }
 
@@ -1201,7 +1222,7 @@ export interface RentalSub extends AuditFields {
   /** Catalog item when the sub-rental maps to one (prototype `assetId`). */
   itemId?: string | null;
   assetName: string;
-  /** Customer contract the sub-rental is billed against. */
+  /** Customer order the sub-rental is billed against. */
   orderId?: string | null;
   /**
    * Who we sub-rent it from — a FK into `parties.id`, a partner carrying the
@@ -1217,6 +1238,22 @@ export interface RentalSub extends AuditFields {
   vendorCost: number; // daily cost to us
   retailRate: number; // daily billable
   qty: number;
+  /**
+   * The window we hold it for, in ISO dates: `rentFrom` is the day we take it from
+   * the supplier, `rentTo` the day it is due back. A sub-rental exists to be
+   * *re-let*, so the two ends are the point — they are what says whether the unit
+   * can go on an order at all, and when it has to come off one.
+   */
+  rentFrom?: string;
+  rentTo?: string;
+  /**
+   * The day it actually went back (ISO), or absent while it is still with us.
+   *
+   * A return is a **date**, not a status flag: the row keeps both ends of the
+   * window *and* the day it went back, so "did it go back late?" stays answerable
+   * after the fact.
+   */
+  returnedAt?: string | null;
   note?: string;
 }
 

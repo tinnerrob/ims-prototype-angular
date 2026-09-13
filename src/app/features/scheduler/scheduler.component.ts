@@ -1,6 +1,6 @@
 import { Component, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DataService, hmMin, periodLabel, periodPhrase } from '../../core/data.service';
+import { DataService, dISO, hmMin, periodLabel, periodPhrase } from '../../core/data.service';
 import {
   CatalogType,
   CATALOG_TYPES,
@@ -21,6 +21,8 @@ import {
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ConfirmService } from '../../shared/confirm/confirm.service';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintGroup, PrintService, wantsExpanded } from '../../shared/print/print.service';
 import { stampRange } from '../../shared/tip/tip-format';
 import { assetTip, orderRecordTip, orderTip, tip } from '../../shared/tip/tip-builders';
 import { Tip, TipLine } from '../../shared/tip/tip.service';
@@ -157,7 +159,7 @@ const POOL_ADD_LABEL: Record<string, string> = {
 @Component({
   selector: 'ims-scheduler',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TipDirective],
   templateUrl: './scheduler.component.html',
   styleUrl: './scheduler.component.scss',
 })
@@ -218,6 +220,7 @@ export class SchedulerComponent implements OnDestroy {
     readonly data: DataService,
     private cdr: ChangeDetectorRef,
     private confirm: ConfirmService,
+    private readonly printer: PrintService,
   ) {
     // Anchor the calendar on the first active order's start week (prototype
     // `renderScheduler`), so the seeded orders are on screen immediately.
@@ -695,7 +698,7 @@ export class SchedulerComponent implements OnDestroy {
     if (item) this.viewer = this.assetModel(item, order, li);
   }
 
-  /** Double-click an order bar / queue card → read-only order (contract) view. */
+  /** Double-click an order bar / queue card → read-only order view. */
   showOrderView(order: Order): void {
     // The double-click also delivered two lane clicks; drop the queued one so
     // the lane does not expand and contract first.
@@ -1014,9 +1017,7 @@ export class SchedulerComponent implements OnDestroy {
     this.resSnap = '';
   }
   dateAt(ms: number): string {
-    const d = new Date(ms);
-    const p = (n: number) => String(n).padStart(2, '0');
-    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+    return dISO(new Date(ms));
   }
 
   /** Local midnight `i` days after the local midnight at `base` (DST-safe). */
@@ -1060,6 +1061,128 @@ export class SchedulerComponent implements OnDestroy {
    *  Re-sorted by catalog type so like types stay together, and recomputed on
    *  every render so resolving a conflict immediately re-groups the list. */
   conflicts(): ConflictRow[] { return conflictsOf(this.data, this.orders(), { view: this.view, anchor: this.anchor, expanded: this.expanded }); }
+
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable **schedule** and open the print dialog.
+   *
+   * The period is whatever the timeline is showing (Day / Week / Month — the menu
+   * offers no period, the screen does). The document is **grouped by order**, and
+   * each order prints its own total before the detail that makes it up: contracted
+   * lists the order's **assets** (one row each, aggregated), expanded adds a second
+   * level — one block per **asset** with a row per booking. The windows come from
+   * the same `lineStart` / `lineEnd` readers the bars are built from, so the sheet
+   * and the timeline cannot disagree about a booking.
+   */
+  printSchedule(mode: PrintMode = 'print'): void {
+    const expanded = wantsExpanded(mode);
+    const orders = this.scheduleOrders();
+    const money = (n: number) => this.data.money(n);
+    const assetLabel = (li: OrderLine) => this.data.itemLabel(li.type, li.refId);
+    const value = (o: Order, li: OrderLine) => this.data.lineTotal(li, o);
+
+    const groups: PrintGroup[] = orders.map((o) => {
+      // The order's lines, keyed by the asset they book — the second level.
+      const byAsset = new Map<string, OrderLine[]>();
+      for (const li of o.lineItems) {
+        const k = `${li.type}:${li.refId}`;
+        byAsset.set(k, [...(byAsset.get(k) ?? []), li]);
+      }
+      const units = (lines: OrderLine[]) => lines.reduce((s, li) => s + this.lineQty(li), 0);
+      const total = (lines: OrderLine[]) => lines.reduce((s, li) => s + value(o, li), 0);
+      const assets = [...byAsset.values()];
+      return {
+        title: `${o.orderId} · ${o.projectName}`,
+        meta: `${this.data.partyName(o.partyId)} · ${this.data.fmtDate(o.startDate)} → ${this.data.fmtDate(o.endDate)}`,
+        rows: expanded
+          ? undefined
+          : assets.map((group) => {
+              const first = group[0];
+              const starts = group.map((li) => this.lineStart(li, o)).sort();
+              const ends = group.map((li) => this.lineEnd(li, o)).sort();
+              return [
+                assetLabel(first),
+                first.type,
+                this.data.int(units(group)),
+                this.data.fmtDate(starts[0]),
+                this.data.fmtDate(ends[ends.length - 1]),
+                this.data.int(group.reduce((s, li) => s + this.lineDays(li, o), 0)),
+                money(total(group)),
+              ];
+            }),
+        subgroups: expanded
+          ? assets.map((group) => {
+              const first = group[0];
+              return {
+                title: `${assetLabel(first)} · ${first.type}`,
+                meta: `${this.data.int(units(group))} unit(s) · ${group.length} booking(s)`,
+                rows: group.map((li) => [
+                  this.data.int(this.lineQty(li)),
+                  this.data.fmtDate(this.lineStart(li, o)),
+                  this.data.fmtDate(this.lineEnd(li, o)),
+                  this.data.int(this.lineDays(li, o)),
+                  money(value(o, li)),
+                ]),
+                subtotals: [
+                  { label: 'Units', value: this.data.int(units(group)) },
+                  { label: 'Value', value: money(total(group)) },
+                ],
+              };
+            })
+          : undefined,
+        subtotals: [
+          { label: 'Assets', value: String(assets.length) },
+          { label: 'Booked Units', value: this.data.int(units(o.lineItems)) },
+          { label: 'Order Value', value: money(total(o.lineItems)), strong: true },
+        ],
+      };
+    });
+
+    const bookedItems = orders.reduce((s, o) => s + o.lineItems.length, 0);
+    this.printer.print({
+      heading: expanded ? 'Schedule — Expanded' : 'Schedule',
+      number: this.rangeLabel(),
+      meta: [
+        { label: 'View', value: this.view === 'day' ? 'Day' : this.view === 'week' ? 'Week' : 'Month' },
+        { label: 'Period', value: this.rangePhrase() },
+        { label: 'Orders', value: String(orders.length) },
+        { label: 'Grouped', value: expanded ? 'By order → asset → booking' : 'By order → asset' },
+      ],
+      columns: expanded
+        ? ['Qty', 'Start', 'End', 'Days', 'Value']
+        : ['Asset', 'Type', 'Qty', 'Start', 'End', 'Days', 'Value'],
+      align: expanded
+        ? ['right', 'left', 'left', 'right', 'right']
+        : ['left', 'left', 'right', 'left', 'left', 'right', 'right'],
+      groups,
+      totals: [
+        { label: 'Orders', value: String(orders.length) },
+        { label: 'Booked Items', value: this.data.int(bookedItems) },
+        {
+          label: 'Total Value',
+          value: money(orders.reduce((s, o) => s + this.data.orderAmount(o), 0)),
+          strong: true,
+        },
+      ],
+      notes: expanded
+        ? 'Grouped by order, then by asset, with one row per booking.'
+        : 'Grouped by order, one row per asset. Print expanded for the individual bookings.',
+    }, mode);
+  }
+
+  /** Last day the timeline shows (inclusive), in ms. */
+  private viewEnd(): number {
+    const cols = this.columns();
+    return cols[cols.length - 1].start + DAY_MS - 1;
+  }
+
+  /** Active orders whose window touches the period on screen. */
+  private scheduleOrders(): Order[] {
+    const from = dISO(new Date(this.viewStart()));
+    const to = dISO(new Date(this.viewEnd()));
+    return this.orders().filter((o) => o.startDate <= to && o.endDate >= from);
+  }
 
   onPoolStart(e: Event, item: Item): void {
     (e as DragEvent).dataTransfer?.setData('text/plain', item.type + '|' + item.id);

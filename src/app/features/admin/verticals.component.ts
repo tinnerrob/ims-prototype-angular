@@ -77,10 +77,12 @@ const CATEGORY_ICONS: string[] = [
  * **fields** a category carries, plus the **stock set** that applies to every asset.
  * The Assets page reads exactly these rows, so this is where the catalog is defined.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-verticals',
   standalone: true,
-  imports: [FieldEditorComponent, FormsModule, ModalDismissDirective, TipDirective],
+  imports: [FieldEditorComponent, FormsModule, ModalDismissDirective, TipDirective, TablePagerDirective],
   templateUrl: './verticals.component.html',
   styleUrl: './verticals.component.scss',
 })

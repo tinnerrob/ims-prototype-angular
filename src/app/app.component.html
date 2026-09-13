@@ -158,3 +158,12 @@
      clipped by the pane/table it belongs to. `[imsTip]` feeds it. -->
 <ims-tip></ims-tip>
 
+<!-- Printable documents (Phase B) — one host, mounted OUTSIDE the app shell so
+     the `@media print` rules can hide the shell and leave only the document.
+     Pages build a `PrintDocument` and call `PrintService.print()`. -->
+<ims-print-document></ims-print-document>
+
+<!-- The print menu (Print / Save to PDF). Also outside the shell: a dropdown
+     drawn inside the button would be clipped by the pane or modal it sits in. -->
+<ims-print-menu-host></ims-print-menu-host>
+

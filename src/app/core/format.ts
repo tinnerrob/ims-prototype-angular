@@ -4,10 +4,14 @@
    They began as `DataService` methods and were the store's only section with **no store
    state** and **no inbound calls** from any other section — nothing else in the store
    read them, and 187 call sites outside it did. So they moved here: formatting is now a
-   module with no dependencies, and the harnesses can drive it directly.
+   module of pure functions, and the harnesses can drive it directly. It borrows one
+   primitive, `pad2`, from `./period` — that module has no imports either, so the two
+   cannot cycle.
 
    `DataService` keeps thin delegates (`data.money(…)`, `data.fmtDate(…)`), because that
    is what every page already calls — no call site outside the store changed. */
+
+import { pad2 } from './period';
 
 /**
  * `$1,234.56`. Two decimals always, so a column of money lines up, and `null`/
@@ -42,16 +46,14 @@ export function parseDT(s: string | Date): Date {
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = parseDT(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()}`;
+  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}/${d.getFullYear()}`;
 }
 
 /** MM/DD/YYYY HH:mm (prototype `fmtDT`). */
 export function fmtDT(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = parseDT(iso);
-  const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
 

@@ -9,7 +9,7 @@ import { DashboardComponent } from './features/dashboard/dashboard.component';
  *
  * **Two pages stay eager.** The dashboard is the landing page a fresh load renders, so
  * paying a chunk round-trip for it buys nothing; the Administration shell is the frame its
- * child pages move inside. Everything else — the thirteen feature pages and the three admin
+ * child pages move inside. Everything else — the thirteen feature pages and the four admin
  * children — loads on first navigation, each as its own chunk, which is what the port's
  * roadmap asked for and what keeps the initial bundle small.
  *
@@ -34,8 +34,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/admin/verticals.component').then((m) => m.VerticalsComponent),
       },
       {
+        path: 'dashboard',
+        loadComponent: () => import('./features/admin/dashboard-widgets.component').then((m) => m.DashboardWidgetsComponent),
+      },
+      {
         path: 'modules',
         loadComponent: () => import('./features/admin/feature-modules.component').then((m) => m.FeatureModulesComponent),
+      },
+      {
+        path: 'sample-data',
+        loadComponent: () => import('./features/admin/sample-data.component').then((m) => m.SampleDataComponent),
       },
       // Location Types merged into the Locations page as a sub-tab — keep the
       // old URL working for bookmarks.

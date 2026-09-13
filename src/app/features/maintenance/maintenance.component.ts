@@ -1,7 +1,17 @@
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
-import { DataService } from '../../core/data.service';
+import {
+  DataService,
+  RANGE_FILTER_LABEL,
+  RANGE_FILTERS,
+  RangeFilter,
+  alignPeriod,
+  periodBounds,
+  periodLabel,
+  rangeView,
+  shiftPeriod,
+} from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
 import {
   SERVICE_TYPES,
@@ -13,6 +23,8 @@ import {
 } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 import { workOrderTip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
@@ -43,10 +55,12 @@ const BLANK_WO_FORM = {
  * (parts + labour roll-up), a status filter and the New Work Order modal that
  * books parts and moves the asset into the shop.
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-maintenance',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './maintenance.component.html',
   styleUrl: './maintenance.component.scss',
 })
@@ -55,6 +69,13 @@ export class MaintenanceComponent {
   readonly serviceTypes = SERVICE_TYPES;
 
   filter: 'all' | WorkOrderStatus = 'all';
+
+  /** Period filter of the grid — the inspection log's All / Day / Week / Month chips. */
+  readonly logRanges = RANGE_FILTERS;
+  logRange: RangeFilter = 'all';
+  /** Cursor date the day/week/month window is built on. */
+  logAnchor = new Date();
+
   modalOpen = false;
   form = { ...BLANK_WO_FORM };
   /** Editor values as they were when it opened (drives the discard prompt). */
@@ -66,6 +87,7 @@ export class MaintenanceComponent {
   constructor(
     readonly data: DataService,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // The topbar search box is this page's search: report how much of the
     // work-order grid survives it (the shell shows "shown of total").
@@ -75,10 +97,47 @@ export class MaintenanceComponent {
     }));
   }
 
-  /** Work orders on the active status filter, narrowed by the page search. */
+  /**
+   * Work orders on the active status filter and period, narrowed by the page
+   * search. The three compose: the chips pick the window, the status the rows, the
+   * query what is left.
+   */
   workOrders(): WorkOrder[] {
-    const all = this.data.listWorkOrders().filter((w) => this.searchHits(w));
+    const b = this.logBounds();
+    const all = this.data
+      .listWorkOrders()
+      .filter((w) => (!this.logFiltered() || (w.date >= b.start && w.date <= b.end)) && this.searchHits(w));
     return this.filter === 'all' ? all : all.filter((w) => w.status === this.filter);
+  }
+
+  /** The period chips are narrowing the grid. */
+  logFiltered(): boolean {
+    return this.logRange !== 'all';
+  }
+
+  logRangeLabelOf(v: RangeFilter): string {
+    return RANGE_FILTER_LABEL[v];
+  }
+
+  /** Human label for the window the pager is paging through. */
+  logRangeLabel(): string {
+    return periodLabel(rangeView(this.logRange), this.logAnchor);
+  }
+
+  /** The window on screen (ISO dates, inclusive). */
+  private logBounds(): { start: string; end: string } {
+    return periodBounds(rangeView(this.logRange), this.logAnchor);
+  }
+
+  /** Switch the period, keeping the cursor date inside the new window. */
+  setLogRange(v: RangeFilter): void {
+    this.logRange = v;
+    this.logAnchor = alignPeriod(rangeView(v), this.logAnchor);
+  }
+
+  /** Page the cursor one day / week / month. */
+  shiftLog(dir: number): void {
+    this.logAnchor = shiftPeriod(rangeView(this.logRange), this.logAnchor, dir);
   }
 
   /** Does the topbar page search match this work order (asset, service, parts)? */
@@ -234,6 +293,51 @@ export class MaintenanceComponent {
 
   closeViewer(): void {
     this.viewer = null;
+  }
+
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Build the printable work order and open the print dialog.
+   *
+   * The parts are priced from each part's own catalog cost and the labor row from
+   * the shop rate, so the sheet totals to the same figure the grid's Cost column
+   * prints (`workOrderCost`).
+   */
+  printWorkOrder(w: WorkOrder, mode: PrintMode = 'print'): void {
+    const c = this.cost(w);
+    const money = (n: number) => this.data.money(n);
+    const partCost = (p: WorkOrderPart): number =>
+      this.data.getItem(p.kind === 'part' ? 'part' : 'consumable', p.refId)?.costPrice ?? 0;
+    this.printer.print({
+      heading: 'Work Order',
+      number: w.id,
+      status: w.status,
+      meta: [
+        { label: 'Asset', value: this.assetLabel(w) },
+        { label: 'Service Type', value: w.type },
+        { label: 'Date', value: this.data.fmtDate(w.date) },
+        { label: 'Meter Reading', value: this.data.int(w.meterReading) },
+      ],
+      columns: ['Part / Labor', 'Kind', 'Qty', 'Unit Cost', 'Amount'],
+      align: ['left', 'left', 'right', 'right', 'right'],
+      rows: [
+        ...w.parts.map((p) => [
+          this.data.itemLabel(p.kind === 'part' ? 'part' : 'consumable', p.refId),
+          p.kind,
+          this.data.int(p.qty),
+          money(partCost(p)),
+          money(p.qty * partCost(p)),
+        ]),
+        ['Shop labor', 'labor', String(w.laborHours), `${money(c.laborRate)}/hr`, money(c.laborCost)],
+      ],
+      totals: [
+        { label: 'Parts', value: money(c.partsCost) },
+        { label: 'Labor', value: money(c.laborCost) },
+        { label: 'Total Cost', value: money(c.total), strong: true },
+      ],
+      notes: w.notes,
+    }, mode);
   }
 
   private emptyForm() {

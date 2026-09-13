@@ -31,6 +31,31 @@ const ROUTES = [
   ['/admin/verticals', 'Your business type'],
 ];
 
+/* The whole route map. Phase H walks it a second time with the workspace *emptied* —
+   the state that finds a page quietly assuming the seed (a `[0]`, a `.find(...)`, a
+   vertical that is not there). A clean console on every one of these is the claim. */
+const ALL_ROUTES = [
+  '/',
+  '/assets',
+  '/orders',
+  '/pricing',
+  '/purchasing',
+  '/inspections',
+  '/handoff',
+  '/logistics',
+  '/maintenance',
+  '/rentals',
+  '/scheduler',
+  '/timesheet',
+  '/telemetry',
+  '/invoicing',
+  '/admin/locations',
+  '/admin/verticals',
+  '/admin/dashboard',
+  '/admin/modules',
+  '/admin/sample-data',
+];
+
 let failures = 0;
 const check = (label, ok, detail) => {
   if (ok) console.log('  ok  ' + label);
@@ -75,6 +100,50 @@ try {
     await page.screenshot({ path: SHOTS + '/' + (path === '/' ? 'dashboard' : path.replace(/\W+/g, '-').replace(/^-|-$/g, '')) + '.png', fullPage: false });
   }
 
+  /* ---- The stylesheet actually applied — not merely "text rendered".
+     Text renders with NO CSS at all, so a stale hashed bundle or a 404'd sheet
+     gives a page that reads fine and *looks* broken (a bare, unstyled sidebar).
+     Nothing above would catch that, so this asserts the shell's pixels: the rail
+     is painted with its gradient at its pinned width, the shell is a flex box,
+     the topbar is frosted, and the design tokens resolve. ---- */
+  await page.goto('http://localhost:' + PORT + '/', { waitUntil: 'load' });
+  await page.waitForSelector('.sidebar', { timeout: 5000 });
+  const chrome = await page.evaluate(() => {
+    const cs = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el) : null;
+    };
+    const root = getComputedStyle(document.documentElement);
+    return {
+      stylesheets: [...document.styleSheets].length,
+      sidebarBg: cs('.sidebar')?.backgroundImage ?? '',
+      sidebarWidth: cs('.sidebar')?.width ?? '',
+      topbarFilter: cs('.topbar')?.backdropFilter ?? '',
+      shellDisplay: cs('.app-shell')?.display ?? '',
+      brand: root.getPropertyValue('--brand').trim(),
+      muted: root.getPropertyValue('--muted').trim(),
+      ink: root.getPropertyValue('--ink').trim(),
+      sidebarBgVar: root.getPropertyValue('--sidebar-bg').trim(),
+      sidebarBg2Var: root.getPropertyValue('--sidebar-bg-2').trim(),
+    };
+  });
+  check(
+    'the stylesheet is applied (the sidebar rail is painted, not a bare list)',
+    chrome.sidebarBg.includes('linear-gradient') && chrome.sidebarWidth === '248px' && chrome.shellDisplay === 'flex',
+    JSON.stringify(chrome),
+  );
+  check(
+    'the rail resolves to its dark slate ramp (not the light page tint showing through)',
+    chrome.sidebarBg.includes('rgb(28, 36, 52)') && chrome.sidebarBg.includes('rgb(21, 27, 40)') &&
+      chrome.sidebarBgVar === '#1c2434' && chrome.sidebarBg2Var === '#151b28',
+    JSON.stringify(chrome),
+  );
+  check(
+    'the design tokens resolve',
+    chrome.brand === '#4f46e5' && chrome.muted === '#5a6a7f' && chrome.ink === '#0b1120',
+    JSON.stringify(chrome),
+  );
+
   /* ---- The P8 pilot: `OnPush` on `<ims-field-editor>`, exercised from the category editor.
      What it must prove: the child re-renders on its *own* events (add / type / remove), and
      the *parent* still re-renders from them (the Save button flipping is the parent's
@@ -112,6 +181,296 @@ try {
   await page.locator('.modal .btn-close').click();
   check('no console errors through the editor', consoleErrors.length === 0, consoleErrors.join(' | '));
 
+  /* ---- Printable documents (Phase B): a page builds a `PrintDocument`, the one
+     `<ims-print-document>` host renders it, and `@media print` shows it alone.
+     `window.print` is stubbed before the navigation so headless Chromium does not
+     block on a print dialog — the check is that the document *renders*. ---- */
+  consoleErrors.length = 0;
+  await page.addInitScript(() => {
+    window.print = () => { window.__printCalls = (window.__printCalls ?? 0) + 1; };
+  });
+  await page.goto('http://localhost:' + PORT + '/purchasing', { waitUntil: 'load' });
+  await page.waitForSelector('#sidebar', { timeout: 5000 }).catch(() => {});
+  await page.getByRole('button', { name: /Purchase Orders/ }).click();
+  await page.waitForSelector('table tbody tr.row-open', { timeout: 5000 });
+  /* The print action is a menu now: the printer icon (with its chevron) opens it
+     and the menu picks the mode. It is drawn from the app root, so it must land
+     on screen rather than being clipped by the table pane it hangs from. */
+  const openPrintMenu = async (selector) => {
+    await page.locator(selector).first().click();
+    const panel = page.locator('.print-menu.ready');
+    await panel.waitFor({ timeout: 5000 });
+    return panel;
+  };
+  const printVia = async (selector, item = 0) => {
+    await openPrintMenu(selector);
+    await page.locator('.print-menu-item').nth(item).click();
+  };
+
+  const panel = await openPrintMenu('button[title="Print purchase order"]');
+  const panelBox = await panel.boundingBox();
+  const vp = page.viewportSize();
+  check(
+    'the print menu opens on screen with Print and Save to PDF',
+    !!panelBox && panelBox.x >= 0 && panelBox.y >= 0 &&
+      panelBox.x + panelBox.width <= vp.width + 1 && panelBox.y + panelBox.height <= vp.height + 1 &&
+      (await page.locator('.print-menu-item').count()) === 2,
+    JSON.stringify({ panelBox, vp }),
+  );
+  await page.locator('.print-menu-item').first().click();
+  check(
+    'a printable document renders into the print host',
+    await settle(async () => (await page.locator('ims-print-document .print-doc').count()) === 1),
+  );
+  const printText = (await page.locator('ims-print-document .print-doc').textContent()) ?? '';
+  check(
+    'the printed document carries a heading and its lines',
+    printText.toUpperCase().includes('PURCHASE ORDER') && printText.includes('Ordered Total'),
+    printText.replace(/\s+/g, ' ').slice(0, 140),
+  );
+  check('the print dialog was opened once', await settle(async () => (await page.evaluate(() => window.__printCalls)) === 1));
+
+  /* The second item runs the same builder; only the destination differs. */
+  await printVia('button[title="Print purchase order"]', 1);
+  check(
+    'Save to PDF runs the same builder (the dialog opens again)',
+    await settle(async () => (await page.evaluate(() => window.__printCalls)) === 2),
+  );
+  await page.screenshot({ path: SHOTS + '/print-purchase-order.png' });
+  check('no console errors through printing', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  /* ---- Phase B stretch: the remaining documents render through the same host —
+     a goods receipt, a dispatch note, a work order and a rate card. ---- */
+  const printDoc = async (path, title, heading, tab) => {
+    await page.goto('http://localhost:' + PORT + path, { waitUntil: 'load' });
+    await page.waitForSelector('#sidebar', { timeout: 5000 }).catch(() => {});
+    if (tab) await page.getByRole('button', { name: tab }).click();
+    await page.waitForSelector('table tbody tr.row-open', { timeout: 5000 });
+    await printVia('button[title="' + title + '"]');
+    return settle(async () => {
+      const t = ((await page.locator('ims-print-document .print-doc').textContent()) ?? '').toUpperCase();
+      return t.includes(heading.toUpperCase());
+    });
+  };
+
+  check('a goods receipt prints', await printDoc('/purchasing', 'Print goods receipt', 'Goods Receipt', /Receipts/));
+  check('a dispatch note prints', await printDoc('/logistics', 'Print dispatch note', 'Dispatch Note'));
+  check('a work order prints', await printDoc('/maintenance', 'Print work order', 'Work Order'));
+  check('a rate card prints', await printDoc('/pricing', 'Print rate card', 'Rate Card'));
+  check('no console errors through the other documents', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  /* ---- The rest of the print surface: the custody log, the inspection log, a
+     schedule and a timesheet. The two calendars also offer the expanded detail
+     level, so their menus carry four items instead of two. ---- */
+  check('the custody log prints', await printDoc('/handoff', 'Print the custody log', 'Custody Log', /Custody Log/));
+  check('the inspection log prints', await printDoc('/inspections', 'Print the inspection log', 'Inspection Log'));
+
+  const printTimeline = async (path, title, word, item = 0) => {
+    await page.goto('http://localhost:' + PORT + path, { waitUntil: 'load' });
+    await page.waitForSelector('#sidebar', { timeout: 5000 }).catch(() => {});
+    await openPrintMenu('button[title="' + title + '"]');
+    const items = await page.locator('.print-menu-item').count();
+    await page.locator('.print-menu-item').nth(item).click();
+    const ok = await settle(async () => {
+      const t = ((await page.locator('ims-print-document .print-doc').textContent()) ?? '').toUpperCase();
+      return t.includes(word.toUpperCase());
+    });
+    const doc = page.locator('ims-print-document .print-doc');
+    const groups = await doc.locator('.print-group-title').count();
+    const subtotals = await doc.locator('.print-group-totals').count();
+    const subgroups = await doc.locator('.print-subgroup-title').count();
+    return { ok, items, groups, subtotals, subgroups };
+  };
+  /* The two reports are grouped: a schedule by order (then asset), a timesheet by
+     employee (then order) — and each *primary* carries its own subtotal. */
+  const sched = await printTimeline('/scheduler', 'Print this schedule', 'Schedule');
+  check(
+    'a schedule prints, grouped by order with a subtotal under each',
+    sched.ok && sched.items === 4 && sched.groups > 0 && sched.subtotals === sched.groups,
+    JSON.stringify(sched),
+  );
+  const sheet = await printTimeline('/timesheet', 'Print this timesheet', 'Timesheet');
+  check(
+    'a timesheet prints, grouped by employee with a subtotal under each',
+    sheet.ok && sheet.items === 4 && sheet.groups > 0 && sheet.subtotals === sheet.groups,
+    JSON.stringify(sheet),
+  );
+  /* Item 3 is the expanded save-to-PDF: the second level (the asset inside the
+     order, the order inside the employee) renders as a label row per group. */
+  const schedX = await printTimeline('/scheduler', 'Print this schedule', 'Schedule', 3);
+  check('the expanded schedule renders the asset level inside each order', schedX.ok && schedX.subgroups > 0, JSON.stringify(schedX));
+  const sheetX = await printTimeline('/timesheet', 'Print this timesheet', 'Timesheet', 3);
+  check('the expanded timesheet renders the order level inside each employee', sheetX.ok && sheetX.subgroups > 0, JSON.stringify(sheetX));
+
+  /* ---- Field Service: the grid now carries the shared period filter. ---- */
+  await page.goto('http://localhost:' + PORT + '/maintenance', { waitUntil: 'load' });
+  await page.waitForSelector('table tbody tr.row-open', { timeout: 5000 });
+  check(
+    'the work-order grid has the All / Day / Week / Month period filter',
+    (await page.getByRole('button', { name: 'Month', exact: true }).count()) === 1 &&
+      (await page.locator('.log-filter .btn-group button').count()) === 4,
+  );
+  check('no console errors through the new documents', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  /* ---- Sub-rentals: the hold window, the return, and the register print. ---- */
+  const returns = () => page.locator('button[title="Record the return to the supplier"]');
+  check('the sub-rental register prints', await printDoc('/rentals', 'Print the sub-rental register', 'Sub-Rental Register'));
+  check(
+    'the ledger carries the window and a status column (and one row is already back)',
+    (await page.locator('table tbody tr.row-open').first().locator('td').count()) === 10 &&
+      (await page.locator('table tbody tr.row-open', { hasText: 'Returned' }).count()) >= 1,
+  );
+  const outBefore = await returns().count();
+  await returns().first().click();
+  check(
+    'recording a return takes the row out of the "out" set',
+    await settle(async () => (await returns().count()) === outBefore - 1),
+    'returns before=' + outBefore + ' after=' + (await returns().count()),
+  );
+  await page.screenshot({ path: SHOTS + '/rentals.png' });
+  check('no console errors through the sub-rental register', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  /* ---- Phase C: the dashboard's widget arrangement, edited on Admin → Dashboard.
+     What it proves: the admin lists every registry widget, a switch moves one to
+     the hidden list, and the dashboard itself honours the arrangement. ---- */
+  consoleErrors.length = 0;
+  await page.goto('http://localhost:' + PORT + '/admin/dashboard', { waitUntil: 'load' });
+  const widgetsCard = page.locator('.card', { hasText: 'Operations Dashboard' });
+  await widgetsCard.waitFor({ timeout: 5000 });
+  const switches = page.locator('input.form-check-input');
+  check('Admin → Dashboard lists every registered widget', (await switches.count()) === 9, 'switch count: ' + (await switches.count()));
+
+  await page.locator('input#dw-book-value').uncheck();
+  check(
+    'switching a widget off moves it to the hidden list',
+    await settle(async () => (await page.locator('input#dwh-book-value').count()) === 1),
+  );
+  await page.goto('http://localhost:' + PORT + '/', { waitUntil: 'load' });
+  await page.waitForSelector('.dash-bento', { timeout: 5000 });
+  check(
+    'the dashboard honours the arrangement (the hidden widget is gone)',
+    await settle(async () => !((await page.locator('.dash-bento').textContent()) ?? '').includes('Total Fleet Book Value')),
+  );
+  await page.screenshot({ path: SHOTS + '/admin-dashboard.png' });
+
+  await page.goto('http://localhost:' + PORT + '/admin/dashboard', { waitUntil: 'load' });
+  await page.getByRole('button', { name: /Reset Order/ }).click();
+  check(
+    'Reset Order restores the registry default',
+    await settle(async () => (await page.locator('input#dw-book-value').count()) === 1),
+  );
+  check('no console errors through the dashboard layout', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  /* ---- Phase H: the two workspace-wide buttons, on Admin → Sample data. Emptying
+     the store is the one action that can leave *every* page reading nothing, so this
+     wipes it, walks the whole route map, and insists on a clean console — then loads
+     the fixture back and checks the tally returns to where it started. ---- */
+  consoleErrors.length = 0;
+  await page.goto('http://localhost:' + PORT + '/admin/sample-data', { waitUntil: 'load' });
+  await page.waitForSelector('.samp-grid', { timeout: 5000 });
+  /** The "Holding now · N rows" line — the page's own read of the store. */
+  const holding = async () => {
+    const text = (await page.locator('div.strong', { hasText: 'Holding now' }).textContent()) ?? '';
+    return Number(text.replace(/[^0-9]/g, '') || '0');
+  };
+  const cells = page.locator('.samp-cell');
+  const heldBefore = await holding();
+  check('Admin → Sample data tallies the workspace table by table', heldBefore > 0 && (await cells.count()) >= 20, 'rows: ' + heldBefore + ', cells: ' + (await cells.count()));
+  await page.screenshot({ path: SHOTS + '/admin-sample-data.png' });
+
+  await page.getByRole('button', { name: /Remove all sample data/ }).click();
+  await page.locator('.confirm-dialog .modal-footer .btn-ims').click();
+  check('Remove all sample data empties the workspace', await settle(async () => (await holding()) === 0), 'rows: ' + (await holding()));
+  check(
+    'the tally shows every table at zero (a wipe, not a missing table)',
+    (await page.locator('.samp-cell.samp-zero').count()) === (await cells.count()),
+    'zeroed ' + (await page.locator('.samp-cell.samp-zero').count()) + ' of ' + (await cells.count()),
+  );
+
+  /* Every page now reads nothing — and must still render, with a clean console. */
+  for (const path of ALL_ROUTES) {
+    consoleErrors.length = 0;
+    await page.goto('http://localhost:' + PORT + path, { waitUntil: 'load' });
+    await page.waitForSelector('#sidebar', { timeout: 5000 }).catch(() => {});
+    const text = (await page.textContent('body')) ?? '';
+    check(
+      'a page with an empty workspace renders clean: ' + path,
+      text.includes('IMS') && consoleErrors.length === 0,
+      consoleErrors.join(' | '),
+    );
+  }
+
+  /* And back again. */
+  consoleErrors.length = 0;
+  await page.goto('http://localhost:' + PORT + '/admin/sample-data', { waitUntil: 'load' });
+  await page.waitForSelector('.samp-grid', { timeout: 5000 });
+  await page.getByRole('button', { name: /Load sample data/ }).click();
+  await page.locator('.confirm-dialog .modal-footer .btn-ims').click();
+  check('Load sample data puts the fixture back, row for row', await settle(async () => (await holding()) === heldBefore), 'rows: ' + (await holding()));
+  check('no console errors through the sample-data buttons', consoleErrors.length === 0, consoleErrors.join(' | '));
+
+  /* ---- Phase I: the table footer — record count, page size, pager. What it proves:
+     the footer is under the table, the count matches the rows, a page size slices them,
+     the pager moves, and the choice is remembered across a reload. ---- */
+  consoleErrors.length = 0;
+  await page.goto('http://localhost:' + PORT + '/assets', { waitUntil: 'load' });
+  await page.waitForSelector('.tbl-foot[data-table="assets"]', { timeout: 5000 });
+  const foot = page.locator('.tbl-foot[data-table="assets"]');
+  const shownRows = () => page.locator('table[imspaged="assets"] tbody tr:visible').count();
+  const total = await shownRows();
+  const footText = async () => (await foot.locator('.tbl-foot-page').textContent()) ?? '';
+  check(
+    'the footer states the record range beside the pager',
+    (await footText()).startsWith('Records 1–') && (await footText()).includes(`of ${total}`),
+    `${await footText()} / rows ${total}`,
+  );
+  check(
+    'the far-left of the footer is free (the range replaced the separate count)',
+    (await foot.locator('.tbl-foot-count').count()) === 0 && (await foot.locator('.tbl-foot-tools').count()) === 1,
+  );
+  await foot.screenshot({ path: SHOTS + '/table-footer.png' });
+
+  // The chevron is drawn at the box's right edge, so the value needs room on its left and
+  // the arrow needs its own clearance — measured, because "it looked fine" is not a test.
+  const sizing = await foot.locator('select').evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const canvas = document.createElement('canvas').getContext('2d');
+    canvas.font = `${cs.fontSize} ${cs.fontFamily}`;
+    const widest = Math.max(...[...el.options].map((o) => canvas.measureText(o.text).width));
+    return {
+      room: el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight),
+      widest,
+      padRight: parseFloat(cs.paddingRight),
+    };
+  });
+  check(
+    'the page-size box leaves the value clear of its chevron',
+    sizing.room > sizing.widest + 10 && sizing.padRight >= 24,
+    JSON.stringify(sizing),
+  );
+
+  await foot.locator('select').selectOption('10');
+  check(
+    'picking a page size shows that many rows',
+    await settle(async () => (await shownRows()) === Math.min(10, total)),
+    'rows: ' + (await shownRows()),
+  );
+  await foot.locator('.tbl-foot-pager button').nth(1).click();
+  check(
+    'the pager moves to the next page',
+    await settle(async () => !(await footText()).startsWith('Records 1–')),
+    await footText(),
+  );
+
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('.tbl-foot[data-table="assets"]', { timeout: 5000 });
+  check(
+    'the page size is remembered across a reload',
+    (await page.locator('.tbl-foot[data-table="assets"] select').inputValue()) === '10',
+  );
+  check('the count sits below the table, not in the header', (await page.locator('.card-header .tbl-foot').count()) === 0);
+  check('no console errors through the table footer', consoleErrors.length === 0, consoleErrors.join(' | '));
+
   writeFileSync(SHOTS + '/console-errors.txt', consoleErrors.join('\n'));
 } finally {
   await browser.close();
@@ -119,6 +478,6 @@ try {
 }
 
 console.log(failures === 0
-  ? '\ne2e smoke: all checks passed (' + ROUTES.length + ' routes + the field editor)'
+  ? '\ne2e smoke: all checks passed (' + ROUTES.length + ' routes + applied stylesheet + the field editor + 5 printable documents + the dashboard layout + the sample-data buttons over all ' + ALL_ROUTES.length + ' routes)'
   : '\ne2e smoke: ' + failures + ' check(s) FAILED');
 process.exit(failures === 0 ? 0 : 1);

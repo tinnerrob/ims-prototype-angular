@@ -4,6 +4,8 @@ import { FormsModule } from '@angular/forms';
 import { DataService, periodLabel } from '../../core/data.service';
 import { Item, Movement, MovementKind, MOVEMENT_KIND_LABEL } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
+import { PrintMenuComponent } from '../../shared/print/print-menu.component';
+import { PrintMode, PrintService } from '../../shared/print/print.service';
 import { formChanged, snapshotForm } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -11,6 +13,7 @@ import { stampDayRange, stampISO, stampRange } from '../../shared/tip/tip-format
 import { assetTip, tip } from '../../shared/tip/tip-builders';
 import { Tip } from '../../shared/tip/tip.service';
 import { TipDirective } from '../../shared/tip/tip.directive';
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
 
 /** Board list shown at a time (one sub-tab each). */
 type HandoffTab = 'outbound' | 'incoming' | 'custody' | 'log';
@@ -52,7 +55,7 @@ const KIND_CLASS: Record<MovementKind, string> = {
 @Component({
   selector: 'ims-handoff',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, ModalDismissDirective, PrintMenuComponent, RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './handoff.component.html',
   styleUrl: './handoff.component.scss',
 })
@@ -91,6 +94,7 @@ export class HandoffComponent {
   constructor(
     readonly data: DataService,
     readonly search: PageSearchService,
+    private readonly printer: PrintService,
   ) {
     // The topbar search box is this page's search: one query for all four tabs,
     // so a search narrows whichever list is open and the pill counts matches.
@@ -115,6 +119,70 @@ export class HandoffComponent {
 
   goToday(): void {
     this.day = new Date().toISOString().slice(0, 10);
+  }
+
+  /* ------------------------------- printing ----------------------------- */
+
+  /**
+   * Print a pick list for the day the board is showing: the very rows on screen,
+   * in the order the board lists them (it already sorts overdue first). A pull
+   * sheet, not a re-derivation — so what is handed over cannot differ from what
+   * the dispatcher sees.
+   */
+  printPickList(mode: PrintMode = 'print'): void {
+    const incoming = this.tab === 'incoming';
+    const rows = incoming ? this.incoming() : this.outbound();
+    this.printer.print({
+      heading: incoming ? 'Return Pick List' : 'Pick List',
+      number: this.dayLabel(),
+      meta: [
+        { label: 'Day', value: this.dayLabel() },
+        { label: 'Board', value: incoming ? 'Incoming' : 'Outbound' },
+        { label: 'Units', value: String(rows.length) },
+      ],
+      columns: ['Asset', 'Model', 'Order', 'Project', 'Custodian', 'Window', 'Status'],
+      rows: rows.map((r) => [
+        r.itemId,
+        r.model,
+        r.orderId,
+        r.project,
+        r.custodian,
+        `${this.data.fmtDate(r.start)} → ${this.data.fmtDate(r.end)}`,
+        this.boardBadgeLabel(r),
+      ]),
+      notes: 'Move the units listed above for the day shown. Confirm each against its order before release.',
+    }, mode);
+  }
+
+  /**
+   * Build the printable **custody log** and open the print dialog.
+   *
+   * The ledger exactly as the page holds it — same rows, same place scope, same
+   * page search — because a chain of custody is evidence: what prints has to be
+   * what the record says, not a re-derived summary of it.
+   */
+  printCustodyLog(mode: PrintMode = 'print'): void {
+    const rows = this.movements();
+    this.printer.print({
+      heading: 'Custody Log',
+      number: this.locationFilterLabel(),
+      meta: [
+        { label: 'Location', value: this.locationFilterLabel() },
+        { label: 'Movements', value: String(rows.length) },
+      ],
+      columns: ['Movement', 'Kind', 'Item', 'Order / party', 'Location', 'When', 'By', 'Note'],
+      rows: rows.map((m) => [
+        m.id,
+        this.kindLabel[m.kind],
+        m.refId,
+        m.orderId || m.party || '—',
+        this.data.locationPath(m.locationId),
+        this.data.fmtDT(m.at),
+        this.data.userName(m.byUserId),
+        m.note || '—',
+      ]),
+      notes: 'Every movement in the ledger for the place and filter shown. The log is append-only.',
+    }, mode);
   }
 
   /** The day stepper only applies to the two board lists. */
@@ -300,11 +368,11 @@ export class HandoffComponent {
   }
 
   /** Other units still out on the same order — shown in the return editor. */
-  siblingsStillOut(contractId: string | null, excludeAssetId: string): string[] {
-    if (!contractId) return [];
+  siblingsStillOut(orderId: string | null, excludeAssetId: string): string[] {
+    if (!orderId) return [];
     return this.data
       .custodyItems()
-      .filter((i) => i.id !== excludeAssetId && this.data.outInfo(i.id)?.orderId === contractId)
+      .filter((i) => i.id !== excludeAssetId && this.data.outInfo(i.id)?.orderId === orderId)
       .map((i) => i.id);
   }
 
@@ -542,7 +610,7 @@ export class HandoffComponent {
 
   /* ------------------------------ tooltips ------------------------------ */
 
-  /** Board row (outbound / incoming): the unit, its contract, window, custodian. */
+  /** Board row (outbound / incoming): the unit, its order, window, custodian. */
   tipBoard(r: BoardRow): Tip {
     const order = this.data.getOrder(r.orderId);
     const window = order

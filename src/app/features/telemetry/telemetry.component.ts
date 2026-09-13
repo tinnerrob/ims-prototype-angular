@@ -36,10 +36,12 @@ const MAP_WIDTH_M = LNG_SPAN_DEG * 111320 * Math.cos((33.735 * Math.PI) / 180);
  * last reported, battery bar, meter hours) with a live filter, the geofence
  * breach alert log, and the map (grid, yard hub, geofence rings, asset pins).
  */
+import { TablePagerDirective } from '../../shared/table/table-pager.directive';
+
 @Component({
   selector: 'ims-telemetry',
   standalone: true,
-  imports: [RecordViewComponent, TipDirective],
+  imports: [RecordViewComponent, TipDirective, TablePagerDirective],
   templateUrl: './telemetry.component.html',
   styleUrl: './telemetry.component.scss',
 })

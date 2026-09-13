@@ -1,0 +1,51 @@
+/* Administration → Sample data. The two operations and the tally that shows what
+   they changed; everything else rides the global card / list-line / button patterns. */
+
+/* The destructive one is the shared outline chip, tinted with the same `--danger`
+   the field editor uses for an invalid row — so the pair does not read as two
+   equals. */
+.samp-remove {
+  border-color: rgba(220, 38, 38, .35);
+  color: var(--danger);
+}
+.samp-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(220, 38, 38, .06);
+}
+
+/* The tally: one cell per table, count first. The number is what the buttons
+   change, so it leads; a table at zero dims rather than disappearing, so "gone" is
+   visible as a zero instead of a missing line. */
+.samp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 6px;
+}
+.samp-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+.samp-count {
+  min-width: 30px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.samp-label {
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--slate-600);
+}
+.samp-zero .samp-count,
+.samp-zero .samp-label {
+  color: var(--muted);
+  font-weight: 600;
+}

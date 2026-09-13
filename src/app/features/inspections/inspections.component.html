@@ -31,12 +31,15 @@
         </button>
       </div>
     }
-    <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="newInspection()">
-      <i class="bi bi-check2-square"></i> Log Inspection
-    </button>
+    <span class="d-flex align-items-center gap-2">
+      <ims-print-menu text="Print Log" label="Print the inspection log" (action)="printLog($event)"></ims-print-menu>
+      <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="newInspection()">
+        <i class="bi bi-check2-square"></i> Log Inspection
+      </button>
+    </span>
   </div>
   <div class="card-body table-wrap">
-    <table class="table">
+    <table class="table" imsPaged="inspections">
       <thead>
         <tr>
           <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
@@ -108,7 +111,7 @@
           </div>
           <div class="row g-2">
             <div class="col-md-6 field-group">
-              <label class="form-label">Contract</label>
+              <label class="form-label">Order</label>
               <select class="form-select" [(ngModel)]="editRecord.orderId">
                 <option value="">— none —</option>
                 @for (o of orders(); track o.orderId) {
@@ -183,7 +186,7 @@
           <!-- The checklist is the template's fields (B7): a reading, an outcome,
                and a severity when it failed. -->
           <div class="table-wrap">
-            <table class="table">
+            <table class="table" imsPaged="inspection-checklist">
               <thead>
                 <tr><th>Item</th><th>Reading</th><th>Outcome</th><th>Severity</th></tr>
               </thead>
@@ -261,6 +264,9 @@
           }
         </div>
         <div class="modal-footer">
+          @if (!isNew()) {
+            <ims-print-menu text="Print Report" label="Print this inspection report" (action)="printInspection(r, $event)"></ims-print-menu>
+          }
           <button type="button" class="btn btn-ims" (click)="saveEdit()">
             <i class="bi bi-check2"></i> {{ isNew() ? 'Log Inspection' : 'Save Record' }}
           </button>

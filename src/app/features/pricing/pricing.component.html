@@ -63,7 +63,7 @@
       </div>
       <div class="card-body">
         <div class="table-wrap">
-          <table class="table">
+          <table class="table" imsPaged="pricing-overheads">
             <thead>
               <tr>
                 <th>Fee / Asset Name</th><th>Category</th><th>Charge Type</th>
@@ -121,7 +121,7 @@
       </div>
       <div class="card-body">
         <div class="table-wrap">
-          <table class="table">
+          <table class="table" imsPaged="tax-schedules">
             <thead>
               <tr><th>Code</th><th>State</th><th>County</th><th>City</th><th class="num">Rate</th><th class="text-end">Actions</th></tr>
             </thead>
@@ -167,7 +167,7 @@
           day its booking starts; a purchase order takes the card's cost as its default.
         </p>
         <div class="table-wrap">
-          <table class="table">
+          <table class="table" imsPaged="pricing-cards">
             <thead>
               <tr>
                 <th>Card</th><th>Counterparty</th><th>In Force</th>
@@ -188,6 +188,7 @@
                     <span class="badge-status {{ cardStatusClass(c) }}">{{ cardStatusLabel(c) }}</span>
                   </td>
                   <td class="text-end text-nowrap">
+                    <ims-print-menu label="Print rate card" (action)="printCard(c, $event)"></ims-print-menu>
                     <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openCard(c)">
                       <i class="bi bi-pencil"></i>
                     </button>
@@ -360,7 +361,7 @@
           </div>
           <p class="text-muted2 text-xs2 mb-2">
             Leave a date blank for an open end. A renewal is a <em>new</em> card with a later start,
-            so contracts already written keep the price they were booked at.
+            so orders already written keep the price they were booked at.
           </p>
           <div class="field-group">
             <div class="form-check form-switch">
@@ -381,7 +382,7 @@
             </button>
           </div>
           <div class="table-wrap">
-            <table class="table">
+            <table class="table" imsPaged="pricing-lines">
               <thead>
                 <tr>
                   <th>Type</th><th>Item</th><th class="num">Daily</th><th class="num">Weekly</th>
