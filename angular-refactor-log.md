@@ -47,7 +47,7 @@ everywhere (**27** `standalone: true`, **0** `NgModule`).
 | Signals | 12 `signal(`/`computed(`/`effect(` uses; the store is a **mutable singleton**, not signal-based | `grep signal(` |
 | Change detection | **0** `ChangeDetectionStrategy` / `OnPush` — all components are default | `grep ChangeDetectionStrategy` |
 | Tests | **0** `*.spec.ts` (Karma is configured but empty) | `find src -name '*.spec.ts'` |
-| Verification culture | `npm run check:store` = 26 Node harnesses = **224 checks** (202 at baseline; P9 added check25, and P9b/P6/3/P6/4 added check26, which is the first to reach a component); plus 2 hand-rolled audits, the build and `npm run e2e` | `scripts/`, `package.json` |
+| Verification culture | `npm run check:store` = 27 Node harnesses = **236 checks** (202 at baseline; P9 added check25; P9b/P6/3/P6/4 added check26, the first to reach a component; P10 added check27, which drives the component's gestures); plus 2 hand-rolled audits, the build and `npm run e2e` | `scripts/`, `package.json` |
 | Bundle | build warns `initial exceeded maximum budget … 500 kB` at **~830 kB** (error budget 1 MB); **all routes eager** (0 `loadComponent`) | `ng build`, `angular.json`, `app.routes.ts` |
 | Marker hygiene | **0** `console.*`, `TODO`, `FIXME`, `XXX`, `HACK` in `src` | `grep -rnE …` |
 | Selectors | **All** `ims-*` except the shell's `app-root`; one mismatch: `ims-admin-verticals` lives in `verticals.component.ts` (`VerticalsComponent`) | `grep 'selector:'` |
@@ -561,6 +561,45 @@ are true by construction, which is the point: a check that guesses a field name 
 nothing could test it — "it is P9's first customer". `check26` is that customer's net: extract, then
 prove the same numbers by running the same assertions against the extracted functions.
 
+### P10 — the gestures, the writes and the tooltips · `MED` · status: **done (2026-09-12)**
+**What this covered.** P6/4 closed by naming what was left in the Scheduler and why it was not an
+extraction candidate: the drag/resize/move handlers, the modals and writes, the pool cards' rows and the
+tip builders — code that touches the DOM or writes. That was the right call for *refactoring*, and the
+wrong place to stop for *verification*: those paths are the most bug-prone in the app (P4b and P4c both
+landed in them), and until now the only thing exercising them was the e2e grid test.
+**It turned out none of it needed a browser.** The gesture code touches exactly one browser global —
+`window` add/removeEventListener — and one DOM call, `track.getBoundingClientRect()`. Stub both, plus a
+plain object standing in for the pointer event, and the *real* handlers run against the *real* store, so
+their real writes can be read back. check27 drives: drag-to-book (one line added, qty 1, the row left
+selected and expanded); the multi-unit prompt (a bulk drop writes **nothing** and opens `bookPrompt`,
+`commitBook()` writes the quantity that was asked for); the retired-asset refusal (`availability().blocked`
+is exactly `status === 'retired'`, and a refused drop never opens the prompt); a whole-order drag (200px
+of a 700px week = 2 days, both ends move, and every booking is carried along); the 3px click-vs-drag
+threshold (a 2px wobble claims nothing and writes nothing — this is what keeps a plain click selecting a
+row); an edge resize (and that it clamps rather than inverting, and cannot leave the order's window); and
+a Day-view drag (snaps to a quarter hour, length preserved).
+**The tip builders and `stamp*` helpers — 8 builders shared by every page, uncovered until now.** check27
+asserts the shape the module documents (title = `CODE - project`, then one fact per line), that
+`orderRecordTip` prints Customer/Site/Items/Value and carries the status badge, that `assetTip` prints a
+serial line *iff* the item has a serial and a notes line iff it has notes, that `tip()` drops empty and
+blank lines, and the stamp edge cases the tips promise: midnight printing `12:00am` not `0:00am`, minutes
+past midnight wrapping, `08:05` → `8:05am`, an empty time printing nothing, a missing date printing `—`
+never `NaN`, and a timeless range repeating its date.
+**Why this is the right shape of test here (and the e2e stays):** this asserts *"given this gesture, did
+the store change the way the rule says"*. Whether the pixels land under the cursor is `npm run e2e`'s
+question, and that suite already drives the grid for real. Two nets, two questions, no overlap.
+**Again, recorded:** one assertion failed first — I expected a dragged order's bookings to keep their own
+dates, and they *do* move with it, because that is the documented behaviour ("moving an order carries its
+bookings along"). My comparison was also wrong in a subtler way: it resolved a booking's window through
+the order's dates *before* the move and compared against the explicit dates written *after*. The fix was
+to resolve both sides the same way. (Fourth time in this effort; the rule from P6/3 stands.)
+**Verified:** build `complete` (0 warnings) · `lint:ctor` OK · `lint:styles` 0 unused · `lint:dead` 0/0 ·
+`check:store` **236 ok / 0 FAIL** in **27 harnesses** · `npm run e2e` all checks passed.
+**Scheduler coverage, after P9b → P6/3 → P6/4 → P10:** the derived math (calendar, capacity, geometry,
+composition) is asserted directly as pure functions; the gestures and writes are asserted through the
+component against the real store; the rendering is asserted in a real browser. What remains genuinely
+uncovered is the modal form editing (order/resource forms) and the drag *paint* — both deliberate.
+
 ### P6/4 — the component half, slice 2: the geometry layer · `MED` · status: **done (2026-09-12)**
 **What moved.** The rest of the Scheduler's derivations, appended to `scheduler-view.ts` (450 lines
 now): `lineQty` / `qtySuffix`, `orderT0` / `orderT1` / `lineT0` / `lineT1`, `dateIncludes`, `geomMin`,
@@ -906,6 +945,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 9b | 2026-09-12 | **P9b** — The harness reaches a component | Probed and proved that the Scheduler class instantiates in Node (JIT compiler loaded, `ChangeDetectorRef`/`ConfirmService` stubbed); runner now compiles with `--rootDir src/app` + flattens core; `check26.mjs` (5 checks) over its view math | `MED` | **done** — `check:store` **215 ok / 0 FAIL in 26 harnesses**; five of my draft assertions failed and all five were the assertion's fault (recorded); this is the net P6's component extraction was waiting for |
 | 6/3 | 2026-09-12 | **P6/3** — Component half, slice 1: calendar & capacity math | `scheduler-view.ts` (196 lines) of pure functions + the view-model types; component **1,591 → 1,506 lines** delegating through same-named methods (template and ~100 call sites untouched) | `MED` | **done** — before/after dump of every derived value **byte-identical (42,584 B, `cmp`)**; check26 5 → **9 checks** driving the module directly; build/lints clean; **219 ok / 0 FAIL**; e2e green. P6/4 (the geometry layer: `models`/`conflicts` + `geom*`/`*T0`/`*T1`) has its dependency list and proof method ready |
 | 6/4 | 2026-09-12 | **P6/4** — Component half, slice 2: the geometry layer | `lineQty`/`qtySuffix`, `*T0`/`*T1`, `dateIncludes`, `geomMin`/`fmtMin`/`geom`, `lineDays`, `typeRank`, `itemName`, `shortItemLabel`, `sortedLines`, `isConflicted`, `conflictDetail`, `models`, `conflictCount`, `conflicts` → module (450 lines); component **1,506 → 1,388 lines** | `MED` | **done** — **P6 complete.** Functions take a six-read `ScheduleReader` instead of `DataService`, so the capacity rule is testable off a stub store; before/after dump **byte-identical (74,014 B, `cmp`)** on the first run; check26 9 → **14 checks**; **224 ok / 0 FAIL**; build/lints/e2e green |
+| 10 | 2026-09-12 | **P10** — The gestures, the writes and the tooltips | `check27.mjs` (12 checks): drag-to-book, the multi-unit prompt, the retired refusal, whole-order drag + carried bookings, the 3px click-vs-drag threshold, edge resize clamping, Day-view 15-minute snapping; the 8 tip builders and the `stamp*` helpers | `MED` | **done** — no production change. The gesture code needs only `window` listeners and `getBoundingClientRect` stubbed, so the real handlers run against the real store and their writes are asserted; **236 ok / 0 FAIL in 27 harnesses**; e2e unchanged |
 
 ### Findings ledger (evidence for the phases above)
 

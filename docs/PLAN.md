@@ -331,7 +331,7 @@ carried unremarked since its first commit.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 224 runtime checks in 26 harnesses, against the real store, no browser
+npm run check:store    # 236 runtime checks in 27 harnesses, against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -535,6 +535,13 @@ hand-roll `localStorage` and assert on the store's own output:
   *directly*: `columnsFor` as the one definition of a period, the day-inclusive tie rule in `peakUnits`,
   `committedUnits` never falling as its window widens, and `bookingsInRange` returning only bookings the
   visible period holds.
+- `check27.mjs` — **12 checks, the gestures, the writes and the tooltips** (P10): the Scheduler's real
+  handlers driven against the real store with only `window`'s listeners and `getBoundingClientRect`
+  stubbed — drag-to-book, the multi-unit quantity prompt (writing nothing until it is committed), the
+  retired-asset refusal, a whole-order drag that carries its bookings, the 3px click-vs-drag threshold,
+  an edge resize that clamps instead of inverting, and Day-view 15-minute snapping — plus the eight shared
+  tip builders (`orderTip`, `orderRecordTip`, `assetTip`, `partyTip`, …) and the `stamp*` helpers
+  (`12:00am` for midnight, `—` for a missing date, a timeless range repeating its date).
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
