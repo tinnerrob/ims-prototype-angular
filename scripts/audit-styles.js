@@ -8,7 +8,12 @@
  *
  *   1. declarations a later rule for the same selector re-sets — they can never
  *      win, so dropping them is visually neutral (this is how the stylesheet was
- *      decluttered: 281 such declarations, 0 changed winners);
+ *      decluttered: 281 such declarations, 0 changed winners). Only counted when the
+ *      earlier declaration cannot outrank the later one, so an early `!important`
+ *      against a later plain declaration is *not* reported. Note the report is **per
+ *      selector**: in a grouped rule (`.a, .b { x }`) a pair for `.a` does not make the
+ *      declaration deletable — `x` may still be live for `.b`. Delete it only when every
+ *      selector the rule names has such a pair;
  *   2. rules whose classes no template or component mentions — prototype
  *      leftovers the Angular port dropped (98 rules removed: `.rn-*`, `.rw-*`,
  *      `.ho-*`, `.tc-*`, `.panel-head`, …).
@@ -30,29 +35,49 @@ const src = fs.readFileSync(CSS, 'utf8');
 // blank out comment bodies but keep the newlines, so line numbers stay true
 const code = src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
 
-/** Split a stylesheet into rules: { sel: [selectors], props: Set, line }. */
+/**
+ * Split a stylesheet into rules: { sels: [selectors], props: Map, line }.
+ *
+ * `props` maps a property name to `'important'` when its declaration carries
+ * `!important`, else `''`; the first declaration of a property within a rule wins.
+ *
+ * Declarations are read at their **boundaries** — `;`, plus `}` for an unterminated last
+ * declaration — so the buffer holds one declaration at a time and a property after the
+ * rule's first is seen too. (Recording a property at the first `:` while everything
+ * accumulated in one buffer cleared only by braces silently reduced every rule to its
+ * first declaration; see `angular-refactor-log.md` → P2c.)
+ */
 function rules(text) {
   const out = [];
   const stack = [];
   let buf = '';
   let line = 1;
   let startLine = 1;
+  const flush = () => {
+    if (!stack.length) return;
+    const k = buf.indexOf(':');
+    if (k === -1) return;
+    const name = buf.slice(0, k).trim().replace(/^.*[;}]\s*/, '');
+    if (!name || name.indexOf('{') !== -1) return;
+    const props = stack[stack.length - 1].props;
+    if (!props.has(name)) props.set(name, /!important/i.test(buf) ? 'important' : '');
+  };
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
     if (ch === '\n') { line++; buf += ' '; continue; }
     if (ch === '{') {
-      stack.push({ sels: buf.trim().replace(/\s+/g, ' ').split(',').map((s) => s.trim()).filter(Boolean), props: new Set(), line: startLine, nested: stack.length > 0 });
+      stack.push({ sels: buf.trim().replace(/\s+/g, ' ').split(',').map((s) => s.trim()).filter(Boolean), props: new Map(), line: startLine, nested: stack.length > 0 });
       buf = '';
     } else if (ch === '}') {
+      flush();
       const r = stack.pop();
       if (r && !r.nested) out.push(r);
       buf = '';
+    } else if (ch === ';') {
+      flush();
+      buf = '';
     } else {
       buf += ch;
-      if (stack.length) {
-        const k = buf.indexOf(':');
-        if (k !== -1) stack[stack.length - 1].props.add(buf.slice(0, k).trim().replace(/^.*[;}]\s*/, ''));
-      }
       if (!buf.trim()) startLine = line;
     }
   }
@@ -67,9 +92,18 @@ let reSet = 0;
 const layered = [];
 for (const [sel, rs] of bySel) {
   if (rs.length < 2) continue;
-  const seen = new Set();
+  const seen = new Map();
   const dupes = [];
-  for (const r of rs) for (const p of r.props) (seen.has(p) ? dupes.push(p) : seen.add(p));
+  for (const r of rs) {
+    for (const [p, important] of r.props) {
+      if (seen.has(p)) {
+        /* dead unless the earlier declaration outranks the later one */
+        if (seen.get(p) !== 'important' || important === 'important') dupes.push(p);
+      } else {
+        seen.set(p, important);
+      }
+    }
+  }
   reSet += dupes.length;
   layered.push({ sel, fields: rs.map((r) => r.line), dupes: [...new Set(dupes)] });
 }

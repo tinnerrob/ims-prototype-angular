@@ -181,27 +181,68 @@ ad-hoc scan suggested, which is the safe direction to be wrong in.
 **Verified:** the script's output above; gates green (build `complete` · `lint:ctor` OK · `lint:styles`
 0 unused · `check:store` **202 ok / 0 FAIL**); README and HANDOFF now list the fourth audit.
 
-### P2c — `lint:styles`'s "re-set" detector is blind after a rule's first declaration · **found, proved, not fixed**
-**Finding:** `scripts/audit-styles.js` prints `122 selector(s) declared in 2+ rules, 0 declaration(s)
-re-set by a later rule`. The real number is **15 declarations across 9 selectors** (listed in P5c).
-**Root cause:** its character parser accumulates every byte into one shared `buf` that it clears only on
-`{`/`}`, and records a property whenever `buf.indexOf(':')` is non-negative. After the first
-declaration that index always finds the *same first* colon, so the same name is re-added and no later
-declaration is ever seen — each rule's property set is effectively `{ first declaration }`.
+### P2c — `lint:styles`'s "re-set" detector · `LOW` · status: **done (2026-09-12) — proved, fixed, and it changed the answer**
+**Finding:** `scripts/audit-styles.js` printed `122 selector(s) declared in 2+ rules, 0 declaration(s)
+re-set by a later rule`. The real number was **15 declarations across 9 selectors**. **Root cause:** its
+character parser accumulated every byte into one shared `buf` cleared only on `{`/`}`, and recorded a
+property whenever `buf.indexOf(':')` was non-negative — after the first declaration that index always
+finds the *same first* colon, so no later declaration was ever seen; each rule's property set was
+effectively `{ first declaration }`.
 **Proof (A/B, in `/tmp` sandboxes against a copy of the script):**
 `.x { background: blue; color: red } .x { color: green }` → `0 declaration(s) re-set`, while
 `.x { color: red; background: blue } .x { color: green }` → `1` (`color`). Identical cascade, opposite
 verdicts; the only difference is which declaration comes first.
-**Second blind spot:** `!important` is ignored, so once the first bug is fixed an early `!important`
-declaration that *does* still win would be reported as re-set — a false positive.
-**Fix (one line each):** clear `buf` once a declaration's `:` has been consumed; and only call it
-re-set when the earlier declaration is not `!important` or the later one is. Report-only, cannot affect
-any build or any behaviour. **Not applied** — it changes what an existing gate prints, and this log's
-guardrail is that gates are not edited mid-sequence without a decision.
-**Why it matters:** that detector is the mechanism the file's own header credits for decluttering the
-stylesheet ("281 such declarations, 0 changed winners"), so while it under-reports, the `0` it prints
-reads as *proof that there is nothing left to drop* — which is exactly how P5's first pass concluded
-"no removals". Hence P5c.
+**Fix applied (in the script's own idiom, report-only behaviour preserved):** declarations are now read
+at their **boundaries** (`;`, plus `}` for an unterminated last declaration) through a `flush()` that
+records the property *and* whether it carried `!important`; `props` became a `Map` (first declaration of
+a property wins); and a pair is no longer counted when the earlier declaration is `!important` and the
+later one is not. The header now also states the report is **per selector** — in a grouped rule
+(`.a, .b { x }`) a pair for `.a` does not make `x` deletable, because `x` may still be live for `.b`.
+**After the fix it prints the truth:** `3 declaration(s) re-set by a later rule` once P5c removed the 12
+that were deletable — and those 3 are exactly the grouped ones it must keep reporting
+(`.btn-sm2`'s `padding` is dead for 1 of 4 selectors, `.sched-inspector`'s `min-height` for 1 of 3,
+`.ts-page`'s `min-height` for 1 of 2).
+**Verified:** `npm run lint:styles` exits 0 as before; the dead-class line is still `0 class(es) no
+template mentions`; gates green (build `complete` · `lint:ctor` OK · `lint:dead` 0/0 · `check:store`
+**202 ok / 0 FAIL**).
+
+### P5c — the dead declarations the gate could not see · `LOW/MED` · status: **done (2026-09-12) — 12 deleted, 3 kept on purpose**
+P5 asked its question at *rule* level ("is a whole rule superseded?") and got 0. Asking it at
+*declaration* level — the level `audit-styles.js` is meant to check, with P2c's bug fixed — found 15
+declarations a later same-selector, same-context rule re-states, i.e. declarations that can never win.
+That is the class the script's own header says was decluttered before ("281 such declarations, 0 changed
+winners"), so deleting them is neutral by the project's own argument.
+
+**Deleted (12)** — each re-set for *every* selector of its rule, killer line named:
+
+| Dead declaration | Superseded by |
+|---|---|
+| `.tl-day-head { font-size: 11.5px }` | `:1585` |
+| `.tl-day-head { border-radius: 0 }` | `:1951` (`.tl-head, .tl-day-head, .tl-corner`) |
+| `.tl-day-head { padding: 6px 0 8px }` | `:1585` |
+| `.tl-row-track { border: 1px solid var(--slate-100) }` | `:1999` |
+| `.tl-row-track { min-height: var(--tl-track-plain) }` | `:1588` |
+| `.tl-block { padding: 5px 10px }` | `:1595` |
+| `.ts-block { padding: 0 5px }` | `:861` |
+| `.ts-block { align-items: center }` | `:861` |
+| `:root { --sidebar-bg: rgba(15, 20, 36, .96) }` | `:2130` |
+| `:root { --sidebar-bg-2: rgba(23, 28, 48, .92) }` | `:2130` |
+| `:root { --sidebar-ink: #cbd5e1 }` | `:2130` |
+| `.sidebar { background: radial-gradient(…) }` | `:2142` (the refresh layer's flat ramp) |
+
+**Kept (3), and this is the part that matters:** `.btn-sm2`'s `padding`, `.sched-inspector`'s
+`min-height` and `.ts-page`'s `min-height` are *re-set for one selector but live for their siblings* —
+they sit in grouped rules (`.btn-ims, .btn-ims-outline, .btn-ims-quiet, .btn-sm2`, …), so deleting the
+declaration would strip the property from `.btn-ims` and friends. The per-selector report cannot say
+that; the check has to group by rule. Three real visual regressions avoided by looking at the lines
+instead of trusting the count.
+**Verification (the user's brief: "verifying each against the compiled CSS's winning values"):** built
+both sides and extracted, for every selector, the winning value of every property from the *compiled*
+stylesheet (619 selectors, 2185 winning declarations — selector lists expanded, so a grouped rule feeds
+each selector it names). **The two maps are identical: `diff` = 0 lines.** The emitted CSS hash does
+change (`2638d90c…` → `3723d96e…`), because the dead declarations are gone from the text — which is the
+point — while the *effective* stylesheet is unchanged. Gates: build `complete` · `lint:ctor` OK ·
+`lint:styles` `0 class(es)` + the 3 disclosed pairs · `lint:dead` 0/0 · `check:store` **202 ok / 0 FAIL**.
 
 ### P3 — Naming & formatting consistency · `LOW` · status: **done (2026-09-12)**
 **Done:** renamed the one selector that did not match its component — `ims-admin-verticals` →
@@ -316,8 +357,8 @@ carrying dead weight — it is long because of the layered design its own header
 prototype CSS first, then feature blocks, then an additive *visual refresh* layer loaded LAST whose
 whole purpose is to restate the same selectors with **different** values. That is why 92 selectors are
 declared more than once yet no two declarations are identical: those repeats *are* the overrides.
-(Stated at the **rule** level, which is how P5 asked the question — P5c lists the 15 declaration-level
-exceptions that this leaves, and P2c explains why the existing detector cannot see them.)
+(Stated at the **rule** level, which is how P5 asked the question — the declaration-level answer is
+**P5c** above, beside P2c: 12 dead declarations removed, 3 kept because their rules are grouped.)
 
 **The one change (comment-only, proven inert):** the `:root` block that calls itself "Source of truth
 for tokens" restated three sidebar tokens (`--sidebar-bg`, `--sidebar-bg-2`, `--sidebar-ink`) that the
@@ -358,38 +399,11 @@ than deleting it.
 proceeds in small named batches and stops at the first change that is not countable, because the gate
 suite cannot see a pixel.
 
-### P5c — the 15 dead declarations `lint:styles` cannot see · **queued (CSS — needs your go-ahead)**
-P5 asked the question at *rule* level ("is a whole rule superseded?") and got 0. Re-running it at
-*declaration* level — the level `audit-styles.js` is supposed to check, with the P2c parser bug
-corrected — finds **15 declarations that a later same-selector, same-context rule re-states**, i.e.
-declarations that can never win. They are the same class the project's own header says it removed 281 of
-("0 changed winners"), so deleting them is neutral by the project's own argument, and each row below has
-its killer line named:
+### P5c — see the audit cluster above (next to P2c)
 
-| Dead declaration | Superseded by |
-|---|---|
-| `:192` `.btn-sm2 { padding: 0 12px }` | `:1313` |
-| `:278` `.sched-inspector { min-height: 0 }` | `:582` |
-| `:322` `.tl-day-head { padding: 6px 0 8px }` | `:1585` |
-| `:322` `.tl-day-head { font-size: 11.5px }` | `:1585` |
-| `:322` `.tl-day-head { border-radius: 0 }` | `:1954` |
-| `:402` `.tl-row-track { min-height: var(--tl-track-plain) }` | `:1588` |
-| `:402` `.tl-row-track { border: 1px solid var(--slate-100) }` | `:2001` |
-| `:411` `.tl-block { padding: 5px 10px }` | `:1595` |
-| `:806` `.ts-block { align-items: center }` | `:863` |
-| `:806` `.ts-block { padding: 0 5px }` | `:863` |
-| `:1062` `:root { --sidebar-bg: rgba(15, 20, 36, 0.96) }` | `:2130` |
-| `:1062` `:root { --sidebar-bg-2: rgba(23, 28, 48, 0.92) }` | `:2130` |
-| `:1062` `:root { --sidebar-ink: #cbd5e1 }` | `:2130` |
-| `:1160` `.sidebar { background: radial-gradient(…) }` | `:2142` (the refresh layer's flat ramp) |
-| `:1579` `.ts-page { min-height: 420px }` | `:1580` |
-
-Two of them are the very footguns P5 documented in prose (the three `--sidebar-*` tokens; the sidebar's
-translucent glass) — so this list is that finding, made actionable.
-**Verification available if approved:** for each affected selector, compare the *winning* declaration per
-property in the compiled CSS before and after (last-wins per selector survives minification), rather
-than trusting the argument alone; plus the four gates. Still a `styles.scss` change, so it waits for a
-go-ahead rather than riding in on a `LOW` batch.
+The 12 dead declarations P5 left behind, the 3 grouped ones that must stay, and the compiled-CSS
+verification are recorded under **P5c** above, beside **P2c** — the detector bug that hid them — because
+those two entries are one finding.
 
 ### P6 — Store & component decomposition study · `HIGH` · ⛔ **approval required**
 **Scope:** `core/data.service.ts` (5,190), `core/models.ts` (1,457), `scheduler.component.ts` (1,578 +
@@ -443,7 +457,8 @@ build-time type-checking plus the store harnesses.
 ```bash
 npm run build        # expect: "Application bundle generation complete."  (+ the known 500 kB budget warning)
 npm run lint:ctor    # expect: "✓ field-initializer order OK (8 method-based initializer(s) inspected)."
-npm run lint:styles  # expect: "0 class(es) no template mentions"  (and a re-set count — see P2c)
+npm run lint:styles  # expect: "0 class(es) no template mentions", then "3 declaration(s) re-set"
+                     #         (the grouped rules P5c must not touch — see P2c)
 npm run lint:dead    # expect: "0 imported name(s)…", "0 export(s)…"
 npm run check:store  # expect: 24 harnesses, 202 "ok  " lines, 0 FAIL
 ```
@@ -474,12 +489,13 @@ because the phase added coverage — which must be stated in the log).
 | 1 | 2026-09-12 | **P1** — Documentation truth pass | README structure/gates/roadmap; HANDOFF path + counts + bundle + Categories row + document list; PLAN.md headline + a `check14`–`check24` block with measured counts; PLAN-B.md principle line | `LOW` | **done** — 30 named paths verified to exist, 0 stale references left, gates green at **202 ok / 0 FAIL** (docs only, no `src/` change) |
 | 2 | 2026-09-12 | **P2** — Dead code sweep | 6 unused imports removed; export + orphan sweep over the whole tree; 10 dead exports deleted | `LOW` | **done** — **33 deletions / 0 insertions** in 4 files, 0 orphans in 96 files, gates green at **202 ok / 0 FAIL** |
 | 2b | 2026-09-12 | **P2b** — Dead-code audit as a gate | `scripts/audit-exports.js` + `npm run lint:dead` (report-only; imports, dead exports, file-local API counted separately) | `LOW` | **done** — 46 files / 230 exports → **0** unused imports, **0** dead exports, 24 file-local kept; gates green at **202 ok / 0 FAIL** |
-| 2c | 2026-09-12 | **P2c** — `lint:styles` detector defect | Proved (A/B) that the re-set detector only sees each rule's first declaration: prints `0`, truth is **15**; `!important` also ignored | — | **recorded, not fixed** — one-line fix identified; gate left alone pending a decision. Produced **P5c** |
+| 2c | 2026-09-12 | **P2c** — `lint:styles` detector defect | Proved (A/B) that the re-set detector only saw each rule's first declaration (printed `0`, truth `15`); rewrote the prop extraction to read declarations at their boundaries, importance-aware, and documented the per-selector/grouped-rule caveat | `LOW` | **done** — the gate now prints `3 declaration(s) re-set` (the grouped pairs it must keep reporting); dead-class line still 0; gates green at **202 ok / 0 FAIL** |
 | 3 | 2026-09-12 | **P3** — Naming & formatting | `ims-admin-verticals` → `ims-verticals`; the two `.editorconfig` whitespace violations in `styles.scss`; naming audit over all 99 files | `LOW` | **done** — 2 lines changed in `styles.scss` + 1 selector, 0 non-kebab files / 0 non-PascalCase classes, gates green at **202 ok / 0 FAIL** |
 | 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | Shell router subscriptions given `takeUntilDestroyed`; every listener/observer site audited; telemetry + scheduler "leaks" disproved by reading | `LOW` | **done** — 12 insertions / 6 deletions in `app.component.ts`, 0 real leaks, gates green at **202 ok / 0 FAIL**; Timesheet mid-drag gap recorded as **P4b** (not fixed) |
 | 4b | 2026-09-12 | **P4b** — Timesheet drag handlers | Drag listeners bound as fields, `endDrag()`/`detachDrag()`, `ngOnDestroy` detaches (Scheduler's tracked-handler pattern) | `LOW` | **done** — 36 insertions / 15 deletions in `timesheet.component.ts`, gates green at **202 ok / 0 FAIL**; Scheduler *resize* gap recorded as **P4c** (not fixed) |
 | 4c | 2026-09-12 | **P4c** — Scheduler resize handlers | Same shape as its whole-block drag: `onResizePointer`/`endResizePointer` + `detachResize()` that removes them and clears state | `LOW` | **done** — 17 insertions / 5 deletions in `scheduler.component.ts`, gates green at **202 ok / 0 FAIL** |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | All 26 sheets (828 rules) run through 4 mechanical detectors; layer structure of `styles.scss` mapped; one comment added at the token footgun | `MED` | **done, 0 removals** — nothing is provably removable (0 unused / 0 duplicate rules / 0 duplicate declarations / 0 superseded rules); 4 insertions / 1 deletion, CSS bundle hash **byte-identical**, gates green at **202 ok / 0 FAIL**. Deeper work recorded as **P5b** (restructure, ⛔) |
+| 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
 | 8 | 2026-09-12 | **P8** — Change-detection study | | `HIGH` | ⛔ awaiting approval |
@@ -509,8 +525,8 @@ because the phase added coverage — which must be stated in the log).
 | `!important` inventory | 4 sites (`styles.scss:1370`, `1436`, `1945`, `admin.component.scss:72`); the Bootstrap *library* is not loaded, so each fights a higher-specificity rule in these same files | P5 — documented, untouched (each is a cascade change) |
 | Cross-boundary style overlap | **50** class names defined in both the global sheet (326 classes) and a component sheet; `scheduler.component.scss` accounts for 27 | P5 — documented as **not** safely collapsible (encapsulation rewrites the component copy to out-specify the global one) |
 | Dead-code gate | `npm run lint:dead` (46 files, 230 exports → 0 unused imports, 0 dead exports, 24 file-local API kept) plus README/HANDOFF/recipe updated | P2b ✔ |
-| `lint:styles` "re-set" detector | Prints `0 declaration(s) re-set`; the true count is **15** across 9 selectors. Root cause proved A/B: the parser only sees a rule's *first* declaration; `!important` is ignored too | **P2c** — fix identified, not applied (gate) |
-| 15 dead declarations in `styles.scss` | Listed with their killer lines, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass background | **P5c** — queued (CSS, needs go-ahead) |
+| `lint:styles` "re-set" detector | Printed `0 declaration(s) re-set`; the true count was **15** across 9 selectors. Root cause proved A/B: the parser only saw a rule's *first* declaration; `!important` ignored too | **P2c ✔** — fixed (boundary-read, importance-aware); now prints 3 |
+| 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |
 | Harness subjects undocumented | `check14`–`check24` (Phase B/C, 61 checks) had no entry in the verification recipe at all | P1 ✔ (block appended with measured counts) |
 
@@ -522,5 +538,6 @@ because the phase added coverage — which must be stated in the log).
 | 2026-09-12 | User approved executing **P1–P4 as one batch, one commit per phase, pausing for review before P5** | chat |
 | 2026-09-12 | User approved **P4b** (Timesheet drag handlers) and **pushing the batch to `origin`** | chat |
 | 2026-09-12 | User approved **pushing P5**, then **P2b** (dead-code audit gate) + **P4c** (Scheduler resize). P2c (the `lint:styles` fix) and P5c (the 15 declarations) are reported but **not** started | chat |
+| 2026-09-12 | User approved **P2c** (fix the detector) and **P5c** (delete the dead declarations), verified against the compiled CSS's winning values | chat |
 
 
