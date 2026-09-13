@@ -321,12 +321,8 @@
 }
 .tl-day-head {
   text-align: center;
-  font-size: 11.5px;
   font-weight: 700;
   background: var(--slate-100);
-  /* square: the header band sits flush on the rows below it (table, not chips) */
-  border-radius: 0;
-  padding: 6px 0 8px;
 }
 .tl-day-hours > div {
   font-size: 9.5px;
@@ -402,10 +398,8 @@
 .tl-row-track {
   position: relative;
   background: var(--tl-band-track);
-  border: 1px solid var(--slate-100);
   /* square + flush: adjacent rows share one continuous gridline */
   border-radius: 0;
-  min-height: var(--tl-track-plain);
 }
 
 .tl-block {
@@ -423,7 +417,6 @@
   color: var(--tint-ink, var(--tl-base-ink));
   border: 1px solid color-mix(in srgb, var(--tint-accent, var(--tl-base-accent)) 40%, transparent);
   border-left: 3px solid var(--tint-accent, var(--tl-base-accent));
-  padding: 5px 10px;
   /* the block body drags the whole window (see `startMove`) — the edge handles
      resize it instead */
   cursor: grab;
@@ -805,7 +798,7 @@
 
 .ts-block {
   position: absolute; border-radius: 4px; font-size: 10px; font-weight: 700;
-  padding: 0 5px; display: flex; align-items: center; white-space: nowrap; overflow: hidden;
+  display: flex; white-space: nowrap; overflow: hidden;
   cursor: pointer; box-sizing: border-box;
   /* same pastel treatment as the scheduler bars */
   background: var(--tint-bg, var(--slate-100));
@@ -1098,13 +1091,10 @@ i.ts-lunch { color: var(--tcol); }
   --teal-soft: #e2f4f1;
   --pink-soft: #fce7f3;
 
-  /* surfaces — the three `--sidebar-*` colour tokens below are restated by the
-     visual-refresh `:root` near the end of this file, which loads last: tune those
-     there, not here (this block is the pre-refresh value). `--sidebar-active` is
-     declared only here. Runs, not values: `:root` itself is not duplicated. */
-  --sidebar-bg: rgba(15, 20, 36, 0.96);
-  --sidebar-bg-2: rgba(23, 28, 48, 0.92);
-  --sidebar-ink: #cbd5e1;
+  /* surfaces — `--sidebar-active` is this block's own. The rest of the `--sidebar-*` ramp
+     is declared by the visual-refresh `:root` near the end of this file (it loads last),
+     so tune the ramp there. The pre-refresh values that used to sit here were dead
+     declarations — a later `:root` re-set them, so they could never win (see P5c). */
   --sidebar-active: #eef2ff;
 
   /* spacing scale (8pt) */
@@ -1164,9 +1154,6 @@ a { color: var(--brand); }
   position: sticky;
   top: 0;
   height: 100vh;
-  background:
-    radial-gradient(600px 300px at 10% 0%, rgba(99, 102, 241, .20), transparent 60%),
-    linear-gradient(180deg, var(--sidebar-bg), var(--sidebar-bg-2));
   color: var(--sidebar-ink);
   z-index: 40;
   transition: transform var(--t-med), width var(--t-med);
