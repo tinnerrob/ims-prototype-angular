@@ -24,6 +24,7 @@ globalThis.localStorage = {
 };
 
 const { DataService } = await import('./data.service.js');
+const { fmtDT, fmtDate, int, money, parseDT, pct } = await import('./format.js');
 const {
   CATALOG_TYPES,
   ROLES,
@@ -133,6 +134,39 @@ check('the store\'s own date format is MM/DD/YYYY with an em dash for nothing', 
   assert.equal(d.fmtDate('2026-12-31'), '12/31/2026');
   assert.equal(d.fmtDate(null), '—');
   assert.equal(d.fmtDate(''), '—');
+});
+
+check('the extracted format module is pure, and the store methods are its delegates', () => {
+  assert.equal(money(1234.5), '$1,234.50');
+  assert.equal(money(0), '$0.00');
+  assert.equal(money(null), '$0.00', 'nothing reads as zero rather than "$NaN"');
+  assert.equal(int(1234), '1,234');
+  assert.equal(int(null), '0');
+  assert.equal(pct(12.34), '12.3%');
+  assert.equal(pct(null), '0.0%');
+  assert.equal(fmtDate('2026-08-01'), '08/01/2026');
+  assert.equal(fmtDT('2026-08-01 10:30'), '08/01/2026 10:30');
+  assert.equal(fmtDT(null), '—');
+
+  const parsed = parseDT('2026-08-01');
+  assert.equal(`${parsed.getFullYear()}-${parsed.getMonth() + 1}-${parsed.getDate()}`, '2026-8-1');
+  assert.equal(parsed.getHours(), 0, 'a date-only string is local midnight, not UTC');
+  const source = new Date(2026, 0, 1);
+  const copy = parseDT(source);
+  copy.setFullYear(1999);
+  assert.equal(source.getFullYear(), 2026, 'a Date argument is copied, not aliased');
+
+  /* P6/1: the store keeps these six as thin delegates, so the two must agree — a second
+     implementation hiding behind the same name is the thing this line exists to catch. */
+  for (const [viaStore, direct] of [
+    [d.money(1234.5), money(1234.5)],
+    [d.int(1234), int(1234)],
+    [d.pct(12.34), pct(12.34)],
+    [d.fmtDate('2026-08-01'), fmtDate('2026-08-01')],
+    [d.fmtDT('2026-08-01 10:30'), fmtDT('2026-08-01 10:30')],
+  ]) {
+    assert.equal(viaStore, direct);
+  }
 });
 
 console.log(`\ncheck25: ${n} checks`);

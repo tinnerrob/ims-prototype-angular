@@ -47,7 +47,7 @@ everywhere (**27** `standalone: true`, **0** `NgModule`).
 | Signals | 12 `signal(`/`computed(`/`effect(` uses; the store is a **mutable singleton**, not signal-based | `grep signal(` |
 | Change detection | **0** `ChangeDetectionStrategy` / `OnPush` — all components are default | `grep ChangeDetectionStrategy` |
 | Tests | **0** `*.spec.ts` (Karma is configured but empty) | `find src -name '*.spec.ts'` |
-| Verification culture | `npm run check:store` = 25 Node harnesses = **209 checks** (202 at baseline; P9 added check25 over the pure helpers); plus 2 hand-rolled audits and the build | `scripts/`, `package.json` |
+| Verification culture | `npm run check:store` = 25 Node harnesses = **210 checks** (202 at baseline; P9 added check25 and P6a extended it); plus 2 hand-rolled audits and the build | `scripts/`, `package.json` |
 | Bundle | build warns `initial exceeded maximum budget … 500 kB` at **~830 kB** (error budget 1 MB); **all routes eager** (0 `loadComponent`) | `ng build`, `angular.json`, `app.routes.ts` |
 | Marker hygiene | **0** `console.*`, `TODO`, `FIXME`, `XXX`, `HACK` in `src` | `grep -rnE …` |
 | Selectors | **All** `ims-*` except the shell's `app-root`; one mismatch: `ims-admin-verticals` lives in `verticals.component.ts` (`VerticalsComponent`) | `grep 'selector:'` |
@@ -512,6 +512,29 @@ natural first customer of P9.
 phase was scoped to the proposal, and because the log's own rule is that a phase documents before the
 next one executes. Say the word and 1 goes first (smallest, pure), then 2 (biggest, but pure data).
 
+### P6a — the `format` extraction · `LOW` · status: **done (2026-09-12)**
+**Done:** the store's `format` section — its only one with **no store state** and **no inbound calls**
+from any other section (P6's measurement) — moved to `core/format.ts`: `money`, `int`, `pct`, `parseDT`,
+`fmtDate`, `fmtDT`, now plain `export function`s with the same bodies. `DataService` keeps all six as
+**thin one-line delegates**, because `data.money(…)` / `data.fmtDate(…)` is what **187 call sites across
+19 files** already write — not one of them changed. The section's banner comment says so, so the next
+reader does not mistake the bare names inside a delegate for recursion.
+**Why this one first:** it is the smallest extraction with a real boundary — arguments in, strings out,
+nothing to thread through — and `check:store` already exercises its output through the store (money in
+check5/6/7/13, date stamps in the inspection/handoff harnesses).
+**The verification, including the part that matters:** `check25` grew from 7 to **8** checks, driving
+the new module *directly* — money/int/pct shapes, the date stamps, `parseDT`'s local-midnight rule and
+its copy-a-Date behaviour — **and asserting the store's six methods agree with it**, which is the line
+that catches a second implementation hiding behind the same name. `check:store` is now **210 ok /
+0 FAIL**, and the harnesses that go *through* the store passed unchanged before and after — the
+behavioural proof that the extraction was transparent.
+**Docs:** README's core list now reads `format.ts period.ts pricing.ts` (the third member of B1's
+extracted-helper family); PLAN.md's `check25` entry says 8; the count is updated wherever it is quoted
+as current (README, HANDOFF, PLAN.md, PLAN-B.md, and this log's recipe + baseline row).
+**Next in P6's order:** the seeds → `core/seed/*.ts` (~1,050 lines of pure data and row factories, no
+inbound and no external call sites, already scoped in PLAN-B's B1). Bigger, but more mechanical still,
+with the same proof: `check:store` asserts the fixture end to end.
+
 ### P7 — Routing & bundle shape · `HIGH` · status: **done (2026-09-12) — every feature page is now its own chunk**
 **Done:** `app.routes.ts` keeps **two** pages eager — the dashboard (the landing page a fresh load
 renders, so a chunk round-trip buys nothing) and the Administration shell (the frame its children move
@@ -651,7 +674,7 @@ npm run lint:ctor    # expect: "✓ field-initializer order OK (8 method-based i
 npm run lint:styles  # expect: "0 class(es) no template mentions", then "3 declaration(s) re-set"
                      #         (the grouped rules P5c must not touch — see P2c)
 npm run lint:dead    # expect: "0 imported name(s)…", "0 export(s)…"
-npm run check:store  # expect: 25 harnesses, 209 "ok  " lines, 0 FAIL
+npm run check:store  # expect: 25 harnesses, 210 "ok  " lines, 0 FAIL
 ```
 
 One-liner used to compare a phase against the baseline:
@@ -663,7 +686,7 @@ npm run check:store 2>&1 | grep -cE '^  ok' ; npm run check:store 2>&1 | grep -c
 ```
 
 **Baseline values to match:** `complete` · `✓ field-initializer order OK (8 …)` ·
-`0 class(es) no template mentions` · **2** (`lint:dead`'s two "0 …" lines) · **209** · **0**.
+`0 class(es) no template mentions` · **2** (`lint:dead`'s two "0 …" lines) · **210** · **0**.
 
 A phase is not finished until those five numbers/strings are unchanged (or *better*, e.g. more checks
 because the phase added coverage — which must be stated in the log).
@@ -701,6 +724,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 5b | 2026-09-12 | **P5b** — Restructure, measured | Measured every provable restructure (all 0) + unread custom properties (13); deleted the 2 stale ones with their false comment; added `scripts/css-equivalence.js` + `npm run css:equiv` | `MED` | **done** — equivalence check: 619 selectors both sides, **only** the 2 deleted declarations differ; 11 unread scale/palette tokens reported and kept; the reorder restructure shown unprovable without a browser |
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
+| 6a | 2026-09-12 | **P6a** — Extract `format` → `core/format.ts` | The store's only 0-inbound section moved to a module; six one-line delegates keep 187 call sites working; `check25` extended to drive the module and assert the delegates agree | `LOW` | **done** — store diff: 6 bodies → 6 delegates; `check:store` **210 ok / 0 FAIL**; docs + counts updated |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; identified `field-editor` as the only safe pilot | `HIGH` | **done (study)** — no sweep recommended and none applied: a stale view is invisible to every gate here. Pilot (one line) ready on request; the real fix is signals in the store |
 | 9 | 2026-09-12 | **P9** — Component/template test gap | Added `check25.mjs` (7 checks) over the previously untested pure helpers; registered it; updated the count everywhere | `HIGH` | **done** — `check:store` **209 ok / 0 FAIL in 25 harnesses**; two contract facts pinned by the new checks; template/visual verification still blocked (no browser) with three options recorded |
@@ -736,7 +760,8 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | No unit tests | 0 `*.spec.ts` | **P9 ✔** (partly) — `check25` covers the pure helpers (209 checks in 25 harnesses); templates/visuals still need a browser: options (a) Karma+browser, (b) Playwright smoke flows, (c) more pure-function harnesses |
 | No `OnPush` | 0 of 27 components | **P8 ✔** (study) — 18 templates read the mutable store inline; no sweep; `field-editor` is the one safe pilot, unapplied pending a browser look |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
-| Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |
+| Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound — **done in P6a**) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |
+| The `format` section | 6 pure methods, 0 inbound cross-section calls, 187 call sites outside the store | **P6a ✔** — moved to `core/format.ts` behind six delegates; check25 (8 checks) drives the module and pins the delegate agreement |
 | Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |
 | Harness subjects undocumented | `check14`–`check24` (Phase B/C, 61 checks) had no entry in the verification recipe at all | P1 ✔ (block appended with measured counts) |

@@ -22,7 +22,7 @@ that compile the core services to JS and drive the *real* store from Node (no
 browser, no server), plus two hand-rolled audits:
 
 ```bash
-npm run check:store   # 209 runtime checks against the real store
+npm run check:store   # 210 runtime checks against the real store
 npm run lint:ctor     # class-field initializer order
 npm run lint:styles   # unused / re-set stylesheet rules
 npm run lint:dead     # imported & exported names nothing references
@@ -40,7 +40,7 @@ src/app/
 │   ├── vertical-metadata.ts # The business-type registry — the *seed* for a tenant's own verticals
 │   ├── modules.service.ts   # Module licence flags (+ module.guard.ts: requireModule)
 │   ├── session.service.ts   # Who the app is acting as (workspace + person) + can() permissions
-│   ├── period.ts pricing.ts # Pure date/period and money/billing helpers
+│   ├── format.ts period.ts pricing.ts # Pure value/date formatting, date-period and money helpers
 │   └── views.ts page-search.service.ts telemetry.service.ts
 ├── features/
 │   ├── admin/           # Administration: Locations · Business type & Categories · Feature Modules

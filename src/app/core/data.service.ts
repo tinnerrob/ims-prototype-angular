@@ -78,6 +78,7 @@ import { VERTICAL_METADATA, VerticalMetadata, VerticalTabMeta, verticalMetaFor, 
  * block so every existing `from '../../core/data.service'` import keeps working
  * unchanged; only `DataService` itself reads them locally.
  */
+import { fmtDT, fmtDate, int, money, parseDT, pct } from './format';
 import {
   dISO,
   hmMin,
@@ -686,44 +687,36 @@ export class DataService {
   }
 
   /* ------------------------------- format ------------------------------- */
+  /* Thin delegates to `core/format.ts` (P6/1). The bodies were pure — no store state
+     and nothing else in the store read them — so they live in their own module now.
+     The methods stay because `data.money(…)` / `data.fmtDate(…)` is what the pages call;
+     the bare names inside these bodies are the module's functions. */
 
   money(n: number | null | undefined): string {
-    return '$' + Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return money(n);
   }
 
   int(n: number | null | undefined): string {
-    return Number(n ?? 0).toLocaleString('en-US');
+    return int(n);
   }
 
   pct(n: number | null | undefined): string {
-    return (Number(n) || 0).toFixed(1) + '%';
+    return pct(n);
   }
 
   /** Parse a date / ISO string; date-only strings are local midnight (prototype `parseDT`). */
   parseDT(s: string | Date): Date {
-    if (s instanceof Date) return new Date(s.getTime());
-    const str = String(s).replace(' ', 'T');
-    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-      const [y, m, d] = str.split('-').map(Number);
-      return new Date(y, m - 1, d);
-    }
-    return new Date(str);
+    return parseDT(s);
   }
 
   /** MM/DD/YYYY (prototype `fmtDate`). */
   fmtDate(iso: string | null | undefined): string {
-    if (!iso) return '—';
-    const d = this.parseDT(iso);
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()}`;
+    return fmtDate(iso);
   }
 
   /** MM/DD/YYYY HH:mm (prototype `fmtDT`). */
   fmtDT(iso: string | null | undefined): string {
-    if (!iso) return '—';
-    const d = this.parseDT(iso);
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${p(d.getMonth() + 1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+    return fmtDT(iso);
   }
 
   /* ------------------------------- parties ------------------------------ */
