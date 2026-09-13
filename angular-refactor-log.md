@@ -163,7 +163,22 @@ widening this phase.
 4. CSS: keep `npm run lint:styles` as the oracle and delete only what it proves unreferenced.
 **Acceptance:** gates green; the diff is deletions plus the import lines, nothing else.
 
-### P3 — Naming & formatting consistency · `LOW` · status: **queued**
+### P3 — Naming & formatting consistency · `LOW` · status: **done (2026-09-12)**
+**Done:** renamed the one selector that did not match its component — `ims-admin-verticals` →
+`ims-verticals` on `VerticalsComponent` (checked first: no template, doc or script references it, so
+no call site moved). Trimmed the only two `.editorconfig` violations in `src` — a whitespace-only line
+and a trailing space, both in `styles.scss`.
+**Audited, nothing to do:** 99 files, **0** non-kebab basenames, **0** non-PascalCase exported
+classes, 0 missing final newlines, 0 CRLF, 0 tabs. (First pass of the audit reported nonsense because
+the regex forbade the dot in `*.component.ts` — re-run corrected; worth remembering if it becomes a
+gate.)
+**Deliberately not done:** import *ordering*. The `core`/`shared` import groups are not alphabetical
+anywhere in this project and no config says they should be, so enforcing one would be inventing a
+convention mid-sequence — the same reason Prettier/ESLint stay out (they remain an end-of-sequence
+⛔ decision, not a mid-refactor one).
+**Verified:** `trailing-whitespace lines: 0`; `ims-verticals` declared once and referenced by nothing
+else (24 `ims-*` selectors, all matching their files); gates green (build `complete` · `lint:ctor` OK ·
+**202 ok / 0 FAIL**).
 **Scope:** the drift rows in Section 1 — nothing stylistic for its own sake.
 **Do:** rename `ims-admin-verticals` → `ims-verticals` (confirm the selector is used by no template
 first — if it is, that is a separate review); normalise trailing whitespace and final newlines per
@@ -302,7 +317,7 @@ because the phase added coverage — which must be stated in the log).
 | 0 | 2026-09-12 | **Baseline** | Read-only survey of the whole tree: file/LOC/import/selector/subscription/`any`/budget counts, gate run, and the doc-drift check. No source changed | — | Gates green at `17c35c3`: build `complete`, `lint:ctor` OK, `lint:styles` 0 unused, `check:store` **202 ok / 0 FAIL**. Assessment + phase list written (Sections 1–5) |
 | 1 | 2026-09-12 | **P1** — Documentation truth pass | README structure/gates/roadmap; HANDOFF path + counts + bundle + Categories row + document list; PLAN.md headline + a `check14`–`check24` block with measured counts; PLAN-B.md principle line | `LOW` | **done** — 30 named paths verified to exist, 0 stale references left, gates green at **202 ok / 0 FAIL** (docs only, no `src/` change) |
 | 2 | 2026-09-12 | **P2** — Dead code sweep | 6 unused imports removed; export + orphan sweep over the whole tree; 10 dead exports deleted | `LOW` | **done** — **33 deletions / 0 insertions** in 4 files, 0 orphans in 96 files, gates green at **202 ok / 0 FAIL** |
-| 3 | 2026-09-12 | **P3** — Naming & formatting | | `LOW` | *queued* |
+| 3 | 2026-09-12 | **P3** — Naming & formatting | `ims-admin-verticals` → `ims-verticals`; the two `.editorconfig` whitespace violations in `styles.scss`; naming audit over all 99 files | `LOW` | **done** — 2 lines changed in `styles.scss` + 1 selector, 0 non-kebab files / 0 non-PascalCase classes, gates green at **202 ok / 0 FAIL** |
 | 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | Shell router subscriptions given `takeUntilDestroyed`; every listener/observer site audited; telemetry + scheduler "leaks" disproved by reading | `LOW` | **done** — 12 insertions / 6 deletions in `app.component.ts`, 0 real leaks, gates green at **202 ok / 0 FAIL**; Timesheet mid-drag gap recorded as **P4b** (not fixed) |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | | `MED` | *queued* |
 | 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
@@ -319,7 +334,9 @@ because the phase added coverage — which must be stated in the log).
 | File-local API types | 11 exports used only inside their own file (`MovementInput`, `GeoAlert`, `ViewGroup`, `ConfirmRequest`, …) | P2 — kept deliberately, not dead |
 | Orphan files | 0 of 96 (every component/service/directive is named elsewhere) | P2 ✔ |
 | Stale doc references | `README.md`: `features/categories/`, `features/items/`; `HANDOFF.md`: old checkout path, "140 checks", "~738 kB", Categories feature row | P1 |
-| Selector mismatch | `ims-admin-verticals` on `VerticalsComponent` | P3 |
+| Selector mismatch | `ims-admin-verticals` on `VerticalsComponent` | P3 ✔ (renamed; nothing referenced it) |
+| Whitespace drift | 2 `.editorconfig` violations in `src` (both `styles.scss`) | P3 ✔ |
+| Naming conventions | 99 files: 0 non-kebab basenames, 0 non-PascalCase exported classes, 0 CRLF/tabs/missing final newlines | P3 ✔ (already clean) |
 | Possible lifecycle leaks | `telemetry.service.ts:66/71` (`setInterval`), `scheduler.component.ts:1512` (deferred global listener removal) | P4 ✔ — both disproved: the sim is started/stopped by the shell, the listener self-removes within 400 ms |
 | Timesheet mid-drag listeners | `timesheet.component.ts:519-532` — `ngOnDestroy` nulls `drag` but leaves a live drag's `mousemove`/`mouseup` on `window` (they self-heal on the next `mouseup`) | **P4b** (optional, needs go-ahead: copy the Scheduler's tracked-handler pattern) |
 | Telemetry sim vs module flag | The shell starts the sim on `ngOnInit` if the module is enabled; disabling the module later leaves it ticking until reload | P4 — observed, deliberately unchanged (behaviour) |
