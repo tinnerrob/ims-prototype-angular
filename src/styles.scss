@@ -1098,7 +1098,10 @@ i.ts-lunch { color: var(--tcol); }
   --teal-soft: #e2f4f1;
   --pink-soft: #fce7f3;
 
-  /* surfaces */
+  /* surfaces — the three `--sidebar-*` colour tokens below are restated by the
+     visual-refresh `:root` near the end of this file, which loads last: tune those
+     there, not here (this block is the pre-refresh value). `--sidebar-active` is
+     declared only here. Runs, not values: `:root` itself is not duplicated. */
   --sidebar-bg: rgba(15, 20, 36, 0.96);
   --sidebar-bg-2: rgba(23, 28, 48, 0.92);
   --sidebar-ink: #cbd5e1;

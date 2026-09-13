@@ -247,7 +247,54 @@ against a future re-scope, not a leak fix.
 **Acceptance:** gates green; Telemetry still ticks; the Scheduler's single/double-click handling is
 unchanged (it deliberately waits out a 250 ms window).
 
-### P5 — Stylesheet consolidation · `MED` · status: **queued (needs a visual review)**
+### P5 — Stylesheet consolidation · `MED` · status: **done (2026-09-12) — no removals; the audit is the deliverable**
+**Analyzed:** all 26 SCSS files (**828** rules) with four mechanical detectors, plus the layer
+structure of `styles.scss` (2,477 lines).
+
+| Detector | Result |
+|---|---|
+| Unused class names (`npm run lint:styles`) | **0** |
+| Exact duplicate rules (same `@media` context + selector + declarations) | **0** |
+| Duplicate declarations inside one block | **0** |
+| A property declared twice in one block (the first silently loses) | **0** |
+| A rule whose every property is re-stated later for the same selector in the same context (so deleting it cannot change any computed value) | **0** |
+
+**Conclusion: nothing in these stylesheets can be removed without a visual review.** The file is not
+carrying dead weight — it is long because of the layered design its own header documents: ported
+prototype CSS first, then feature blocks, then an additive *visual refresh* layer loaded LAST whose
+whole purpose is to restate the same selectors with **different** values. That is why 92 selectors are
+declared more than once yet no two declarations are identical: those repeats *are* the overrides.
+
+**The one change (comment-only, proven inert):** the `:root` block that calls itself "Source of truth
+for tokens" restated three sidebar tokens (`--sidebar-bg`, `--sidebar-bg-2`, `--sidebar-ink`) that the
+refresh `:root` near the end of the file overrides — so editing them in the first block does nothing.
+It now says so, in the file, where the temptation occurs. Nothing else was added: the refresh block
+already documents its own layering, its four goals and its "no geometry changes" promise, better than
+any map I would have written.
+**Proof it is inert:** the production CSS bundle hash is **byte-identical** before and after
+(`2638d90cfda0896358843660330c99f1a8dc888ead94cad78e57f20c384a4058`, `styles-AN6RIW43.css`) — comments
+are stripped by the compiler, so the emitted CSS *cannot* have changed. That is the strongest
+verification available to this phase without a browser.
+
+**Reported, deliberately untouched:**
+- **`!important` — 4 sites:** `styles.scss:1370` (`.text-danger`), `1436` (`.hidden`), `1945`
+  (`.tl-inner { min-width: 0 }`), `admin.component.scss:72` (`.admin-nav-chev` font-size). Bootstrap
+  the *library* is not loaded at all (`angular.json`'s `styles` array is `src/styles.scss` alone; no
+  `@import`, no dependency), so these are not fighting Bootstrap — each beats a higher-specificity rule
+  in these same files, which is exactly why retiring one is a cascade change needing the pages in front
+  of a human. (The `.tl-inner` one at least sits under a section comment stating its intent.)
+- **Cross-boundary overlap: 50 class names** are defined in *both* the global sheet (326 class names)
+  and a component sheet — `scheduler.component.scss` alone accounts for **27**. These are *not*
+  collapsible the way duplicates would be: Angular's emulated encapsulation rewrites a component rule
+  to `[_ngcontent-*]`, which out-specifies the global one, so the two copies may legitimately disagree
+  and the component's wins inside its own view. Consolidating them means deciding per rule which layer
+  owns it — a restructure, not a cleanup.
+
+**If the goal is a smaller stylesheet rather than a proven-clean one,** that is that restructure:
+promote every override into the refresh layer, delete the superseded ported rules, diff the rendered
+pages. ⛔ with a visual review — recorded as **P5b (optional)**, not attempted here.
+**Verified:** gates green (build `complete` · `lint:ctor` OK · `lint:styles` 0 unused · **202 ok /
+0 FAIL**); diff is **4 insertions / 1 deletion** in `styles.scss` (one comment); CSS hash unchanged.
 **Scope:** `src/styles.scss` (2,477 lines) + the 26 component sheets.
 **Do:** inventory duplicate/overlapping rules between the ported layer and the additive "visual
 refresh" layer; collapse only the provably identical ones; where a rule deliberately overrides
@@ -341,7 +388,7 @@ because the phase added coverage — which must be stated in the log).
 | 3 | 2026-09-12 | **P3** — Naming & formatting | `ims-admin-verticals` → `ims-verticals`; the two `.editorconfig` whitespace violations in `styles.scss`; naming audit over all 99 files | `LOW` | **done** — 2 lines changed in `styles.scss` + 1 selector, 0 non-kebab files / 0 non-PascalCase classes, gates green at **202 ok / 0 FAIL** |
 | 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | Shell router subscriptions given `takeUntilDestroyed`; every listener/observer site audited; telemetry + scheduler "leaks" disproved by reading | `LOW` | **done** — 12 insertions / 6 deletions in `app.component.ts`, 0 real leaks, gates green at **202 ok / 0 FAIL**; Timesheet mid-drag gap recorded as **P4b** (not fixed) |
 | 4b | 2026-09-12 | **P4b** — Timesheet drag handlers | Drag listeners bound as fields, `endDrag()`/`detachDrag()`, `ngOnDestroy` detaches (Scheduler's tracked-handler pattern) | `LOW` | **done** — 36 insertions / 15 deletions in `timesheet.component.ts`, gates green at **202 ok / 0 FAIL**; Scheduler *resize* gap recorded as **P4c** (not fixed) |
-| 5 | 2026-09-12 | **P5** — Stylesheet consolidation | | `MED` | *queued* |
+| 5 | 2026-09-12 | **P5** — Stylesheet consolidation | All 26 sheets (828 rules) run through 4 mechanical detectors; layer structure of `styles.scss` mapped; one comment added at the token footgun | `MED` | **done, 0 removals** — nothing is provably removable (0 unused / 0 duplicate rules / 0 duplicate declarations / 0 superseded rules); 4 insertions / 1 deletion, CSS bundle hash **byte-identical**, gates green at **202 ok / 0 FAIL**. Deeper work recorded as **P5b** (restructure, ⛔) |
 | 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
 | 8 | 2026-09-12 | **P8** — Change-detection study | | `HIGH` | ⛔ awaiting approval |
@@ -366,7 +413,10 @@ because the phase added coverage — which must be stated in the log).
 | Eager routes | 0 `loadComponent` of 16 features; initial bundle ~830 kB vs 500 kB warn budget | P7 |
 | No `OnPush` | 0 of 27 components | P8 |
 | No unit tests | 0 `*.spec.ts` | P9 |
-| Global stylesheet concentration | 2,477 of 8,927 SCSS lines in one file; `lint:styles` reports 0 unused class names, so the debt is overlap, not dead rules | P5 |
+| Global stylesheet concentration | 2,477 of 8,927 SCSS lines in one file; `lint:styles` reports 0 unused class names, so the debt is overlap, not dead rules | P5 ✔ — measured: 828 rules, **0** duplicates/protected-dead rules anywhere. The length is the layered design, not waste |
+| Token footgun | `styles.scss`'s ":root … Source of truth for tokens" restated `--sidebar-bg`, `--sidebar-bg-2`, `--sidebar-ink`, which the refresh `:root` (line 2127) overrides — 3 of its 50 tokens are dead values | P5 ✔ — comment added where the temptation is (comment-only; CSS hash unchanged) |
+| `!important` inventory | 4 sites (`styles.scss:1370`, `1436`, `1945`, `admin.component.scss:72`); the Bootstrap *library* is not loaded, so each fights a higher-specificity rule in these same files | P5 — documented, untouched (each is a cascade change) |
+| Cross-boundary style overlap | **50** class names defined in both the global sheet (326 classes) and a component sheet; `scheduler.component.scss` accounts for 27 | P5 — documented as **not** safely collapsible (encapsulation rewrites the component copy to out-specify the global one) |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |
 | Harness subjects undocumented | `check14`–`check24` (Phase B/C, 61 checks) had no entry in the verification recipe at all | P1 ✔ (block appended with measured counts) |
 
