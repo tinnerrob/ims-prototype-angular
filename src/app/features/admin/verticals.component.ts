@@ -78,7 +78,7 @@ const CATEGORY_ICONS: string[] = [
  * The Assets page reads exactly these rows, so this is where the catalog is defined.
  */
 @Component({
-  selector: 'ims-admin-verticals',
+  selector: 'ims-verticals',
   standalone: true,
   imports: [FieldEditorComponent, FormsModule, ModalDismissDirective, TipDirective],
   templateUrl: './verticals.component.html',
