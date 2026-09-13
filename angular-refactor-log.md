@@ -47,7 +47,7 @@ everywhere (**27** `standalone: true`, **0** `NgModule`).
 | Signals | 12 `signal(`/`computed(`/`effect(` uses; the store is a **mutable singleton**, not signal-based | `grep signal(` |
 | Change detection | **0** `ChangeDetectionStrategy` / `OnPush` — all components are default | `grep ChangeDetectionStrategy` |
 | Tests | **0** `*.spec.ts` (Karma is configured but empty) | `find src -name '*.spec.ts'` |
-| Verification culture | `npm run check:store` = 27 Node harnesses = **236 checks** (202 at baseline; P9 added check25; P9b/P6/3/P6/4 added check26, the first to reach a component; P10 added check27, which drives the component's gestures); plus 2 hand-rolled audits, the build and `npm run e2e` | `scripts/`, `package.json` |
+| Verification culture | `npm run check:store` = 28 Node harnesses = **246 checks** (202 at baseline; P9 added check25; P9b/P6/3/P6/4 added check26, the first to reach a component; P10 added check27 for its gestures; P11 added check28 for its modal editors); plus 2 hand-rolled audits, the build and `npm run e2e` | `scripts/`, `package.json` |
 | Bundle | build warns `initial exceeded maximum budget … 500 kB` at **~830 kB** (error budget 1 MB); **all routes eager** (0 `loadComponent`) | `ng build`, `angular.json`, `app.routes.ts` |
 | Marker hygiene | **0** `console.*`, `TODO`, `FIXME`, `XXX`, `HACK` in `src` | `grep -rnE …` |
 | Selectors | **All** `ims-*` except the shell's `app-root`; one mismatch: `ims-admin-verticals` lives in `verticals.component.ts` (`VerticalsComponent`) | `grep 'selector:'` |
@@ -561,6 +561,41 @@ are true by construction, which is the point: a check that guesses a field name 
 nothing could test it — "it is P9's first customer". `check26` is that customer's net: extract, then
 prove the same numbers by running the same assertions against the extracted functions.
 
+### P11 — the modal editors · `MED` · status: **done (2026-09-12)**
+**The last gap, and the one P6/4 and P10 both pointed at.** `openOrder()`/`saveOrder()` and
+`openRes()`/`saveRes()` are the app's only *creation* paths — and the code the component never had a
+reason to expose: they seed a form from the surrounding context, validate it, coerce its numbers, and
+write through with a set of documented fallbacks. P10 proved the gestures need no browser; this proved
+the same of the editors, and for a stronger reason: **the component references `document` nowhere at
+all** (0 hits), so `window`'s listeners are the only global it touches.
+**check28 (10 checks)** drives both editors against the real store:
+opening the New Order editor seeds a complete form *and is not an edit* (`orderDirty()` false — which is
+what makes the close-confirm trustworthy, since a freshly opened form must not look unsaved); editing one
+field makes it dirty, and reopening starts clean; saving is refused with a blank (or whitespace) name or
+an unknown customer, **writing nothing and leaving the editor open**; a valid save trims name and site,
+maps `07:00`/`17:00` to 420/1020 minutes, falls back rather than writing junk (`'not a number'` radius →
+300 m, an unparseable latitude → the yard's), closes the editor and focuses the new order (selected,
+expanded); and an order saved unticked is created `closed`.
+For resources: the editor seeds the pool tab (its first category, that type's first status, the yard);
+a blank name is refused; **the category name is copied from the category row while its id is what is
+stored**, so the two cannot disagree (the Phase C rule); an unplaced resource stores *no* location rather
+than an empty one; the per-type fields follow the tab (serialized keeps serial/make/model/meter hours/
+purchase value, consumable keeps its reorder point and costs); and — the check that turned out to be the
+interesting one — **an opening count only lands when the row has a place to sit in**: 50 units with a
+place become the row's first level, the same 50 with no place leave the row holding nothing
+(`openStock()`'s documented rule, reached through the editor rather than by calling the store).
+**Two assertions failed first, and both were mine** — and both had the same cause: I assumed
+`createItem` takes every key of the patch verbatim. It does not: for a counted row the quantities are the
+*level table's* sum, so `qty`/`qtyOnHand` come back 0 when there is no place. Reading `createItem` /
+`openStock` turned a wrong assertion into the check worth keeping. (Fifth time in this effort; the rule
+from P6/3 stands, and this is its sharpest form yet — the store was right, and reading it made the test
+better than the one I had imagined.)
+**Verified:** build `complete` (0 warnings) · `lint:ctor` OK · `lint:styles` 0 unused · `lint:dead` 0/0 ·
+`check:store` **246 ok / 0 FAIL** in **28 harnesses** · `npm run e2e` all checks passed.
+**With this, every surface the log named as uncovered is covered** except the drag *paint* (the position
+of a bar under the cursor during a drag), which is genuinely a rendering question and stays with
+`npm run e2e`.
+
 ### P10 — the gestures, the writes and the tooltips · `MED` · status: **done (2026-09-12)**
 **What this covered.** P6/4 closed by naming what was left in the Scheduler and why it was not an
 extraction candidate: the drag/resize/move handlers, the modals and writes, the pool cards' rows and the
@@ -946,6 +981,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 6/3 | 2026-09-12 | **P6/3** — Component half, slice 1: calendar & capacity math | `scheduler-view.ts` (196 lines) of pure functions + the view-model types; component **1,591 → 1,506 lines** delegating through same-named methods (template and ~100 call sites untouched) | `MED` | **done** — before/after dump of every derived value **byte-identical (42,584 B, `cmp`)**; check26 5 → **9 checks** driving the module directly; build/lints clean; **219 ok / 0 FAIL**; e2e green. P6/4 (the geometry layer: `models`/`conflicts` + `geom*`/`*T0`/`*T1`) has its dependency list and proof method ready |
 | 6/4 | 2026-09-12 | **P6/4** — Component half, slice 2: the geometry layer | `lineQty`/`qtySuffix`, `*T0`/`*T1`, `dateIncludes`, `geomMin`/`fmtMin`/`geom`, `lineDays`, `typeRank`, `itemName`, `shortItemLabel`, `sortedLines`, `isConflicted`, `conflictDetail`, `models`, `conflictCount`, `conflicts` → module (450 lines); component **1,506 → 1,388 lines** | `MED` | **done** — **P6 complete.** Functions take a six-read `ScheduleReader` instead of `DataService`, so the capacity rule is testable off a stub store; before/after dump **byte-identical (74,014 B, `cmp`)** on the first run; check26 9 → **14 checks**; **224 ok / 0 FAIL**; build/lints/e2e green |
 | 10 | 2026-09-12 | **P10** — The gestures, the writes and the tooltips | `check27.mjs` (12 checks): drag-to-book, the multi-unit prompt, the retired refusal, whole-order drag + carried bookings, the 3px click-vs-drag threshold, edge resize clamping, Day-view 15-minute snapping; the 8 tip builders and the `stamp*` helpers | `MED` | **done** — no production change. The gesture code needs only `window` listeners and `getBoundingClientRect` stubbed, so the real handlers run against the real store and their writes are asserted; **236 ok / 0 FAIL in 27 harnesses**; e2e unchanged |
+| 11 | 2026-09-12 | **P11** — The modal editors | `check28.mjs` (10 checks): the New Order and New Resource editors — seeding, the dirty guard, refusal on a blank name / unknown customer, trimming, number coercion and fallbacks, `hmMin` times, focus-after-save, the inactive-order path, category-row derivation, per-type fields, and the opening-count rule | `MED` | **done** — no production change. **246 ok / 0 FAIL in 28 harnesses**; two of my assertions were wrong and reading `createItem`/`openStock` made them better than what I had imagined; every surface the log called uncovered is now covered except the drag *paint* |
 
 ### Findings ledger (evidence for the phases above)
 

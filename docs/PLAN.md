@@ -331,7 +331,7 @@ carried unremarked since its first commit.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 236 runtime checks in 27 harnesses, against the real store, no browser
+npm run check:store    # 246 runtime checks in 28 harnesses, against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -542,6 +542,12 @@ hand-roll `localStorage` and assert on the store's own output:
   an edge resize that clamps instead of inverting, and Day-view 15-minute snapping — plus the eight shared
   tip builders (`orderTip`, `orderRecordTip`, `assetTip`, `partyTip`, …) and the `stamp*` helpers
   (`12:00am` for midnight, `—` for a missing date, a timeless range repeating its date).
+- `check28.mjs` — **10 checks, the modal editors** (P11): the New Order and New Resource editors driven
+  against the real store — a freshly opened form is not an "edit" (so the close-confirm stays honest),
+  a blank name or unknown customer writes nothing and leaves the editor open, saving trims and coerces
+  with the documented fallbacks, `07:00`/`17:00` land as minutes, an unticked order is created closed, the
+  category name is derived from the category row while its id is what is stored, the per-type fields
+  follow the pool tab, and an opening count only lands when the row has a place to sit in.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
