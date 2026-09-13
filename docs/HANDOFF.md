@@ -36,6 +36,10 @@ Three audits sit beside them, all report-only (`build`, `lint:ctor`, `lint:style
 declarations a later rule re-sets, and imports/exports nothing references. None of them
 fails the build; they are meant to be read.
 
+A **stylesheet change is proved neutral** rather than eyeballed: `npm run css:equiv`
+takes two built CSS files and prints every selector whose winning value for a property
+changed (workflow in `angular-refactor-log.md` → P5b).
+
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~830 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
 (raised from 4 kB), because `scheduler.component.scss` — by far the largest component

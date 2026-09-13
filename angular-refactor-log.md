@@ -387,7 +387,9 @@ verification available to this phase without a browser.
 
 **If the goal is a smaller stylesheet rather than a proven-clean one,** that is that restructure:
 promote every override into the refresh layer, delete the superseded ported rules, diff the rendered
-pages. ⛔ with a visual review — recorded as **P5b (optional)**, not attempted here.
+pages. ⛔ with a visual review — recorded as **P5b**: the tooling half is done there, the restructure is
+shown to be unprovable without a browser, and the one provable deletion it had (two unread tokens) is
+taken.
 **Verified:** gates green (build `complete` · `lint:ctor` OK · `lint:styles` 0 unused · **202 ok /
 0 FAIL**); diff is **4 insertions / 1 deletion** in `styles.scss` (one comment); CSS hash unchanged.
 **Scope:** `src/styles.scss` (2,477 lines) + the 26 component sheets.
@@ -398,6 +400,51 @@ than deleting it.
 **Acceptance:** `lint:styles` still reports 0 unused, **and the pages look identical** — this phase
 proceeds in small named batches and stops at the first change that is not countable, because the gate
 suite cannot see a pixel.
+
+### P5b — the stylesheet restructure, measured · `MED` · status: **done (2026-09-12) — tooling + 2 deletions; the restructure itself is not provable**
+**What I looked for, and what the measurement says:** every *mechanical* restructure a stylesheet can
+offer was counted, and none is available:
+
+| Candidate | Count |
+|---|---|
+| A rule whose every property is re-stated later for the same selector (P5) | 0 |
+| Exact duplicate rules (P5) | 0 |
+| **Adjacent same-selector rule pairs** (merging those *is* provable: nothing sits between them) | **0** |
+| Rules with an empty body | 0 |
+| Custom properties declared but never read anywhere in `src/` | **13** |
+
+**Deleted (2):** `--teal-soft` and `--pink-soft`, and with them their comment — which claimed *"the
+calendar bars need [them] to keep their type hues distinct (teal ≈ work orders/kits, pink ≈
+attachments)"*. Nothing reads them (the name appears only on its own declaration line), and the bars'
+hues now come from the per-type `--tint-*` classes (`.ts-idle { --tint-bg: hsl(…); … }`), so the comment
+described a superseded approach and went with the tokens.
+**Kept (11), on purpose:** `--slate-900`, `--accent-soft`, `--brand-ink`, `--brand-soft`,
+`--purple-soft`, `--sp-5`, `--fs-xs`, `--fs-lg`, `--lh-tight`, `--r-sm`, `--tip-accent`. Each is a step
+in a *complete scale* (the slate ramp, the 8pt spacing scale, the type scale, the radius scale) or a
+member of a deliberately-declared palette — `--tip-accent` sits in `tip-host`'s block whose own comment
+says the palette exists "so re-skinning every tip in the app is a one-line change". Deleting an unread
+*scale step* leaves a hole in a design system that mirrors the prototype's `shared.css`; that is a design
+decision, not cleanup, so it is reported rather than taken.
+**The tool this phase leaves behind:** `scripts/css-equivalence.js` + `npm run css:equiv` — it reads two
+**built** CSS files and prints, per selector, every winning declaration that differs:
+
+```bash
+npm run build && cp dist/ims-web/browser/styles-*.css /tmp/before.css
+# …edit src/styles.scss…
+npm run build
+node scripts/css-equivalence.js /tmp/before.css dist/ims-web/browser/styles-*.css
+```
+
+Exit 0 when the effective stylesheet is identical, 1 when it is not. **Verified with it:** 619 selectors
+on both sides, 2185 → 2183 winning declarations, and the only two differences are the two declarations
+deleted (`:root || --teal-soft :: #e2f4f1 -> (absent)`, `:root || --pink-soft :: #fce7f3 -> (absent)`).
+Nothing else moved. Gates: build `complete` · `lint:ctor` OK · `lint:styles` `0 class(es)` + the 3
+disclosed pairs · `lint:dead` 0/0 · `check:store` **202 ok / 0 FAIL**.
+**What remains unprovable (and stays ⛔):** the restructure P5b was named after — promoting every override
+into the refresh layer and deleting the superseded ported rules — *reorders rules between selectors*, and
+two equal-specificity rules can then flip which one wins **for one element**. A per-selector map cannot
+see that; it needs a DOM. So it is not a `MED` sweep: it wants a browser (or a per-page screenshot diff)
+as its verification, and saying so is the honest outcome of this phase rather than doing it blind.
 
 ### P5c — see the audit cluster above (next to P2c)
 
@@ -477,6 +524,18 @@ npm run check:store 2>&1 | grep -cE '^  ok' ; npm run check:store 2>&1 | grep -c
 A phase is not finished until those five numbers/strings are unchanged (or *better*, e.g. more checks
 because the phase added coverage — which must be stated in the log).
 
+**For a `styles.scss` change specifically**, prove it neutral rather than eyeballing it:
+
+```bash
+npm run build && cp dist/ims-web/browser/styles-*.css /tmp/before.css   # before the edit
+# …edit…
+npm run build
+node scripts/css-equivalence.js /tmp/before.css dist/ims-web/browser/styles-*.css
+```
+
+It prints every selector whose winning value for a property changed, and exits 1 if any did. The only
+acceptable output for a "dead declaration" change is that changed declaration and nothing else.
+
 ---
 
 ## 6. Iteration history (append-only)
@@ -495,6 +554,7 @@ because the phase added coverage — which must be stated in the log).
 | 4b | 2026-09-12 | **P4b** — Timesheet drag handlers | Drag listeners bound as fields, `endDrag()`/`detachDrag()`, `ngOnDestroy` detaches (Scheduler's tracked-handler pattern) | `LOW` | **done** — 36 insertions / 15 deletions in `timesheet.component.ts`, gates green at **202 ok / 0 FAIL**; Scheduler *resize* gap recorded as **P4c** (not fixed) |
 | 4c | 2026-09-12 | **P4c** — Scheduler resize handlers | Same shape as its whole-block drag: `onResizePointer`/`endResizePointer` + `detachResize()` that removes them and clears state | `LOW` | **done** — 17 insertions / 5 deletions in `scheduler.component.ts`, gates green at **202 ok / 0 FAIL** |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | All 26 sheets (828 rules) run through 4 mechanical detectors; layer structure of `styles.scss` mapped; one comment added at the token footgun | `MED` | **done, 0 removals** — nothing is provably removable (0 unused / 0 duplicate rules / 0 duplicate declarations / 0 superseded rules); 4 insertions / 1 deletion, CSS bundle hash **byte-identical**, gates green at **202 ok / 0 FAIL**. Deeper work recorded as **P5b** (restructure, ⛔) |
+| 5b | 2026-09-12 | **P5b** — Restructure, measured | Measured every provable restructure (all 0) + unread custom properties (13); deleted the 2 stale ones with their false comment; added `scripts/css-equivalence.js` + `npm run css:equiv` | `MED` | **done** — equivalence check: 619 selectors both sides, **only** the 2 deleted declarations differ; 11 unread scale/palette tokens reported and kept; the reorder restructure shown unprovable without a browser |
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
@@ -527,6 +587,9 @@ because the phase added coverage — which must be stated in the log).
 | Dead-code gate | `npm run lint:dead` (46 files, 230 exports → 0 unused imports, 0 dead exports, 24 file-local API kept) plus README/HANDOFF/recipe updated | P2b ✔ |
 | `lint:styles` "re-set" detector | Printed `0 declaration(s) re-set`; the true count was **15** across 9 selectors. Root cause proved A/B: the parser only saw a rule's *first* declaration; `!important` ignored too | **P2c ✔** — fixed (boundary-read, importance-aware); now prints 3 |
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
+| Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
+| Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
+| Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |
 | Harness subjects undocumented | `check14`–`check24` (Phase B/C, 61 checks) had no entry in the verification recipe at all | P1 ✔ (block appended with measured counts) |
 
@@ -539,5 +602,6 @@ because the phase added coverage — which must be stated in the log).
 | 2026-09-12 | User approved **P4b** (Timesheet drag handlers) and **pushing the batch to `origin`** | chat |
 | 2026-09-12 | User approved **pushing P5**, then **P2b** (dead-code audit gate) + **P4c** (Scheduler resize). P2c (the `lint:styles` fix) and P5c (the 15 declarations) are reported but **not** started | chat |
 | 2026-09-12 | User approved **P2c** (fix the detector) and **P5c** (delete the dead declarations), verified against the compiled CSS's winning values | chat |
+| 2026-09-12 | User approved continuing through **P5b, P6, P7, P8, P9** | chat |
 
 

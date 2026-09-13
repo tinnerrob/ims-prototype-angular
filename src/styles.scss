@@ -1086,10 +1086,6 @@ i.ts-lunch { color: var(--tcol); }
   --info-soft: #e0f5f9;
   --purple: #7c3aed;
   --purple-soft: #f0eafd;
-  /* Two extra soft fills the calendar bars need to keep their type hues distinct
-     (teal ≈ work orders/kits, pink ≈ attachments). */
-  --teal-soft: #e2f4f1;
-  --pink-soft: #fce7f3;
 
   /* surfaces — `--sidebar-active` is this block's own. The rest of the `--sidebar-*` ramp
      is declared by the visual-refresh `:root` near the end of this file (it loads last),
