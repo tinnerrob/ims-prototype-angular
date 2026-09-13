@@ -446,6 +446,25 @@ two equal-specificity rules can then flip which one wins **for one element**. A 
 see that; it needs a DOM. So it is not a `MED` sweep: it wants a browser (or a per-page screenshot diff)
 as its verification, and saying so is the honest outcome of this phase rather than doing it blind.
 
+**Closed by decision (2026-09-12), now that the browser exists.** P9 delivered the instrument this was
+waiting for (`npm run e2e` + `npm run css:equiv`), so the restructure *can* now be attempted — and,
+having measured what it would contain, it should not be:
+- every **provable** cleanup is already taken: 0 superseded rules, 0 duplicate rules, 0 duplicate
+  declarations, 0 duplicate properties, 0 adjacent same-selector pairs, 0 empty rules — and P5c removed
+  the 12 declaration-level exceptions the corrected detector found.
+- what is left on the list is **reorganisation for readability only**: the 92 selectors declared more
+  than once are the refresh layer restating selectors with different values, and that layer's own header
+  states its purpose and its grouping ("easy to read, tune or drop as one unit"). Moving those rules
+  into a different order is work that *fights* the design, changes no computed value by construction, and
+  risks the one thing no tool here can settle: an equal-specificity winner flipping for a single element.
+So P5b closes as: **the tooling is in place, the dead weight is gone, and the remaining length is the
+layered design — deliberate, documented, and not worth paying visual risk to shuffle.**
+**If you still want the churn, the recipe is ready** (and it is now a two-command loop):
+`npm run build && npm run e2e` → move a *named batch* of rules → `npm run build && npm run e2e` →
+compare `dist/e2e/*.png` by eye **and** `npm run css:equiv /tmp/before.css dist/ims-web/browser/styles-*.css`
+for the exact half (any winner that changes is printed) → revert the batch if either disagrees. Do it in
+batches of one theme (sidebar, buttons, calendar), never as one sweep.
+
 ### P5c — see the audit cluster above (next to P2c)
 
 The 12 dead declarations P5 left behind, the 3 grouped ones that must stay, and the compiled-CSS
@@ -777,7 +796,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 4b | 2026-09-12 | **P4b** — Timesheet drag handlers | Drag listeners bound as fields, `endDrag()`/`detachDrag()`, `ngOnDestroy` detaches (Scheduler's tracked-handler pattern) | `LOW` | **done** — 36 insertions / 15 deletions in `timesheet.component.ts`, gates green at **202 ok / 0 FAIL**; Scheduler *resize* gap recorded as **P4c** (not fixed) |
 | 4c | 2026-09-12 | **P4c** — Scheduler resize handlers | Same shape as its whole-block drag: `onResizePointer`/`endResizePointer` + `detachResize()` that removes them and clears state | `LOW` | **done** — 17 insertions / 5 deletions in `scheduler.component.ts`, gates green at **202 ok / 0 FAIL** |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | All 26 sheets (828 rules) run through 4 mechanical detectors; layer structure of `styles.scss` mapped; one comment added at the token footgun | `MED` | **done, 0 removals** — nothing is provably removable (0 unused / 0 duplicate rules / 0 duplicate declarations / 0 superseded rules); 4 insertions / 1 deletion, CSS bundle hash **byte-identical**, gates green at **202 ok / 0 FAIL**. Deeper work recorded as **P5b** (restructure, ⛔) |
-| 5b | 2026-09-12 | **P5b** — Restructure, measured | Measured every provable restructure (all 0) + unread custom properties (13); deleted the 2 stale ones with their false comment; added `scripts/css-equivalence.js` + `npm run css:equiv` | `MED` | **done** — equivalence check: 619 selectors both sides, **only** the 2 deleted declarations differ; 11 unread scale/palette tokens reported and kept; the reorder restructure shown unprovable without a browser |
+| 5b | 2026-09-12 | **P5b** — Restructure, measured | Measured every provable restructure (all 0) + unread custom properties (13); deleted the 2 stale ones with their false comment; added `scripts/css-equivalence.js` + `npm run css:equiv` | `MED` | **done → closed by decision** — equivalence check: 619 selectors both sides, **only** the 2 deleted declarations differ; 11 unread scale/palette tokens reported and kept; the reorder restructure is rejected with the evidence and a ready two-command recipe (P9's `npm run e2e` provides the screenshot half) |
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
 | 6a | 2026-09-12 | **P6a** — Extract `format` → `core/format.ts` | The store's only 0-inbound section moved to a module; six one-line delegates keep 187 call sites working; `check25` extended to drive the module and assert the delegates agree | `LOW` | **done** — store diff: 6 bodies → 6 delegates; `check:store` **210 ok / 0 FAIL**; docs + counts updated |
