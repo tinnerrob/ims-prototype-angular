@@ -22,7 +22,7 @@
  * that turn these windows into pixels) is deliberately not here yet: it reads catalog
  * names and capacities from the store, so it is the next slice, not this one.
  */
-import { CatalogType, Item, Order, OrderLine } from '../../core/models';
+import { CATALOG_TYPES, CatalogType, Item, Order, OrderLine } from '../../core/models';
 
 export type View = 'day' | 'week' | 'month';
 
@@ -192,5 +192,259 @@ export function committedUnits(item: Item, orders: Order[], from: number, to: nu
     }
   }
   return peakUnits(spans);
+}
+
+/* ======================================================================================
+ * The geometry layer (P6/4) — turning those windows into pixels.
+ *
+ * This is the layer above the calendar math, and it is the one that needs the store:
+ * names come from the catalog (`itemLabel`), quantity from the item (`capacity`), and
+ * the Day view's minute windows from the order (`orderT0`/`orderT1`). Rather than take
+ * the whole `DataService`, these functions take a `ScheduleReader` — the six reads they
+ * actually perform — so the contract is visible in the signature and a check can drive
+ * them with a stub. Nothing here writes.
+ * ==================================================================================== */
+
+/** A conflict row, as the inspector pane prints it. */
+export interface ConflictRow { type: CatalogType; refId: string; orderId: string; label: string; detail: string }
+
+/** The visible state a render was derived from. */
+export interface ViewState { view: View; anchor: number; expanded: ReadonlySet<string> }
+
+/**
+ * The slice of the store the geometry layer reads. Declared structurally so a stub can
+ * stand in (a check does exactly that) and so it is obvious from the signatures that
+ * nothing here mutates.
+ */
+export interface ScheduleReader {
+  orderT0(o: Order): number;
+  orderT1(o: Order): number;
+  getItem(type: CatalogType, refId: string): Item | undefined;
+  itemLabel(type: CatalogType, refId: string): string;
+  mkName(item: Item | undefined): string;
+  capacity(item: Item): number;
+}
+
+/** Units this line takes — never below 1 (a serialized unit / employee is 1). */
+export function lineQty(li: OrderLine): number { return li.qty || 1; }
+
+/**
+ * ` · ×12` for a multi-unit line, '' when it takes one — appended to a timeline
+ * bar's sub-line, which is otherwise the only place a booking's quantity is
+ * invisible (the Order Details row is where it is edited).
+ */
+export function qtySuffix(li: OrderLine): string {
+  const q = lineQty(li);
+  return q > 1 ? ' · ×' + q : '';
+}
+
+export function orderT0(data: ScheduleReader, o: Order): number { return data.orderT0(o); }
+export function orderT1(data: ScheduleReader, o: Order): number { return data.orderT1(o); }
+export function lineT0(data: ScheduleReader, li: OrderLine, o: Order): number { return li.t0 ?? orderT0(data, o); }
+export function lineT1(data: ScheduleReader, li: OrderLine, o: Order): number { return li.t1 ?? orderT1(data, o); }
+
+/** Does this order's date window include the Day-view anchor? */
+export function dateIncludes(o: Order, anchor: number): boolean {
+  const day = new Date(anchor);
+  day.setHours(0, 0, 0, 0);
+  const d = day.getTime();
+  const s = new Date(o.startDate + 'T00:00:00').getTime();
+  const e = new Date(o.endDate + 'T00:00:00').getTime() + DAY_MS - 1;
+  return d >= s && d <= e;
+}
+
+/** Percentage geometry across the 24-hour day (0..1440 minutes). */
+export function geomMin(t0: number, t1: number): BarGeom | null {
+  const l = Math.max(0, Math.min(1440, t0));
+  const r = Math.max(0, Math.min(1440, t1));
+  if (r <= l) return null;
+  return { left: (l / 1440) * 100, width: ((r - l) / 1440) * 100 };
+}
+
+/** `HH:MM` from minutes-of-day. */
+export function fmtMin(t: number): string {
+  return pad2(Math.floor(t / 60)) + ':' + pad2(Math.round(t % 60));
+}
+
+/**
+ * Where a day-inclusive ISO window sits across the current columns, as percentages.
+ * Day indices come from LOCAL midnights — never floor raw epoch, which is UTC and
+ * would make indices fractional in non-UTC timezones, mis-sizing the bars.
+ */
+export function geom(isoStart: string, endISO: string, view: View, anchor: number): BarGeom | null {
+  const cols = columnsFor(view, anchor);
+  const N = cols.length;
+  const first = cols[0].start;
+  const dayIndex = (iso: string): number => Math.round((new Date(iso + 'T00:00:00').getTime() - first) / DAY_MS);
+  const sIdx = dayIndex(isoStart);
+  const eIdx = dayIndex(endISO);
+  if (eIdx < 0 || sIdx >= N) return null;
+  const cs = Math.max(0, sIdx);
+  const ce = Math.min(N - 1, eIdx);
+  return { left: (cs / N) * 100, width: ((ce - cs + 1) / N) * 100 };
+}
+
+/** Day-inclusive length of a booking, in days (never below 1). */
+export function lineDays(li: OrderLine, order: Order): number {
+  const s = new Date(lineStart(li, order) + 'T00:00:00').getTime();
+  const e = new Date(lineEnd(li, order) + 'T00:00:00').getTime();
+  return Math.max(1, Math.round((e - s) / DAY_MS) + 1);
+}
+
+/**
+ * Rank of a catalog type in the canonical order (serialized, bulk, consumable, part,
+ * labor, kit, attachment) — the sort key that keeps like types together. Unknown types
+ * (including the pseudo-type `'order'`) rank last.
+ */
+export function typeRank(type: CatalogType | 'order'): number {
+  const i = CATALOG_TYPES.findIndex((c) => c.key === type);
+  return i < 0 ? CATALOG_TYPES.length : i;
+}
+
+export function itemName(data: ScheduleReader, type: CatalogType, refId: string): string {
+  return data.itemLabel(type, refId);
+}
+
+/** Short item label used in a line row's gutter (prototype `shortItemLabel`). */
+export function shortItemLabel(data: ScheduleReader, li: OrderLine): string {
+  const it = data.getItem(li.type, li.refId);
+  return it ? data.mkName(it) || it.name : li.refId;
+}
+
+/**
+ * An order's booked items grouped by catalog type (then by name, then by the day the
+ * booking starts). Every list that shows mixed types — the expanded timeline rows, the
+ * Order Details booked list and the conflicts pane — runs through this, and all of them
+ * re-render from data, so the grouping is re-applied the moment a conflict is resolved
+ * (a bar moved/resized, or a booking dropped) and the like types fall back together.
+ */
+export function sortedLines(data: ScheduleReader, order: Order): OrderLine[] {
+  return [...order.lineItems].sort(
+    (a, b) =>
+      typeRank(a.type) - typeRank(b.type) ||
+      itemName(data, a.type, a.refId).localeCompare(itemName(data, b.type, b.refId)) ||
+      lineStart(a, order).localeCompare(lineStart(b, order)),
+  );
+}
+
+/**
+ * Capacity-aware conflict: a booking clashes only when the overlapping bookings for the
+ * same resource need **more units than the item owns**. A serialized unit (capacity 1)
+ * behaves exactly as before — any overlap is a clash — while 24 jugs of hydraulic fluid
+ * can go out on two orders as long as their windows don't overlap and together over-ask.
+ * `committedUnits()` walks every order, so the line under test is counted in its own peak.
+ */
+export function isConflicted(data: ScheduleReader, orders: Order[], li: OrderLine, order: Order): boolean {
+  const item = data.getItem(li.type, li.refId);
+  if (!item) return false;
+  const s = Date.parse(lineStart(li, order) + 'T00:00:00');
+  const e = Date.parse(lineEnd(li, order) + 'T00:00:00');
+  return committedUnits(item, orders, s, e) > data.capacity(item);
+}
+
+/** "30 needed · 24 owned" — why the conflicts pane flagged the row. */
+export function conflictDetail(data: ScheduleReader, orders: Order[], li: OrderLine, order: Order): string {
+  const item = data.getItem(li.type, li.refId);
+  if (!item) return '';
+  const s = Date.parse(lineStart(li, order) + 'T00:00:00');
+  const e = Date.parse(lineEnd(li, order) + 'T00:00:00');
+  return committedUnits(item, orders, s, e) + ' needed · ' + data.capacity(item) + ' owned';
+}
+
+/**
+ * One row per active order: its own bar (null when the order is off-screen) and the bars
+ * of its bookings. Day view measures a row in minutes-of-day, Week/Month in days — the two
+ * branches differ only in which geometry helper they call.
+ */
+export function models(data: ScheduleReader, orders: Order[], st: ViewState): OrderModel[] {
+  const isDay = st.view === 'day';
+  return orders.map((o) => {
+    let og: BarGeom | null = null;
+    let oSub = o.lineItems.length + ' items';
+    if (isDay) {
+      if (dateIncludes(o, st.anchor)) {
+        og = geomMin(orderT0(data, o), orderT1(data, o));
+        oSub = fmtMin(orderT0(data, o)) + '–' + fmtMin(orderT1(data, o));
+      }
+    } else {
+      og = geom(o.startDate, o.endDate, st.view, st.anchor);
+    }
+    const orderBar: BarModel | null = og
+      ? {
+          orderId: o.orderId,
+          liId: null,
+          type: 'order',
+          label: o.orderId,
+          short: o.orderId,
+          sub: oSub,
+          conflict: false,
+          geom: og,
+        }
+      : null;
+    const lines: BarModel[] = [];
+    for (const li of sortedLines(data, o)) {
+      let lg: BarGeom | null = null;
+      let sub = '';
+      if (isDay) {
+        if (dateIncludes(o, st.anchor)) {
+          const t0 = Math.max(orderT0(data, o), Math.min(orderT1(data, o), lineT0(data, li, o)));
+          const t1 = Math.max(t0, Math.min(orderT1(data, o), lineT1(data, li, o)));
+          lg = geomMin(t0, t1);
+          sub = fmtMin(t0) + '–' + fmtMin(t1) + qtySuffix(li);
+        }
+      } else {
+        lg = geom(lineStart(li, o), lineEnd(li, o), st.view, st.anchor);
+        sub = lineDays(li, o) + 'd' + qtySuffix(li);
+      }
+      if (!lg) continue;
+      const conflict = !isDay && isConflicted(data, orders, li, o);
+      lines.push({
+        orderId: o.orderId,
+        liId: li.id,
+        type: li.type,
+        label: itemName(data, li.type, li.refId),
+        short: shortItemLabel(data, li),
+        sub: sub + (conflict ? ' - CONFLICT' : ''),
+        conflict,
+        geom: lg,
+      });
+    }
+    return { order: o, isExpanded: st.expanded.has(o.orderId), orderBar, lines };
+  });
+}
+
+export function conflictCount(data: ScheduleReader, orders: Order[], st: ViewState): number {
+  let n = 0;
+  for (const m of models(data, orders, st)) for (const l of m.lines) if (l.conflict) n++;
+  return n;
+}
+
+/**
+ * Flat conflict list for the inspector pane (prototype `renderInspector`). Re-sorted by
+ * catalog type so like types stay together, and recomputed on every render so resolving
+ * a conflict immediately re-groups the list.
+ */
+export function conflicts(data: ScheduleReader, orders: Order[], st: ViewState): ConflictRow[] {
+  const out: ConflictRow[] = [];
+  for (const m of models(data, orders, st)) {
+    for (const line of m.lines) {
+      if (!line.conflict) continue;
+      const li = m.order.lineItems.find((l) => l.id === line.liId);
+      if (!li) continue;
+      out.push({
+        type: li.type,
+        refId: li.refId,
+        orderId: m.order.orderId,
+        label: line.label,
+        detail: conflictDetail(data, orders, li, m.order),
+      });
+    }
+  }
+  return out.sort(
+    (a, b) =>
+      typeRank(a.type) - typeRank(b.type) ||
+      a.label.localeCompare(b.label) ||
+      a.orderId.localeCompare(b.orderId),
+  );
 }
 

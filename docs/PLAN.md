@@ -331,7 +331,7 @@ carried unremarked since its first commit.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 219 runtime checks in 26 harnesses, against the real store, no browser
+npm run check:store    # 224 runtime checks in 26 harnesses, against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -526,7 +526,8 @@ hand-roll `localStorage` and assert on the store's own output:
   round trip, the `verticalLabel`/`roleLabel` fallbacks, `periodPhrase` for day/week/month (and the
   contract that it formats the date it is given), and `core/format.ts` — money/int/pct/date stamps,
   plus the assertion that the store's six methods are *delegates* of it and not a second copy.
-- `check26.mjs` — **9 checks, the harness reaching past the store to a component** (P9b + P6/3): the
+- `check26.mjs` — **14 checks, the harness reaching past the store to a component** (P9b + P6/3 + P6/4):
+  the
   Scheduler class instantiated in Node (JIT compiler loaded, injected `ChangeDetectorRef` /
   `ConfirmService` stubbed) so its derived view math is assertable — it opens Monday-anchored on the week
   view, a week is seven consecutive labelled days, day/month are the periods they claim, every bar names a

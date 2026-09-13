@@ -47,7 +47,7 @@ everywhere (**27** `standalone: true`, **0** `NgModule`).
 | Signals | 12 `signal(`/`computed(`/`effect(` uses; the store is a **mutable singleton**, not signal-based | `grep signal(` |
 | Change detection | **0** `ChangeDetectionStrategy` / `OnPush` — all components are default | `grep ChangeDetectionStrategy` |
 | Tests | **0** `*.spec.ts` (Karma is configured but empty) | `find src -name '*.spec.ts'` |
-| Verification culture | `npm run check:store` = 25 Node harnesses = **210 checks** (202 at baseline; P9 added check25 and P6a extended it); plus 2 hand-rolled audits and the build | `scripts/`, `package.json` |
+| Verification culture | `npm run check:store` = 26 Node harnesses = **224 checks** (202 at baseline; P9 added check25, and P9b/P6/3/P6/4 added check26, which is the first to reach a component); plus 2 hand-rolled audits, the build and `npm run e2e` | `scripts/`, `package.json` |
 | Bundle | build warns `initial exceeded maximum budget … 500 kB` at **~830 kB** (error budget 1 MB); **all routes eager** (0 `loadComponent`) | `ng build`, `angular.json`, `app.routes.ts` |
 | Marker hygiene | **0** `console.*`, `TODO`, `FIXME`, `XXX`, `HACK` in `src` | `grep -rnE …` |
 | Selectors | **All** `ims-*` except the shell's `app-root`; one mismatch: `ims-admin-verticals` lives in `verticals.component.ts` (`VerticalsComponent`) | `grep 'selector:'` |
@@ -561,6 +561,38 @@ are true by construction, which is the point: a check that guesses a field name 
 nothing could test it — "it is P9's first customer". `check26` is that customer's net: extract, then
 prove the same numbers by running the same assertions against the extracted functions.
 
+### P6/4 — the component half, slice 2: the geometry layer · `MED` · status: **done (2026-09-12)**
+**What moved.** The rest of the Scheduler's derivations, appended to `scheduler-view.ts` (450 lines
+now): `lineQty` / `qtySuffix`, `orderT0` / `orderT1` / `lineT0` / `lineT1`, `dateIncludes`, `geomMin`,
+`fmtMin`, `geom`, `lineDays`, `typeRank`, `itemName`, `shortItemLabel`, `sortedLines`, `isConflicted`,
+`conflictDetail`, and the composition on top of them — `models()`, `conflictCount()`, `conflicts()`.
+`scheduler.component.ts` went **1,506 → 1,388 lines** (from the original 1,591), still delegating through
+same-named thin methods, so the template and every internal call site remain untouched.
+**The design decision that matters.** These functions need the store — names from the catalog, capacity
+from the item, Day-view minute windows from the order — so the tempting move is to pass `DataService` and
+call it a day. Instead they take a **`ScheduleReader`**: the six reads they actually perform
+(`orderT0`, `orderT1`, `getItem`, `itemLabel`, `mkName`, `capacity`). Three consequences, all deliberate:
+the *contract* is visible in every signature, nothing in the module can write, and — the point — a check
+can pass a hand-made store. That is how the capacity rule finally became testable: two overlapping
+bookings of a serialized unit clash, a third with its own September window does not, and 12 + 12 units of
+a 24-unit bulk item is *not* a clash while a 25th unit is. No seeding, no DOM, no component.
+**The proof (same method, wider net).** The dumper was extended to cover the whole geometry layer and run
+before/after: for 3 views × 5 anchor positions — every order's and every booking's `geom()` rectangle,
+`fmtMin` at nine minute values, `dateIncludes` for every order, `headColumns()`, plus `geomMin` on eight
+crafted minute windows, `lineDays` / `lineQty` per booking, `sortedLines` per order, `typeRank` for every
+type and two nonsense keys, `itemName` / `shortItemLabel` per booking, the minute windows
+(`orderT0`/`orderT1`/`lineT0`/`lineT1`), `isConflicted` + `conflictDetail` per booking, `models()` in all
+three views, `models()` with a row expanded, `conflicts()`, `conflictCount()`, plus the P6/3 sections.
+**74,014 bytes before, 74,014 bytes after — `cmp` byte-identical**, on the first run.
+**check26 grew 9 → 14 checks**, five of them driving the new layer through the stub reader.
+**Verified:** build `complete` (0 warnings) · `lint:ctor` OK · `lint:styles` 0 unused · `lint:dead` 0/0 ·
+`check:store` **224 ok / 0 FAIL** in 26 harnesses · `npm run e2e` all checks passed.
+**P6 is now complete.** `scheduler.component.ts` is 203 lines lighter and everything derived is reachable
+from a check. What remains in it is state and gestures: the drag/resize/move handlers, the order and
+booking modals, the pool cards' own rows, and the tip builders — all of which either touch the DOM
+(so they belong to the e2e suite, which already exercises the grid, not to this pattern) or write (so
+they need a store round trip, which the harnesses already cover directly).
+
 ### P6/3 — the component half, in slices: the calendar & capacity math · `MED` · status: **done (2026-09-12)**
 **What moved.** `src/app/features/scheduler/scheduler-view.ts` (196 lines) now holds the Scheduler's
 period and capacity math as pure functions: `startOfDay` / `mondayOf` / `dayAt` / `pad2`,
@@ -873,6 +905,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 8 | 2026-09-12 | **P8** — Change-detection study + pilot | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; applied the identified pilot — `OnPush` on `field-editor` only | `HIGH` | **done** — no sweep (a stale view is invisible to every gate here); the one pilot is in with a two-minute confirmation checklist recorded; gates green at **210 ok / 0 FAIL** |
 | 9b | 2026-09-12 | **P9b** — The harness reaches a component | Probed and proved that the Scheduler class instantiates in Node (JIT compiler loaded, `ChangeDetectorRef`/`ConfirmService` stubbed); runner now compiles with `--rootDir src/app` + flattens core; `check26.mjs` (5 checks) over its view math | `MED` | **done** — `check:store` **215 ok / 0 FAIL in 26 harnesses**; five of my draft assertions failed and all five were the assertion's fault (recorded); this is the net P6's component extraction was waiting for |
 | 6/3 | 2026-09-12 | **P6/3** — Component half, slice 1: calendar & capacity math | `scheduler-view.ts` (196 lines) of pure functions + the view-model types; component **1,591 → 1,506 lines** delegating through same-named methods (template and ~100 call sites untouched) | `MED` | **done** — before/after dump of every derived value **byte-identical (42,584 B, `cmp`)**; check26 5 → **9 checks** driving the module directly; build/lints clean; **219 ok / 0 FAIL**; e2e green. P6/4 (the geometry layer: `models`/`conflicts` + `geom*`/`*T0`/`*T1`) has its dependency list and proof method ready |
+| 6/4 | 2026-09-12 | **P6/4** — Component half, slice 2: the geometry layer | `lineQty`/`qtySuffix`, `*T0`/`*T1`, `dateIncludes`, `geomMin`/`fmtMin`/`geom`, `lineDays`, `typeRank`, `itemName`, `shortItemLabel`, `sortedLines`, `isConflicted`, `conflictDetail`, `models`, `conflictCount`, `conflicts` → module (450 lines); component **1,506 → 1,388 lines** | `MED` | **done** — **P6 complete.** Functions take a six-read `ScheduleReader` instead of `DataService`, so the capacity rule is testable off a stub store; before/after dump **byte-identical (74,014 B, `cmp`)** on the first run; check26 9 → **14 checks**; **224 ok / 0 FAIL**; build/lints/e2e green |
 
 ### Findings ledger (evidence for the phases above)
 
@@ -902,7 +935,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
-| No unit tests | 0 `*.spec.ts` | **P9 ✔** — `check25` covers the pure helpers (210 checks in 25 harnesses) and `npm run e2e` renders the built app headless (6 lazy routes, clean console, the field-editor grid, screenshots) |
+| No unit tests | 0 `*.spec.ts` | **P9 ✔** — 26 harnesses (**224 checks**) now cover the store *and* the Scheduler's derived view/geometry math (P9b made the component instantiable in Node; P6/3–P6/4 extracted the math), and `npm run e2e` renders the built app headless (6 lazy routes, clean console, the field-editor grid, screenshots) |
 | No `OnPush` | 0 of 27 components | **P8 ✔** — 18 templates read the mutable store inline, so no sweep; the one pilot (`field-editor`) is applied and needs a two-minute browser confirmation; the real fix is signals in the store |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` was 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** measured → **P6a/P6/2 ✔ done**: `format` → `core/format.ts` and the fixture → `core/seed/`; the store is now **4,333** lines with 915 in `core/seed/`. Component extraction still filed for P9. |

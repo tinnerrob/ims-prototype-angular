@@ -152,5 +152,72 @@ check('bookingsInRange() returns only bookings the visible period can hold', () 
   }
 });
 
+/* ============ the geometry layer, driven by a stub reader ============
+ *
+ * P6/4 moved the geometry out of the component, and — the reason it declares a
+ * `ScheduleReader` instead of taking `DataService` — these checks can hand it a
+ * hand-made store. The capacity rule is now testable without seeding anything.
+ */
+const {
+  models: modelsOf, isConflicted, geom, geomMin, fmtMin, typeRank,
+} = await import('./features/scheduler/scheduler-view.js');
+
+const reader = {
+  orderT0: () => 480,
+  orderT1: () => 1020,
+  getItem: (type, refId) => (type === 'bulk' ? { id: refId, type, name: 'Hydraulic fluid', capacity: 24 } : { id: refId, type, name: refId, capacity: 1 }),
+  itemLabel: (type, refId) => refId + ' · label',
+  mkName: (it) => (it && it.name ? it.name : ''),
+  capacity: (it) => (it.capacity === undefined ? 1 : it.capacity),
+};
+const mkOrder = (id, start, end, items) => ({ orderId: id, status: 'active', startDate: start, endDate: end, lineItems: items });
+const mkLine = (id, type, refId, qty) => ({ id, type, refId, qty });
+
+check('two bookings of one serialized unit clash; a third with its own window does not', () => {
+  const a = mkOrder('A', '2026-08-17', '2026-08-21', [mkLine('l1', 'serialized', 'EQ-1', 1)]);
+  const b = mkOrder('B', '2026-08-19', '2026-08-23', [mkLine('l2', 'serialized', 'EQ-1', 1)]);
+  assert.equal(isConflicted(reader, [a, b], a.lineItems[0], a), true, 'the same unit out on two overlapping orders');
+  const later = mkOrder('C', '2026-09-01', '2026-09-05', [mkLine('l3', 'serialized', 'EQ-1', 1)]);
+  assert.equal(isConflicted(reader, [a, b, later], later.lineItems[0], later), false, 'September is its own window');
+});
+
+check('a bulk item clashes only when the asks exceed what it owns', () => {
+  const one = mkOrder('B1', '2026-08-17', '2026-08-21', [mkLine('l1', 'bulk', 'BULK-1', 12)]);
+  const two = mkOrder('B2', '2026-08-19', '2026-08-23', [mkLine('l2', 'bulk', 'BULK-1', 12)]);
+  const three = mkOrder('B3', '2026-08-20', '2026-08-22', [mkLine('l3', 'bulk', 'BULK-1', 1)]);
+  assert.equal(isConflicted(reader, [one, two], two.lineItems[0], two), false, '24 needed of 24 owned is not a clash');
+  assert.equal(isConflicted(reader, [one, two, three], three.lineItems[0], three), true, 'a 25th unit is');
+});
+
+check('models() builds an order bar and a booking row off the stub', () => {
+  const a = mkOrder('A', '2026-08-17', '2026-08-21', [mkLine('l1', 'serialized', 'EQ-1', 1)]);
+  const st = { view: 'week', anchor: mondayOf(Date.parse('2026-08-17T00:00:00')), expanded: new Set() };
+  const rows = modelsOf(reader, [a], st);
+  assert.equal(rows.length, 1, 'one row per order');
+  assert.ok(rows[0].orderBar && rows[0].orderBar.geom.width > 0, 'the order carries a bar inside the visible week');
+  assert.equal(rows[0].lines.length, 1, 'and so does its booking');
+  assert.equal(rows[0].lines[0].liId, 'l1');
+  assert.equal(rows[0].isExpanded, false, 'collapsed until the row is clicked');
+});
+
+check('geom() clamps to the visible columns and rejects an off-screen window', () => {
+  const anchor = mondayOf(Date.parse('2026-08-17T00:00:00')); // Monday Aug 17
+  assert.equal(geom('2026-08-01', '2026-08-05', 'week', anchor), null, 'an earlier week has no bar');
+  assert.equal(geom('2026-09-30', '2026-10-02', 'week', anchor), null, 'nor a later one');
+  const clipped = geom('2026-08-10', '2026-08-20', 'week', anchor);
+  assert.equal(clipped.left, 0, 'a window starting before the week is clipped to the first column');
+  assert.ok(Math.abs(clipped.width - (4 / 7) * 100) < 1e-9, 'Mon-Thu of it, no more');
+  assert.equal(geomMin(1440, 1440), null, 'an empty minute window has no bar');
+  assert.equal(fmtMin(485), '08:05', 'minutes of day print as HH:MM');
+});
+
+check('typeRank() keeps the canonical order, and ranks anything unknown last', () => {
+  const seq = ['serialized', 'bulk', 'consumable', 'part', 'labor', 'kit', 'attachment'].map(typeRank);
+  assert.ok(seq.every((r, i) => r === i), 'the canonical order ranks 0..6, got ' + seq.join(','));
+  assert.equal(typeRank('order'), 7, 'the pseudo-type ranks last');
+  assert.equal(typeRank('nonsense'), 7, 'so does an unknown key');
+});
+
 console.log(`\ncheck26: ${n} checks`);
+
 

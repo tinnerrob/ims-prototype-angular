@@ -45,6 +45,27 @@ import {
   periodStartFor,
   rangeBoundsFor,
   startOfDay as startOfDayAt,
+  ConflictRow,
+  conflictCount as conflictCountOf,
+  conflictDetail as conflictDetailOf,
+  conflicts as conflictsOf,
+  dateIncludes as dateIncludesAt,
+  fmtMin as fmtMinOf,
+  geom as geomOf,
+  geomMin as geomMinOf,
+  isConflicted as isConflictedWith,
+  itemName as itemNameOf,
+  lineDays as lineDaysOf,
+  lineQty as lineQtyOf,
+  lineT0 as lineT0Of,
+  lineT1 as lineT1Of,
+  models as modelsOf,
+  orderT0 as orderT0Of,
+  orderT1 as orderT1Of,
+  qtySuffix as qtySuffixOf,
+  shortItemLabel as shortItemLabelOf,
+  sortedLines as sortedLinesOf,
+  typeRank as typeRankOf,
 } from './scheduler-view';
 
 /** Gap within which a second click counts as a double-click (ms). */
@@ -336,17 +357,14 @@ export class SchedulerComponent implements OnDestroy {
   lineEnd(li: OrderLine, order: Order): string { return lineEndOf(li, order); }
 
   /** Units this line takes — never below 1 (a serialized unit / employee is 1). */
-  lineQty(li: OrderLine): number { return li.qty || 1; }
+  lineQty(li: OrderLine): number { return lineQtyOf(li); }
 
   /**
    * ` · ×12` for a multi-unit line, '' when it takes one — appended to a timeline
    * bar's sub-line, which is otherwise the only place a booking's quantity is
    * invisible (the Order Details row is where it is edited).
    */
-  private qtySuffix(li: OrderLine): string {
-    const q = this.lineQty(li);
-    return q > 1 ? ' · ×' + q : '';
-  }
+  private qtySuffix(li: OrderLine): string { return qtySuffixOf(li); }
 
   /**
    * The line's item capacity (see `data.capacity`). Drives whether Order Details
@@ -422,16 +440,13 @@ export class SchedulerComponent implements OnDestroy {
     return this.fmtDay(this.lineStart(li, order)) + ' → ' + this.fmtDay(this.lineEnd(li, order));
   }
 
-  itemName(type: CatalogType, refId: string): string { return this.data.itemLabel(type, refId); }
+  itemName(type: CatalogType, refId: string): string { return itemNameOf(this.data, type, refId); }
 
   /** Short type label for chips / row gutters (prototype `TYPE_LABEL`). */
   typeLabel(type: string): string { return TYPE_LABEL[type] ?? type; }
 
   /** Short item label used in a line row's gutter (prototype `shortItemLabel`). */
-  shortItemLabel(li: OrderLine): string {
-    const it = this.data.getItem(li.type, li.refId);
-    return it ? this.data.mkName(it) || it.name : li.refId;
-  }
+  shortItemLabel(li: OrderLine): string { return shortItemLabelOf(this.data, li); }
 
   /* ---------------------------- type grouping ---------------------------- */
 
@@ -440,10 +455,7 @@ export class SchedulerComponent implements OnDestroy {
    * consumable, part, labor, kit, attachment) — the sort key that keeps like
    * types together.
    */
-  typeRank(type: CatalogType | 'order'): number {
-    const i = CATALOG_TYPES.findIndex((c) => c.key === type);
-    return i < 0 ? CATALOG_TYPES.length : i;
-  }
+  typeRank(type: CatalogType | 'order'): number { return typeRankOf(type); }
 
   /**
    * An order's booked items grouped by catalog type (then by name, then by the
@@ -453,14 +465,7 @@ export class SchedulerComponent implements OnDestroy {
    * re-applied the moment a conflict is resolved (a bar moved/resized, or a
    * booking dropped) and the like types fall back together.
    */
-  sortedLines(order: Order): OrderLine[] {
-    return [...order.lineItems].sort(
-      (a, b) =>
-        this.typeRank(a.type) - this.typeRank(b.type) ||
-        this.itemName(a.type, a.refId).localeCompare(this.itemName(b.type, b.refId)) ||
-        this.lineStart(a, order).localeCompare(this.lineStart(b, order)),
-    );
-  }
+  sortedLines(order: Order): OrderLine[] { return sortedLinesOf(this.data, order); }
 
   /* ------------------------------- header ------------------------------- */
 
@@ -1017,53 +1022,22 @@ export class SchedulerComponent implements OnDestroy {
   /** Local midnight `i` days after the local midnight at `base` (DST-safe). */
   dayAt(base: number, i: number): number { return dayAtOf(base, i); }
 
-  orderT0(o: Order): number { return this.data.orderT0(o); }
-  orderT1(o: Order): number { return this.data.orderT1(o); }
-  lineT0(li: OrderLine, o: Order): number { return li.t0 ?? this.orderT0(o); }
-  lineT1(li: OrderLine, o: Order): number { return li.t1 ?? this.orderT1(o); }
+  orderT0(o: Order): number { return orderT0Of(this.data, o); }
+  orderT1(o: Order): number { return orderT1Of(this.data, o); }
+  lineT0(li: OrderLine, o: Order): number { return lineT0Of(this.data, li, o); }
+  lineT1(li: OrderLine, o: Order): number { return lineT1Of(this.data, li, o); }
 
   /** Does this order's date window include the Day-view anchor? */
-  private dateIncludes(o: Order): boolean {
-    const day = new Date(this.anchor);
-    day.setHours(0, 0, 0, 0);
-    const d = day.getTime();
-    const s = new Date(o.startDate + 'T00:00:00').getTime();
-    const e = new Date(o.endDate + 'T00:00:00').getTime() + DAY_MS - 1;
-    return d >= s && d <= e;
-  }
+  private dateIncludes(o: Order): boolean { return dateIncludesAt(o, this.anchor); }
 
   /** Percentage geometry across the 24-hour day (0..1440 minutes). */
-  private geomMin(t0: number, t1: number): BarGeom | null {
-    const l = Math.max(0, Math.min(1440, t0));
-    const r = Math.max(0, Math.min(1440, t1));
-    if (r <= l) return null;
-    return { left: (l / 1440) * 100, width: ((r - l) / 1440) * 100 };
-  }
+  private geomMin(t0: number, t1: number): BarGeom | null { return geomMinOf(t0, t1); }
 
-  fmtMin(t: number): string {
-    return this.pad2(Math.floor(t / 60)) + ':' + this.pad2(Math.round(t % 60));
-  }
+  fmtMin(t: number): string { return fmtMinOf(t); }
 
-  geom(startISO: string, endISO: string): BarGeom | null {
-    const N = this.colCount();
-    const view = this.viewStart();
-    // Day index from LOCAL midnights (never floor raw epoch — that is UTC and
-    // would make indices fractional in non-UTC timezones, mis-sizing the bars).
-    const dayIndex = (iso: string): number =>
-      Math.round((new Date(iso + 'T00:00:00').getTime() - view) / DAY_MS);
-    const sIdx = dayIndex(startISO);
-    const eIdx = dayIndex(endISO);
-    if (eIdx < 0 || sIdx >= N) return null;
-    const cs = Math.max(0, sIdx);
-    const ce = Math.min(N - 1, eIdx);
-    return { left: (cs / N) * 100, width: ((ce - cs + 1) / N) * 100 };
-  }
+  geom(startISO: string, endISO: string): BarGeom | null { return geomOf(startISO, endISO, this.view, this.anchor); }
 
-  lineDays(li: OrderLine, order: Order): number {
-    const s = new Date(this.lineStart(li, order) + 'T00:00:00').getTime();
-    const e = new Date(this.lineEnd(li, order) + 'T00:00:00').getTime();
-    return Math.max(1, Math.round((e - s) / DAY_MS) + 1);
-  }
+  lineDays(li: OrderLine, order: Order): number { return lineDaysOf(li, order); }
 
   /**
    * Capacity-aware conflict: a booking clashes only when the overlapping bookings
@@ -1073,112 +1047,19 @@ export class SchedulerComponent implements OnDestroy {
    * overlap and together over-ask. `committedUnits()` walks every order, so the line
    * under test is counted in its own peak.
    */
-  private isConflicted(li: OrderLine, order: Order): boolean {
-    const item = this.data.getItem(li.type, li.refId);
-    if (!item) return false;
-    const s = Date.parse(this.lineStart(li, order) + 'T00:00:00');
-    const e = Date.parse(this.lineEnd(li, order) + 'T00:00:00');
-    return this.committedUnits(item, s, e) > this.data.capacity(item);
-  }
+  private isConflicted(li: OrderLine, order: Order): boolean { return isConflictedWith(this.data, this.orders(), li, order); }
 
   /** "30 needed · 24 owned" — why the conflicts pane flagged the row. */
-  private conflictDetail(li: OrderLine, order: Order): string {
-    const item = this.data.getItem(li.type, li.refId);
-    if (!item) return '';
-    const s = Date.parse(this.lineStart(li, order) + 'T00:00:00');
-    const e = Date.parse(this.lineEnd(li, order) + 'T00:00:00');
-    return this.committedUnits(item, s, e) + ' needed · ' + this.data.capacity(item) + ' owned';
-  }
+  private conflictDetail(li: OrderLine, order: Order): string { return conflictDetailOf(this.data, this.orders(), li, order); }
 
-  models(): OrderModel[] {
-    const isDay = this.view === 'day';
-    return this.orders().map((o) => {
-      let og: BarGeom | null = null;
-      let oSub = o.lineItems.length + ' items';
-      if (isDay) {
-        if (this.dateIncludes(o)) {
-          og = this.geomMin(this.orderT0(o), this.orderT1(o));
-          oSub = this.fmtMin(this.orderT0(o)) + '–' + this.fmtMin(this.orderT1(o));
-        }
-      } else {
-        og = this.geom(o.startDate, o.endDate);
-      }
-      const orderBar: BarModel | null = og
-        ? {
-            orderId: o.orderId,
-            liId: null,
-            type: 'order',
-            label: o.orderId,
-            short: o.orderId,
-            sub: oSub,
-            conflict: false,
-            geom: og,
-          }
-        : null;
-      const lines: BarModel[] = [];
-      for (const li of this.sortedLines(o)) {
-        let lg: BarGeom | null = null;
-        let sub = '';
-        if (isDay) {
-          if (this.dateIncludes(o)) {
-            const t0 = Math.max(this.orderT0(o), Math.min(this.orderT1(o), this.lineT0(li, o)));
-            const t1 = Math.max(t0, Math.min(this.orderT1(o), this.lineT1(li, o)));
-            lg = this.geomMin(t0, t1);
-            sub = this.fmtMin(t0) + '–' + this.fmtMin(t1) + this.qtySuffix(li);
-          }
-        } else {
-          lg = this.geom(this.lineStart(li, o), this.lineEnd(li, o));
-          sub = this.lineDays(li, o) + 'd' + this.qtySuffix(li);
-        }
-        if (!lg) continue;
-        const conflict = !isDay && this.isConflicted(li, o);
-        lines.push({
-          orderId: o.orderId,
-          liId: li.id,
-          type: li.type,
-          label: this.itemName(li.type, li.refId),
-          short: this.shortItemLabel(li),
-          sub: sub + (conflict ? ' - CONFLICT' : ''),
-          conflict,
-          geom: lg,
-        });
-      }
-      return { order: o, isExpanded: this.expanded.has(o.orderId), orderBar, lines };
-    });
-  }
+  models(): OrderModel[] { return modelsOf(this.data, this.orders(), { view: this.view, anchor: this.anchor, expanded: this.expanded }); }
 
-  conflictCount(): number {
-    let n = 0;
-    for (const m of this.models()) for (const l of m.lines) if (l.conflict) n++;
-    return n;
-  }
+  conflictCount(): number { return conflictCountOf(this.data, this.orders(), { view: this.view, anchor: this.anchor, expanded: this.expanded }); }
 
   /** Flat conflict list for the inspector pane (prototype `renderInspector`).
    *  Re-sorted by catalog type so like types stay together, and recomputed on
    *  every render so resolving a conflict immediately re-groups the list. */
-  conflicts(): { type: CatalogType; refId: string; orderId: string; label: string; detail: string }[] {
-    const out: { type: CatalogType; refId: string; orderId: string; label: string; detail: string }[] = [];
-    for (const m of this.models()) {
-      for (const line of m.lines) {
-        if (!line.conflict) continue;
-        const li = m.order.lineItems.find((l) => l.id === line.liId);
-        if (!li) continue;
-        out.push({
-          type: li.type,
-          refId: li.refId,
-          orderId: m.order.orderId,
-          label: line.label,
-          detail: this.conflictDetail(li, m.order),
-        });
-      }
-    }
-    return out.sort(
-      (a, b) =>
-        this.typeRank(a.type) - this.typeRank(b.type) ||
-        a.label.localeCompare(b.label) ||
-        a.orderId.localeCompare(b.orderId),
-    );
-  }
+  conflicts(): ConflictRow[] { return conflictsOf(this.data, this.orders(), { view: this.view, anchor: this.anchor, expanded: this.expanded }); }
 
   onPoolStart(e: Event, item: Item): void {
     (e as DragEvent).dataTransfer?.setData('text/plain', item.type + '|' + item.id);
