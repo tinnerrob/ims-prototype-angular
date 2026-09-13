@@ -548,14 +548,53 @@ phase, which is exactly what that harness proves).
 What can be checked without one is checked above: the map type-checks, the payload is measured, and the
 guard-before-fetch ordering is Angular's own contract for `canActivate` + `loadComponent`.
 
-### P8 — Change-detection feasibility study · `HIGH` · ⛔ **approval required**
-**Scope:** all 27 components (0 `OnPush` today).
-**Do:** assess, and probably **recommend against a sweep**: with a mutable singleton store and
-zone-based CD, an `OnPush` component whose template reads store state mutated by a sibling or a service
-(the receiving desk, count sessions, the live timeline) would simply stop updating unless every
-mutation arrives via an input or an event. The credible options are (a) `OnPush` only for leaf/shared
-widgets driven purely by inputs — `record-view`, `dynamic-form`, `field-editor`, `evidence`, `confirm`
-— or (b) adopt signals in the store first. Write the finding, propose (a) as a bounded pilot, stop.
+### P8 — Change-detection feasibility study · `HIGH` · status: **done (2026-09-12) — study + a bounded pilot, not applied; the reason is in the last paragraph**
+**Measured first — which templates read store/services *inline*?** Of the 25 component templates, **7
+read nothing from an injected service**; the other 18 read it directly and heavily (purchasing 20
+references, invoicing 14, scheduler 12, orders/app/handoff 10–11, dashboard 10). The 7 break down as:
+
+| Component | service reads in template | `@Input`s |
+|---|---|---|
+| `admin` | 0 | 0 |
+| `feature-modules` | 0 | 0 |
+| `logistics` | 0 | 0 |
+| `field-editor` | 0 | **1** (`fields`) |
+| `record-view` | 0 | **2** (`view`, `editable`) |
+| `evidence` | 0 | **3** (`scope`, `refId`, `readOnly`) |
+| `dynamic-form` | 0 | **4** (`schema`, `values`, `errors`, `readOnly`) |
+
+(For the three with 0 inputs and 0 inline reads — `admin`, `feature-modules`, `logistics` — the template
+calls *component methods* that read the store, so the zero is a measurement artefact, not freedom from
+the store. Only the four widgets are genuinely input-driven.)
+
+**The mechanism, stated precisely, because it decides the answer:** an `OnPush` component is re-checked
+when one of *its* inputs changes by reference, when an event fires *inside* it, or when it is explicitly
+marked. This app's store is a **mutable singleton** and components read it straight from templates, so an
+`OnPush` page would stop updating the moment a *sibling* or a service mutates the store — the receiving
+desk posting a receipt, a count session being closed, the telemetry loop appending an alert, the shell's
+user switch. Nothing about that is hypothetical: `scheduler` and `timesheet` already inject
+`ChangeDetectorRef` and call `detectChanges()` **6 times between them**, precisely because their DOM
+mutations happen in `window` listeners that Angular's zone does not associate with a component.
+**Therefore: no sweep.** OnPush across 18 store-reading pages would be a behaviour change whose failure
+mode — a view that silently stops refreshing — is invisible to every gate this project has.
+
+**The bounded pilot, if you want one:** `field-editor`. It is the smallest safe surface: exactly one
+input, no store reads at all, the parent hands it a **fresh array** every time the modal opens
+(`openAddCategory`/`openEditCategory` copy with `copyFields`), and every mutation of that array *after*
+that is the child's own (`add`/`remove`/`move`/`ngModel`), which re-renders under `OnPush` anyway
+because the event originates inside it. The change is one line in the decorator
+(`changeDetection: ChangeDetectionStrategy.OnPush`). **Not applied here** for one honest reason: it can
+only be confirmed by looking at the Verticals modal (open it, add a field, type in it, move it, remove
+it) — and this phase was scoped to the *study*, with the pilot pausing for exactly that look. Say the
+word and the one line is in.
+**The other three widgets are *not* safe to pilot blind**, and the reason is checkable but tedious: it
+depends on whether any parent mutates the object it passes *in place* and then expects the child to
+notice. `dynamic-form`'s `values` is the risk case — parents that programmatically fill `attributes`
+(e.g. after picking a PO line on the receiving desk) rely on that. That audit is a half-day per call
+site, and a wrong answer is another invisible stale view.
+**The direction that actually fixes this** is the one the log named before: signals in the store. Once
+store reads are signals, `OnPush` (or `Zoneless`) becomes safe and this whole question disappears; that
+is a project, not a phase, and it is not proposed here.
 
 ### P9 — Component/template test gap · `HIGH` · ⛔ **approval required**
 **Scope:** the 0-spec Karma setup.
@@ -637,7 +676,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
 | 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
-| 8 | 2026-09-12 | **P8** — Change-detection study | | `HIGH` | ⛔ awaiting approval |
+| 8 | 2026-09-12 | **P8** — Change-detection study | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; identified `field-editor` as the only safe pilot | `HIGH` | **done (study)** — no sweep recommended and none applied: a stale view is invisible to every gate here. Pilot (one line) ready on request; the real fix is signals in the store |
 | 9 | 2026-09-12 | **P9** — Component/template tests | | `HIGH` | ⛔ awaiting approval |
 
 ### Findings ledger (evidence for the phases above)
@@ -668,6 +707,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
+| No `OnPush` | 0 of 27 components | **P8 ✔** (study) — 18 templates read the mutable store inline; no sweep; `field-editor` is the one safe pilot, unapplied pending a browser look |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |
 | Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
