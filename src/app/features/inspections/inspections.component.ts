@@ -8,7 +8,6 @@ import {
   FormSchema,
   Inspection,
   InspectionResult,
-  InspectionSeverity,
   INSPECTION_OUTCOMES,
   INSPECTION_SEVERITIES,
   statusClass,

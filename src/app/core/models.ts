@@ -184,8 +184,6 @@ export interface Party extends AuditFields {
 /** What a counterparty is to us (see `Party.kinds`). */
 export type PartyKind = 'customer' | 'supplier';
 
-export const PARTY_KINDS: PartyKind[] = ['customer', 'supplier'];
-
 export const PARTY_KIND_LABEL: Record<PartyKind, string> = {
   customer: 'Customer',
   supplier: 'Supplier',
@@ -661,8 +659,6 @@ export interface StockLevel extends AuditFields {
 /** Whether a count session is still being worked or has been posted (B5). */
 export type CountSessionStatus = 'draft' | 'posted';
 
-export const COUNT_SESSION_STATUSES: CountSessionStatus[] = ['draft', 'posted'];
-
 /** One row of a count sheet: what the place should hold, and what was found (B5). */
 export interface CountLine {
   /** `<item id>@<location id>` — the level it counts (unique within a session). */
@@ -697,8 +693,6 @@ export interface CountSession extends AuditFields {
 
 /** What a document is attached to. */
 export type DocumentScope = 'item' | 'inspection' | 'receipt';
-
-export const DOCUMENT_SCOPES: DocumentScope[] = ['item', 'inspection', 'receipt'];
 
 /** What kind of evidence a document is. */
 export type DocumentKind = 'photo' | 'signature' | 'packing-slip' | 'certificate' | 'coa';
@@ -843,8 +837,6 @@ export interface Yard extends AuditFields {
 
 /** How a landed quantity arrived (a damaged one goes to the quarantine place). */
 export type ReceivingCondition = 'good' | 'damaged';
-
-export const RECEIVING_CONDITIONS: ReceivingCondition[] = ['good', 'damaged'];
 
 /**
  * The receiving desk's rules, as tenant configuration (B6, see `docs/PLAN-B.md`).
@@ -1066,8 +1058,6 @@ export const ROLES: RoleDef[] = [
   },
 ];
 
-export const ROLE_KEYS: RoleKey[] = ROLES.map((r) => r.key);
-
 /** The role definition for a key (falls back to the least-privileged role). */
 export function roleDef(key: RoleKey): RoleDef {
   return ROLES.find((r) => r.key === key) ?? ROLES[ROLES.length - 1];
@@ -1078,8 +1068,6 @@ export function roleLabel(key: RoleKey): string {
 }
 
 export type TenantPlan = 'starter' | 'professional' | 'enterprise';
-
-export const TENANT_PLANS: TenantPlan[] = ['starter', 'professional', 'enterprise'];
 
 export const TENANT_PLAN_LABEL: Record<TenantPlan, string> = {
   starter: 'Starter',
@@ -1191,8 +1179,6 @@ export const TIMESHEET_KIND: Record<TimesheetTarget, { label: string; icon: stri
   lunch: { label: 'Lunch', icon: 'bi-cup-hot', cls: 'ts-lunch' },
 };
 
-export const TIMESHEET_TARGETS: TimesheetTarget[] = ['order', 'workorder', 'shop', 'overhead', 'idle', 'lunch'];
-
 /** A labour clock segment (prototype `IMS.timesheets` row). */
 export interface Timesheet extends AuditFields {
   id: string;
@@ -1258,8 +1244,6 @@ export interface Dispatch extends AuditFields {
 
 export type InvoiceStatus = 'pending' | 'invoiced' | 'paid';
 
-export const INVOICE_STATUSES: InvoiceStatus[] = ['pending', 'invoiced', 'paid'];
-
 export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
   pending: 'Pending',
   invoiced: 'Invoiced',
@@ -1322,8 +1306,6 @@ export const FORM_FIELD_KINDS: FormFieldKind[] = [
 
 /** What a form schema can be attached to. */
 export type FormScope = 'item' | 'inspection' | 'receipt-line' | 'stock-level';
-
-export const FORM_SCOPES: FormScope[] = ['item', 'inspection', 'receipt-line', 'stock-level'];
 
 /**
  * One field a schema declares. The `key` is resolved against a record's

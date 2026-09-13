@@ -147,12 +147,3 @@ export function workOrderTip(data: DataService, w: WorkOrder): Tip {
     { badge: w.status },
   );
 }
-
-/** A day column in the calendar (`8/1/26`, weekday). */
-export function dayTip(date: Date, lines: TipLine[] = []): Tip {
-  const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  return tip(
-    stampDate(iso),
-    [{ label: 'Weekday', value: date.toLocaleDateString('en-US', { weekday: 'long' }) }, ...lines],
-  );
-}

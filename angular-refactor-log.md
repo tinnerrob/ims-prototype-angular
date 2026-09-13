@@ -126,7 +126,32 @@ from the HANDOFF feature table, and add `PLAN-B.md` / `PLAN-C.md` to its "the do
 command re-run today; no doc claims a feature absent from `app.routes.ts`.
 **Why first:** it is the map every later phase navigates by, and it cannot break the app.
 
-### P2 — Dead code sweep · `LOW` · status: **queued**
+### P2 — Dead code sweep · `LOW` · status: **done (2026-09-12)**
+**Done:** the 6 unused imports removed — 5 from `data.service.ts` (`DocumentKind`, `PartyKind`,
+`PurchaseOrderStatus`, `WorkOrderPart`, `countWeekdays`) plus `InspectionSeverity` in
+`inspections.component.ts`; each was checked for comment/JSDoc use first, and each symbol's *real*
+use site imports it from `models`/`period`, never re-exported through the store, so nothing broke.
+Then a whole-tree export sweep (every `export` in `src/app` tested against every other file under
+`src/`, `scripts/runtime-checks/` and `docs/`), which found **10 truly dead exports**, all deleted:
+nine `X: X[] = [...]` vocabulary arrays that merely restated their own union (`PARTY_KINDS`,
+`COUNT_SESSION_STATUSES`, `DOCUMENT_SCOPES`, `RECEIVING_CONDITIONS`, `ROLE_KEYS`, `TENANT_PLANS`,
+`TIMESHEET_TARGETS`, `INVOICE_STATUSES`, `FORM_SCOPES` — each keeps a **used** `*_LABEL` sibling that
+is the single source) and `dayTip()` in `tip-builders.ts`, whose siblings
+`orderTip`/`assetTip`/`partyTip`/`segmentTip`/`employeeTip`/`workOrderTip` are all called from pages
+while it has no caller at all.
+**Left alone on purpose:** 11 exports used *inside their own file* — the public shape of a method
+signature or an internal helper (`MovementInput`, `ReceiveLandingInput`, `ReceiveLineInput`,
+`SearchCount`, `GeoAlert`, `haversineMeters`, `ViewGroup`, `ConfirmRequest`, `CONFIRM_DEFAULTS`,
+`stampMinutes`, `stampHM`). Exported API, not dead code.
+**Verified:** the diff is **33 deletions / 0 additions** across 4 files; 96 files audited for orphans,
+**0** found (the two it flagged are `app.component.ts` / `app.config.ts`, the bootstrap entry points);
+`lint:styles` was already 0-unused, so there was no CSS to remove; gates green (build `complete` ·
+`lint:ctor` OK · **202 ok / 0 FAIL**).
+**Reproduce:** the sweeps are two throwaway Node scans — for each named import/export, test the
+symbol against every other `src`/`scripts`/`docs` file (and, for imports, exclude the declaration
+line to catch file-local use). Worth promoting to a committed audit script next to
+`scripts/audit-styles.js` so the rule becomes a gate — recorded as an optional P2b rather than
+widening this phase.
 **Scope:** unused imports (6 measured), then unused exports, orphan files, unreferenced CSS.
 **Do, in this order:**
 1. Remove the 6 unused named imports — first confirming the symbol is not cited in a comment/JSDoc
@@ -248,7 +273,7 @@ because the phase added coverage — which must be stated in the log).
 |---|---|---|---|---|---|
 | 0 | 2026-09-12 | **Baseline** | Read-only survey of the whole tree: file/LOC/import/selector/subscription/`any`/budget counts, gate run, and the doc-drift check. No source changed | — | Gates green at `17c35c3`: build `complete`, `lint:ctor` OK, `lint:styles` 0 unused, `check:store` **202 ok / 0 FAIL**. Assessment + phase list written (Sections 1–5) |
 | 1 | 2026-09-12 | **P1** — Documentation truth pass | README structure/gates/roadmap; HANDOFF path + counts + bundle + Categories row + document list; PLAN.md headline + a `check14`–`check24` block with measured counts; PLAN-B.md principle line | `LOW` | **done** — 30 named paths verified to exist, 0 stale references left, gates green at **202 ok / 0 FAIL** (docs only, no `src/` change) |
-| 2 | 2026-09-12 | **P2** — Dead code sweep | | `LOW` | *queued* |
+| 2 | 2026-09-12 | **P2** — Dead code sweep | 6 unused imports removed; export + orphan sweep over the whole tree; 10 dead exports deleted | `LOW` | **done** — **33 deletions / 0 insertions** in 4 files, 0 orphans in 96 files, gates green at **202 ok / 0 FAIL** |
 | 3 | 2026-09-12 | **P3** — Naming & formatting | | `LOW` | *queued* |
 | 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | | `LOW` | *queued* |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | | `MED` | *queued* |
@@ -261,7 +286,10 @@ because the phase added coverage — which must be stated in the log).
 
 | Finding | Measured | Phase that clears it |
 |---|---|---|
-| Unused named imports | 6 (`DocumentKind`, `PartyKind`, `PurchaseOrderStatus`, `WorkOrderPart`, `countWeekdays` in `data.service.ts`; `InspectionSeverity` in `inspections.component.ts`) | P2 |
+| Unused named imports | 6 (`DocumentKind`, `PartyKind`, `PurchaseOrderStatus`, `WorkOrderPart`, `countWeekdays` in `data.service.ts`; `InspectionSeverity` in `inspections.component.ts`) | P2 ✔ |
+| Dead exports | 10: nine `X: X[] = [...]` arrays restating their own union, and `tip-builders.ts`'s `dayTip()` (no caller; its six siblings all called) | P2 ✔ |
+| File-local API types | 11 exports used only inside their own file (`MovementInput`, `GeoAlert`, `ViewGroup`, `ConfirmRequest`, …) | P2 — kept deliberately, not dead |
+| Orphan files | 0 of 96 (every component/service/directive is named elsewhere) | P2 ✔ |
 | Stale doc references | `README.md`: `features/categories/`, `features/items/`; `HANDOFF.md`: old checkout path, "140 checks", "~738 kB", Categories feature row | P1 |
 | Selector mismatch | `ims-admin-verticals` on `VerticalsComponent` | P3 |
 | Possible lifecycle leaks | `telemetry.service.ts:66/71` (`setInterval`), `scheduler.component.ts:1512` (deferred global listener removal) | P4 |
