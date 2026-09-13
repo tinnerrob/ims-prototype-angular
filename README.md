@@ -17,33 +17,56 @@ npm start          # dev server → http://localhost:4200 (hot reload)
 npm run build      # production build to dist/ims-web
 ```
 
+There are **no Karma specs** — verification is `npm run check:store`, 24 harnesses
+that compile the core services to JS and drive the *real* store from Node (no
+browser, no server), plus two hand-rolled audits:
+
+```bash
+npm run check:store   # 202 runtime checks against the real store
+npm run lint:ctor     # class-field initializer order
+npm run lint:styles   # unused stylesheet rules
+```
+
 ## Structure
 
 ```
 src/app/
 ├── core/
-│   ├── models.ts        # Typed domain models + catalog type registry
-│   └── data.service.ts  # Typed in-memory store + localStorage persistence (the apiAdapter seam)
+│   ├── models.ts            # Typed domain models + catalog type registry + the FormField vocabulary
+│   ├── data.service.ts      # Typed in-memory store + versioned localStorage persistence (the apiAdapter seam)
+│   ├── forms.service.ts     # The form-builder engine: schema resolution, coerce(), validate(), fieldsFor()
+│   ├── vertical-metadata.ts # The business-type registry — the *seed* for a tenant's own verticals
+│   ├── modules.service.ts   # Module licence flags (+ module.guard.ts: requireModule)
+│   ├── session.service.ts   # Who the app is acting as (workspace + person) + can() permissions
+│   ├── period.ts pricing.ts # Pure date/period and money/billing helpers
+│   └── views.ts page-search.service.ts telemetry.service.ts
 ├── features/
-│   ├── admin/           # Administration shell (Locations, Categories, Feature Modules)
+│   ├── admin/           # Administration: Locations · Business type & Categories · Feature Modules
+│   ├── assets/          # Assets (typed catalog: list + CRUD per category tab)
 │   ├── dashboard/       # Landing + port roadmap
-│   ├── categories/      # Categories (Admin submenu: type tabs, list + add/rename/remove)
-│   ├── items/           # Items & Stock (typed catalog: list + CRUD per type)
-│   ├── invoicing/       # Billing & Invoicing (module: invoices from orders)
 │   ├── handoff/         # Item Hand-Off & Custody (movements: issue/return + log)
 │   ├── inspections/     # Receiving / Inspections (check in/out meter/fuel log)
+│   ├── invoicing/       # Billing & Invoicing (module: invoices from orders)
 │   ├── locations/       # Locations (Admin submenu: hierarchy + location type tabs)
 │   ├── logistics/       # Logistics & Dispatch (module: truck dispatch)
 │   ├── maintenance/     # Field Service & Maintenance (module: work orders)
+│   ├── orders/          # Parties & Orders (party CRUD + order headers/detail)
+│   ├── pricing/         # Pricing & Policies (rules engine, fees, tax, counterparty rate cards)
+│   ├── purchasing/      # Purchasing & Receiving (purchase orders + the receiving desk)
 │   ├── rentals/         # Rentals & Sub-Rentals (module: vendor sub-rentals)
 │   ├── scheduler/       # Scheduling (module: week timeline + conflicts)
 │   ├── telemetry/       # Fleet Telemetry (module: GPS sim live feed)
-│   ├── timesheet/       # Labor & Timesheets (module: time records)
-│   └── orders/          # Parties & Orders (party CRUD + order headers/detail)
+│   └── timesheet/       # Labor & Timesheets (module: time records)
 ├── shared/
-│   └── record-view/     # shared read-only record viewer (click a table row)
-├── app.component.*      # Shell: sidebar (Core vs Planned groups) + topbar + router outlet
-├── app.routes.ts        # Core-first route map
+│   ├── confirm/         # Confirmation dialog (ask before a destructive/state-changing act)
+│   ├── dynamic-form/    # Renders FormField *values* (<ims-dynamic-form>)
+│   ├── evidence/        # Document/evidence panel
+│   ├── field-editor/    # Authors FormField *definitions* (<ims-field-editor>)
+│   ├── modal-dismiss/   # ✕ / click-outside / dirty-guard for every modal
+│   ├── record-view/     # Shared read-only record viewer (click a table row)
+│   └── tip/             # Tooltips
+├── app.component.*      # Shell: sidebar (inventory / movement / admin / module groups) + topbar + outlet
+├── app.routes.ts        # Route map (feature routes + module-guarded ones)
 └── app.config.ts
 ```
 
@@ -81,7 +104,7 @@ touching feature code.
 - [x] Receiving / Inspections (core) — check-in/out with meter/fuel + inspection log; the log's ‹ › date navigator leads the card header (at the far left of the table, shown once a Day/Week/Month filter is picked) with the All / Day / Week / Month chips and the **Log Inspection** button against the right end; clicking a logged inspection opens the inspection editor (no read-only step, no pencil column), and **Log Inspection** opens that same editor on a new record (the old side pane is gone).
 - [x] Order line-item booking — add catalog items to order lines (connects Items ↔ Orders ↔ Hand-Off).
 - [x] Module registry + gating (ModulesService + route guard) — Field Service, Labor, Rentals, Dispatch, Billing ported.
-- [x] Admin — Administration shell with submenus: Locations, Categories, Feature Modules.
+- [x] Admin — Administration shell with submenus: Locations, **Business type & Categories** (the tenant's own verticals, categories and stock fields), Feature Modules.
 - [x] Scheduling — week timeline, conflict detection, item booking (overbooking allowed); blocks drag to another day, lists group by type, double-click opens the read-only asset/contract viewer without flashing the lane shut first (a lane click waits out the 250 ms double-click window); every modal closes on ✕ or a click outside the dialog (no footer Close/Cancel duplicates) and asks before discarding unsaved form edits.
 - [x] Fleet Telemetry — GPS-sim live feed with geofence breaches.
 

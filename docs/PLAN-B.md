@@ -59,7 +59,8 @@ Three asks drive it, and they turn out to be the same ask seen from three sides:
   column ↔ a field, `NOT NULL` ↔ optionality, enums ↔ unions, FKs ↔ tables, the
   five derived stock columns, and every table `auditedRows()` writes ↔ the map).
 - **Verified without a browser.** `npm run check:store` compiles the core
-  services and drives the real store from Node — 140 checks in 13 harnesses. This
+  services and drives the real store from Node — it held 140 checks in 13 harnesses
+  when this plan was written and holds **202 in 24** today. This
   is where a new model/mutator gets its proof, and where the form/level/receiving
   invariants below will be proven too.
 

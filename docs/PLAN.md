@@ -331,7 +331,7 @@ carried unremarked since its first commit.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 140 runtime checks against the real store, no browser
+npm run check:store    # 202 runtime checks in 24 harnesses, against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -492,6 +492,34 @@ hand-roll `localStorage` and assert on the store's own output:
   once the days run out; and the basis steps on the **line's own days** (a three-day
   line inside a 24-day order bills the daily rate, and the invoice agrees), which is the
   second day-source bug the same audit found.
+
+- `check14.mjs` — **B2, 7 checks:** the form builder's backend — seeded `form_schemas`
+  rows attributed like any configuration row, `(scope, type)` resolution with an exact
+  type beating a wildcard, `coerce()` dropping undeclared keys, and the `jsonb` payload
+  surviving a reload.
+- `check15.mjs` — **B4, 4 checks:** kits and attachments join the level model, so a row
+  with a quantity above one can sit in more than one place.
+- `check16.mjs` — **B5, 4 checks:** a `StockLevel` carries its own facts (a lot, an
+  expiry) under a schema, and a cycle count is a document with its own sheet.
+- `check17.mjs` — **B6, 10 checks:** receiving lands per line — one PO line split across
+  places, each landing writing its own level, its own `receipt_line` and its own movement.
+- `check18.mjs` — **B7, 6 checks:** an inspection's checklist is the fields of an
+  `inspection`-scope schema, and its results are one entry per field key.
+- `check19.mjs` — **B8, 4 checks:** a record's evidence is `documents` rows (the count
+  derived, never stored) and **hold** is a first-class read.
+- `check20.mjs` — **C1, 6 checks:** a workspace's verticals, categories and stock schema
+  are its own rows — seeded from the compiled registry, then owned, ordered, switchable
+  and removable (with their guards).
+- `check21.mjs` — **C2, 4 checks:** one field engine — an asset's fields are the tenant's
+  stock set *union* its category's own, and the same `coerce()`/`validate()` drives it.
+- `check22.mjs` — **C4, 5 checks:** the authoring invariants — a new category's spine
+  `type` follows its `behaviour`, an edit keeps it unless the behaviour changes, and the
+  counts the screen prints are real.
+- `check23.mjs` — **Phase C cleanup, 7 checks:** the fixture's rows linked to categories
+  (no more orphaned `categoryId`), and *Start clean* leaving a workspace with its own
+  catalog and nothing else.
+- `check24.mjs` — **Phase C, 4 checks:** a field key identifies a field *in its own
+  list* — two categories may both declare `rate`, one list may not declare it twice.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.

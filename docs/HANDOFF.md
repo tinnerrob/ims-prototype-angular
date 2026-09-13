@@ -1,16 +1,19 @@
 # IMS — Angular Port: Handoff / State
 
-**Date:** 2026-09-11 · **Repo:** `https://github.com/tinnerrob/ims-prototype-angular.git` (`main`)
+**Date:** 2026-09-12 · **Repo:** `https://github.com/tinnerrob/ims-prototype-angular.git` (`main`)
 **Purpose:** Everything a fresh session needs to resume work with no guesswork.
-**The three documents:** this file is the *state*; `docs/PLAN.md` is the *plan*
+**The documents:** this file is the *state*; `docs/PLAN.md` is the *plan*
 (the increments, their acceptance criteria, the open decisions and the
 verification recipe); `docs/DATA-MODEL.md` is the *schema the backend implements*
 — tables, columns, FKs, enums, what is derived and what the server must enforce.
+`docs/PLAN-B.md` and `docs/PLAN-C.md` are the two landed phase plans (the form
+builder and the level/receiving/inspection work, then the tenant-owned catalog) —
+history, kept because the data model and the harnesses are their argument.
 
 ## Run / test
 
 ```bash
-cd /Users/robt/Projects/ims-web
+cd /Users/robt/Projects/ims-prototype-angular
 npm install        # once
 npm start          # dev server → http://localhost:4200 (hot reload)
 npm run build      # production build to dist/ims-web
@@ -18,15 +21,18 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (140 checks across tenancy,
-attribution, the item↔location spine, per-place stock levels, the vertical
-registry, the data-model document, the custody ledger, purchasing, the
+services to JS and drives the real store from Node (202 checks across 24 harnesses
+— tenancy, attribution, the item↔location spine, per-place stock levels, the
+vertical registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/
-month windows the purchasing lists filter by, the order↔party join, and the
-counterparty rate cards — see `docs/PLAN.md` → "Verification recipe").
+month windows the purchasing lists filter by, the order↔party join and the
+counterparty rate cards; then Phase B/C: the jsonb form builder, level-tracked
+kits, per-place level facts, the receiving desk's split landings, template-driven
+inspections, documents + hold, the tenant-owned catalog (verticals / categories /
+stock schema) and the field-key rule — see `docs/PLAN.md` → "Verification recipe").
 
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
-~738 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
+~830 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
 (raised from 4 kB), because `scheduler.component.scss` — by far the largest component
 stylesheet, everything else lives in `styles.scss` — is ~4.4 kB minified. Builds should
 otherwise be warning-free; a new component-style warning means a component's SCSS has
@@ -52,7 +58,7 @@ than editing a count, and a change of place or a physical count logs a
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
 | **Administration** | `features/admin` | submenu shell: Locations · Business type & Categories · Feature Modules (licence flags) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
-| Categories | `features/categories` | type tabs (named by the tenant's vertical registry), add/rename/remove (Admin submenu) |
+| Business type & Categories | `features/admin` (`verticals.component.*`) | the workspace's own vertical, its categories (one tab each) and the stock fields every asset carries — seeded from the registry, then the tenant's rows |
 | Pricing & Policies | `features/pricing` | the pricing rules engine · overhead / service fees · sales-tax schedules · **counterparty rate cards** (negotiated rates per party, read by the order screens and used as the PO editor's cost default) |
 | Parties & Orders | `features/orders` | party CRUD + order headers + per-order **line booking**; a party's name is read through the order's FK (never stored) and removal is refused while a document names it |
 | Assets | `features/assets` | typed catalog: list/CRUD per type, scoped by location, with tabs/labels/columns/defaults read from the tenant's vertical registry; row actions **Move** (logs a `transfer` of a chosen quantity between places) and **Count** (logs a signed `adjust` at one place), the record viewer's **Ledger** section reads both back, and a counted row's stock is per place (`stock_levels`) |
