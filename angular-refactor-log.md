@@ -452,14 +452,65 @@ The 12 dead declarations P5 left behind, the 3 grouped ones that must stay, and 
 verification are recorded under **P5c** above, beside **P2c** — the detector bug that hid them — because
 those two entries are one finding.
 
-### P6 — Store & component decomposition study · `HIGH` · ⛔ **approval required**
-**Scope:** `core/data.service.ts` (5,190), `core/models.ts` (1,457), `scheduler.component.ts` (1,578 +
-676 template).
-**Do:** not a split — a *proposal*. Use the store's own section comments to list the cohesive
-sub-domains, mark which have no cross-talk, and state the harness parity proof each extraction would
-need. Then propose an order, one domain per iteration, each proven by a full `check:store` run.
-**Why gated:** 24 harnesses and `DATA-MODEL.md` treat `DataService` as the schema's facade; moving it
-moves the spine of the app. The payoff is readability, not correctness.
+### P6 — Store & component decomposition study · `HIGH` · status: **done (2026-09-12) — a proposal with measurements, no code moved**
+**Method (measured, not skimmed):** the store's own 32 banner sections were parsed with method
+declarations and `this.x(` call sites, so every section got a line count, a method count, its
+**outbound** calls into other sections and its **inbound** calls from them; separately, the *external*
+call sites (`.method(` in `features/`, `shared/`, `scripts/runtime-checks/`) were counted per public
+method. Nothing was resolved by guesswork: 353 methods, 0 unresolved call sites.
+
+**What the store is (`core/data.service.ts`, 5,185 lines, 353 methods):**
+
+| Section | lines | methods | public | calls out | call sites outside |
+|---|---|---|---|---|---|
+| the tenant's catalog (Phase C) | 347 | 28 | 22 | 21 | 183 |
+| orders | 254 | 23 | 21 | 11 | 154 |
+| receipts | 246 | 11 | 6 | 17 | 63 |
+| billing | 236 | 16 | 14 | 14 | 52 |
+| movements | 235 | 12 | 8 | 28 | 86 |
+| purchasing | 221 | 22 | 22 | 19 | 101 |
+| items | 219 | 18 | 14 | 9 | **224** |
+| price cards | 188 | 15 | 14 | 4 | 45 |
+| timesheets | 155 | 20 | 19 | 7 | 33 |
+| stock levels | 133 | 11 | 8 | 5 | 99 |
+| … 22 more | | | | | |
+| **seeds + `bulk resources` + `serialized fleet` + tenancy seeds** | **~1,050** | — | — | — | 0 |
+| `format` | 41 | 6 | 6 | **0** | 119 |
+
+The spine is visible in the numbers: **`persistence` is called from 21 sections (85 call sites)** — the
+shared bottom layer, as it should be; **`items` is the most depended-on domain** (31 inbound
+cross-section calls — movements 6, KPIs 5, work orders 4, catalog 4, receipts 3, …); and **1,595 call
+sites live outside the store** (`data.x(…)` across features, shared widgets and harnesses). That last
+number is the facade, and it is the whole argument for what follows.
+
+**The proposal, in order, with the proof each step needs:**
+
+1. **`format` → `core/format.ts`** (41 lines, 6 methods, **0 inbound cross-section calls**, 119 external
+   call sites that keep working via a re-export). Pure value formatting — exactly the shape B1 already
+   took twice for `period.ts` and `pricing.ts`. *Proof:* `check:store` (the harnesses assert money and
+   date strings) + `build`.
+2. **The seeds → `core/seed/*.ts`** (~1,050 lines, no inbound calls, no external call sites — pure data
+   plus pure row factories). **Not a new idea:** `PLAN-B.md`'s B1 lists exactly this as its remaining
+   work ("Still to do under B1: the seed split into `core/seed/`"). *Proof:* `check:store` *is* the
+   proof — the fixture is asserted end to end (every section above has checks over its seeded rows).
+3. **Nothing else.** Every remaining section is entangled with the spine: split a domain out and it
+   either needs the store passed back in or leaves thin delegates on the facade anyway, while 1,595
+   external call sites stay exactly as they are. That is a redesign of the app's spine with no
+   correctness payoff, which is why it is not proposed.
+
+**Component half — the Scheduler (1,591 lines, 105 methods; 24 private, 81 public):** the size is held
+by 35 methods that touch an injected service — `assetModel` (93 lines), `availability` (72),
+`showOrderView` (65), `onMoveMove` (59), `onResizeMove` (52), `saveRes` (47). 70 methods touch none, but
+most are one-line template helpers; the ones with real weight are the *derived-value* computations:
+`models` (56), `columns` (23), `conflicts` (23), `peakUnits` (17), `bookingsInRange` (15),
+`committedUnits` (13) — i.e. a `scheduler-view.ts` that takes the data it needs as arguments.
+**Why that one is filed rather than started:** the harnesses cover the **store**, not view models, and
+there are **0 specs** — so a component extraction today would be a change nothing can check. It is the
+natural first customer of P9.
+
+**Status:** 1 and 2 are each one iteration with an existing proof; neither is started here because this
+phase was scoped to the proposal, and because the log's own rule is that a phase documents before the
+next one executes. Say the word and 1 goes first (smallest, pure), then 2 (biggest, but pure data).
 
 ### P7 — Routing & bundle shape · `HIGH` · ⛔ **approval required**
 **Scope:** `app.routes.ts` (16 eager features), `angular.json` budgets.
@@ -556,7 +607,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | All 26 sheets (828 rules) run through 4 mechanical detectors; layer structure of `styles.scss` mapped; one comment added at the token footgun | `MED` | **done, 0 removals** — nothing is provably removable (0 unused / 0 duplicate rules / 0 duplicate declarations / 0 superseded rules); 4 insertions / 1 deletion, CSS bundle hash **byte-identical**, gates green at **202 ok / 0 FAIL**. Deeper work recorded as **P5b** (restructure, ⛔) |
 | 5b | 2026-09-12 | **P5b** — Restructure, measured | Measured every provable restructure (all 0) + unread custom properties (13); deleted the 2 stale ones with their false comment; added `scripts/css-equivalence.js` + `npm run css:equiv` | `MED` | **done** — equivalence check: 619 selectors both sides, **only** the 2 deleted declarations differ; 11 unread scale/palette tokens reported and kept; the reorder restructure shown unprovable without a browser |
 | 5c | 2026-09-12 | **P5c** — the dead declarations the gate hid | 12 declarations deleted from `styles.scss` (each re-set for *every* selector of its rule); the 3 grouped ones kept | `LOW/MED` | **done** — compiled-CSS winning-value maps **identical** (`diff` = 0 of 619 selectors / 2185 declarations); CSS hash `2638d90c…` → `3723d96e…` (text only); gates green at **202 ok / 0 FAIL** |
-| 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
+| 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
 | 8 | 2026-09-12 | **P8** — Change-detection study | | `HIGH` | ⛔ awaiting approval |
 | 9 | 2026-09-12 | **P9** — Component/template tests | | `HIGH` | ⛔ awaiting approval |
@@ -589,6 +640,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
+| Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |
 | Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
 | Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |
 | Harness subjects undocumented | `check14`–`check24` (Phase B/C, 61 checks) had no entry in the verification recipe at all | P1 ✔ (block appended with measured counts) |
