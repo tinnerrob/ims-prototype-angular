@@ -172,7 +172,35 @@ files being touched anyway; confirm `kebab-case` file names and `PascalCase` cla
 **Do not:** adopt Prettier/ESLint here. A formatter would rewrite the tree and bury every later diff;
 if the project wants one, it is a ⛔ decision recorded in the log and applied at the *end*.
 
-### P4 — Lifecycle & RxJS hygiene · `LOW` · status: **queued**
+### P4 — Lifecycle & RxJS hygiene · `LOW` · status: **done (2026-09-12)**
+**Done:** the shell's two `router.events` subscriptions now carry
+`takeUntilDestroyed(this.destroyRef)` (a `DestroyRef` constructor parameter), so their lifetime is
+*stated* rather than implied. Behaviour is identical — the shell lives as long as the app — but a
+future re-scope of the shell can no longer leak them.
+**Both suspected leaks turned out not to be leaks, so neither was touched:**
+- **Telemetry's `setInterval`** is started by the *shell* (`AppComponent.ngOnInit`, and only while
+  the module is enabled) and stopped in the shell's `ngOnDestroy`; the Telemetry page's own
+  `start()` is idempotent (`if (this.timer) return`). One interval, app-lifetime, stopped on
+  destroy.
+- **The Scheduler's deferred listener:** `ngOnDestroy` calls `detachResize()` + `detachMove()` +
+  `cancelRowClick()`, so the queued row-click `setTimeout` (the 250 ms double-click window) is
+  cleared. The one listener not registered in `ngOnDestroy` — the drag's capture-phase `click`
+  killer — is bounded: it removes itself the moment that click arrives, or after 400 ms
+  (`scheduler.component.ts:1512`). Self-healing, not a leak.
+**Audited (every listener/observer site, 4 files):** Scheduler (resize/move handlers tracked and
+detached), Timesheet (drag handlers detach on `mouseup`), `tip-host` (one one-shot
+`requestAnimationFrame`, no cancel needed), and the shell's router events.
+**One gap found and deliberately not fixed:** the Timesheet's `ngOnDestroy` nulls `this.drag` but
+does not remove a drag's `mousemove`/`mouseup` listeners if the component is destroyed *mid-drag* —
+they linger until the next `mouseup`, which then removes them (and `this.drag` is already `null`, so
+the handler is a safe no-op). The Scheduler's tracked-handler + `detach*()` pattern is the fix, but
+editing a drag interaction that no gate can exercise is not a `LOW`-risk change — recorded as
+**P4b (optional)** pending an explicit go-ahead.
+**Also observed, not changed:** disabling the Telemetry module after boot does not stop the sim
+(the shell starts it in `ngOnInit` and nothing watches the licence flag), so it keeps ticking
+invisibly until a reload. Pre-existing, and stopping it would change the nav badge's live behaviour.
+**Verified:** gates green (build `complete` · `lint:ctor` OK · `lint:styles` 0 unused · **202 ok /
+0 FAIL**); the app's only two `.subscribe(` calls are the two above, both now torn down.
 **Scope:** `core/telemetry.service.ts`, `features/scheduler/scheduler.component.ts` (gap 4), and the
 2 `router.events` subscriptions in `app.component.ts`.
 **Do:** confirm `TelemetryService`'s interval is cleared on every stop path (component destroy, module
@@ -275,7 +303,7 @@ because the phase added coverage — which must be stated in the log).
 | 1 | 2026-09-12 | **P1** — Documentation truth pass | README structure/gates/roadmap; HANDOFF path + counts + bundle + Categories row + document list; PLAN.md headline + a `check14`–`check24` block with measured counts; PLAN-B.md principle line | `LOW` | **done** — 30 named paths verified to exist, 0 stale references left, gates green at **202 ok / 0 FAIL** (docs only, no `src/` change) |
 | 2 | 2026-09-12 | **P2** — Dead code sweep | 6 unused imports removed; export + orphan sweep over the whole tree; 10 dead exports deleted | `LOW` | **done** — **33 deletions / 0 insertions** in 4 files, 0 orphans in 96 files, gates green at **202 ok / 0 FAIL** |
 | 3 | 2026-09-12 | **P3** — Naming & formatting | | `LOW` | *queued* |
-| 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | | `LOW` | *queued* |
+| 4 | 2026-09-12 | **P4** — Lifecycle & RxJS hygiene | Shell router subscriptions given `takeUntilDestroyed`; every listener/observer site audited; telemetry + scheduler "leaks" disproved by reading | `LOW` | **done** — 12 insertions / 6 deletions in `app.component.ts`, 0 real leaks, gates green at **202 ok / 0 FAIL**; Timesheet mid-drag gap recorded as **P4b** (not fixed) |
 | 5 | 2026-09-12 | **P5** — Stylesheet consolidation | | `MED` | *queued* |
 | 6 | 2026-09-12 | **P6** — Store decomposition study | | `HIGH` | ⛔ awaiting approval |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | | `HIGH` | ⛔ awaiting approval |
@@ -292,7 +320,9 @@ because the phase added coverage — which must be stated in the log).
 | Orphan files | 0 of 96 (every component/service/directive is named elsewhere) | P2 ✔ |
 | Stale doc references | `README.md`: `features/categories/`, `features/items/`; `HANDOFF.md`: old checkout path, "140 checks", "~738 kB", Categories feature row | P1 |
 | Selector mismatch | `ims-admin-verticals` on `VerticalsComponent` | P3 |
-| Possible lifecycle leaks | `telemetry.service.ts:66/71` (`setInterval`), `scheduler.component.ts:1512` (deferred global listener removal) | P4 |
+| Possible lifecycle leaks | `telemetry.service.ts:66/71` (`setInterval`), `scheduler.component.ts:1512` (deferred global listener removal) | P4 ✔ — both disproved: the sim is started/stopped by the shell, the listener self-removes within 400 ms |
+| Timesheet mid-drag listeners | `timesheet.component.ts:519-532` — `ngOnDestroy` nulls `drag` but leaves a live drag's `mousemove`/`mouseup` on `window` (they self-heal on the next `mouseup`) | **P4b** (optional, needs go-ahead: copy the Scheduler's tracked-handler pattern) |
+| Telemetry sim vs module flag | The shell starts the sim on `ngOnInit` if the module is enabled; disabling the module later leaves it ticking until reload | P4 — observed, deliberately unchanged (behaviour) |
 | Eager routes | 0 `loadComponent` of 16 features; initial bundle ~830 kB vs 500 kB warn budget | P7 |
 | No `OnPush` | 0 of 27 components | P8 |
 | No unit tests | 0 `*.spec.ts` | P9 |

@@ -1,6 +1,7 @@
-import { Component, HostListener, OnDestroy, OnInit } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, NavigationStart, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
 
 import { DataService } from './core/data.service';
@@ -55,6 +56,7 @@ export class AppComponent implements OnInit, OnDestroy {
     readonly session: SessionService,
     readonly telemetry: TelemetryService,
     readonly search: PageSearchService,
+    private readonly destroyRef: DestroyRef,
   ) {
     this.view = this.viewFromUrl(this.router.url);
     this.search.activate(this.view?.search ?? '');
@@ -64,13 +66,17 @@ export class AppComponent implements OnInit, OnDestroy {
     // Hand the search box over at *NavigationStart*, before the router builds
     // the target view: NavigationEnd arrives after the new page's constructor
     // has already reported its counts, so resetting there would wipe them.
+    // Both subscriptions live as long as the shell does; `takeUntilDestroyed`
+    // says so explicitly rather than relying on that staying true.
     this.router.events
-      .pipe(filter((e) => e instanceof NavigationStart))
+      .pipe(filter((e) => e instanceof NavigationStart), takeUntilDestroyed(this.destroyRef))
       .subscribe((e) => this.search.activate(this.viewFromUrl((e as NavigationStart).url)?.search ?? ''));
-    this.router.events.pipe(filter((e) => e instanceof NavigationEnd)).subscribe((e) => {
-      this.view = this.viewFromUrl((e as NavigationEnd).urlAfterRedirects);
-      window.scrollTo(0, 0);
-    });
+    this.router.events
+      .pipe(filter((e) => e instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
+      .subscribe((e) => {
+        this.view = this.viewFromUrl((e as NavigationEnd).urlAfterRedirects);
+        window.scrollTo(0, 0);
+      });
     // The live GPS loop runs while the telemetry module is enabled (prototype `init`).
     if (this.mods.isEnabled('telemetry')) this.telemetry.start();
   }
