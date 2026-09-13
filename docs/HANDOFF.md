@@ -31,6 +31,11 @@ kits, per-place level facts, the receiving desk's split landings, template-drive
 inspections, documents + hold, the tenant-owned catalog (verticals / categories /
 stock schema) and the field-key rule — see `docs/PLAN.md` → "Verification recipe").
 
+Three audits sit beside them, all report-only (`build`, `lint:ctor`, `lint:styles`,
+`lint:dead`): class-field initializer order, stylesheet rules no template mentions and
+declarations a later rule re-sets, and imports/exports nothing references. None of them
+fails the build; they are meant to be read.
+
 Build budgets (`angular.json`): the initial bundle warns at 500 kB (the app sits at
 ~830 kB, so that warning is expected); the `anyComponentStyle` warn threshold is **6 kB**
 (raised from 4 kB), because `scheduler.component.scss` — by far the largest component

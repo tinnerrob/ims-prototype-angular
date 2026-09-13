@@ -24,7 +24,8 @@ browser, no server), plus two hand-rolled audits:
 ```bash
 npm run check:store   # 202 runtime checks against the real store
 npm run lint:ctor     # class-field initializer order
-npm run lint:styles   # unused stylesheet rules
+npm run lint:styles   # unused / re-set stylesheet rules
+npm run lint:dead     # imported & exported names nothing references
 ```
 
 ## Structure

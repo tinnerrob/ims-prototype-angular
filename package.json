@@ -9,6 +9,7 @@
     "test": "ng test",
     "lint:ctor": "node scripts/check-field-init-order.js",
     "lint:styles": "node scripts/audit-styles.js",
+    "lint:dead": "node scripts/audit-exports.js",
     "check:store": "bash scripts/check-store.sh"
   },
   "private": true,
