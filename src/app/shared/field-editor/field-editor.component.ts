@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { FormField, FORM_FIELD_KINDS, duplicateFieldKeys } from '../../core/models';
@@ -19,6 +19,15 @@ import { FormField, FORM_FIELD_KINDS, duplicateFieldKeys } from '../../core/mode
   imports: [FormsModule],
   templateUrl: './field-editor.component.html',
   styleUrl: './field-editor.component.scss',
+  /**
+   * The app's one `OnPush` component (P8's pilot, see `angular-refactor-log.md`). It is
+   * the one place where that is provably safe: a single input, no store reads at all, a
+   * *fresh* array every time the modal opens (`copyFields`), and every later mutation of
+   * it is the child's own (`add` / `remove` / `move` / `ngModel`), which re-renders under
+   * `OnPush` anyway because the event originates here. Everything else in the app reads
+   * the mutable singleton store straight from its template, so this stays the exception.
+   */
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FieldEditorComponent {
   @Input() fields: FormField[] = [];

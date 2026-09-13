@@ -636,10 +636,18 @@ input, no store reads at all, the parent hands it a **fresh array** every time t
 (`openAddCategory`/`openEditCategory` copy with `copyFields`), and every mutation of that array *after*
 that is the child's own (`add`/`remove`/`move`/`ngModel`), which re-renders under `OnPush` anyway
 because the event originates inside it. The change is one line in the decorator
-(`changeDetection: ChangeDetectionStrategy.OnPush`). **Not applied here** for one honest reason: it can
-only be confirmed by looking at the Verticals modal (open it, add a field, type in it, move it, remove
-it) — and this phase was scoped to the *study*, with the pilot pausing for exactly that look. Say the
-word and the one line is in.
+(`changeDetection: ChangeDetectionStrategy.OnPush`). **Applied (P8 pilot, and only this one):** `field-editor` now carries
+`changeDetection: ChangeDetectionStrategy.OnPush` — the app's **only** `OnPush` component, with that
+comment sitting in the decorator so nobody copies it into a store-reading page by accident. It is the
+smallest provably-safe surface: one input, no store reads, a fresh array per modal open, and every later
+mutation child-originated.
+**How to confirm it in two minutes (the part no gate here can do):** open Admin → Business type &
+Categories → edit a category and, in the Fields grid, **add** a row, **type** a key/label, change the
+**kind** (which swaps the last column between unit / choices), **move** it up and down, **remove** one,
+and watch the Save button enable/disable as keys become valid (that is the parent re-rendering, which
+`OnPush` on the child must not block). Then Save and reopen. If every one of those updates the grid, the
+pilot holds; if the grid ever looks stale, revert this one line and the study's conclusion stands
+unchanged.
 **The other three widgets are *not* safe to pilot blind**, and the reason is checkable but tedious: it
 depends on whether any parent mutates the object it passes *in place* and then expects the child to
 notice. `dynamic-form`'s `values` is the risk case — parents that programmatically fill `attributes`
@@ -757,7 +765,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 6a | 2026-09-12 | **P6a** — Extract `format` → `core/format.ts` | The store's only 0-inbound section moved to a module; six one-line delegates keep 187 call sites working; `check25` extended to drive the module and assert the delegates agree | `LOW` | **done** — store diff: 6 bodies → 6 delegates; `check:store` **210 ok / 0 FAIL**; docs + counts updated |
 | 6/2 | 2026-09-12 | **P6/2** — Seeds → `core/seed/` | 24 pure data factories into 5 modules + the 8 shared fixture facts + `pad3` → `format.ts`; the 6 store-coupled seeders stay; generated mechanically and policed by a snapshot diff | `LOW/MED` | **done** — store **5,179 → 4,333** lines, `core/seed/` 915; **whole seeded store byte-identical** (92,351 B, `cmp` clean); check:store 210/0; also fixed a latent `check-store.sh` import-rewrite bug that broke on nested paths |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
-| 8 | 2026-09-12 | **P8** — Change-detection study | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; identified `field-editor` as the only safe pilot | `HIGH` | **done (study)** — no sweep recommended and none applied: a stale view is invisible to every gate here. Pilot (one line) ready on request; the real fix is signals in the store |
+| 8 | 2026-09-12 | **P8** — Change-detection study + pilot | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; applied the identified pilot — `OnPush` on `field-editor` only | `HIGH` | **done** — no sweep (a stale view is invisible to every gate here); the one pilot is in with a two-minute confirmation checklist recorded; gates green at **210 ok / 0 FAIL** |
 | 9 | 2026-09-12 | **P9** — Component/template test gap | Added `check25.mjs` (7 checks) over the previously untested pure helpers; registered it; updated the count everywhere | `HIGH` | **done** — `check:store` **209 ok / 0 FAIL in 25 harnesses**; two contract facts pinned by the new checks; template/visual verification still blocked (no browser) with three options recorded |
 
 ### Findings ledger (evidence for the phases above)
@@ -789,7 +797,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
 | No unit tests | 0 `*.spec.ts` | **P9 ✔** (partly) — `check25` covers the pure helpers (209 checks in 25 harnesses); templates/visuals still need a browser: options (a) Karma+browser, (b) Playwright smoke flows, (c) more pure-function harnesses |
-| No `OnPush` | 0 of 27 components | **P8 ✔** (study) — 18 templates read the mutable store inline; no sweep; `field-editor` is the one safe pilot, unapplied pending a browser look |
+| No `OnPush` | 0 of 27 components | **P8 ✔** — 18 templates read the mutable store inline, so no sweep; the one pilot (`field-editor`) is applied and needs a two-minute browser confirmation; the real fix is signals in the store |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` was 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** measured → **P6a/P6/2 ✔ done**: `format` → `core/format.ts` and the fixture → `core/seed/`; the store is now **4,333** lines with 915 in `core/seed/`. Component extraction still filed for P9. |
 | Harness runner import rewrite | `check-store.sh` only ever appended `.js` to `./x` specifiers (pattern `(\./[A-Za-z._-]+)`), so a nested core directory broke the whole suite | **P6/2 ✔** — pattern is now `(\.[^']+)` and the fix-up recurses over `find` |
