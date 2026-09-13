@@ -33,4 +33,4 @@ cp scripts/runtime-checks/*.mjs "$OUT/"
 cp src/app/core/models.ts src/app/core/data.service.ts docs/DATA-MODEL.md "$OUT/"
 
 cd "$OUT"
-node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs && node check20.mjs && node check21.mjs && node check22.mjs && node check23.mjs && node check24.mjs
+node check.mjs && node check2.mjs && node check3.mjs && node check4.mjs && node check5.mjs && node check6.mjs && node check7.mjs && node check8.mjs && node check9.mjs && node check10.mjs && node check11.mjs && node check12.mjs && node check13.mjs && node check14.mjs && node check15.mjs && node check16.mjs && node check17.mjs && node check18.mjs && node check19.mjs && node check20.mjs && node check21.mjs && node check22.mjs && node check23.mjs && node check24.mjs && node check25.mjs

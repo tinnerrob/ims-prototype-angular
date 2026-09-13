@@ -21,7 +21,7 @@ npm run build      # production build to dist/ims-web
 
 There are **no unit tests yet** (no Karma specs were written — see "Known gaps").
 Runtime checks that don't need a browser: `npm run check:store` compiles the core
-services to JS and drives the real store from Node (202 checks across 24 harnesses
+services to JS and drives the real store from Node (209 checks across 25 harnesses
 — tenancy, attribution, the item↔location spine, per-place stock levels, the
 vertical registry, the data-model document, the custody ledger, purchasing, the
 transfer / adjust / reorder paths, configuration attribution, the day/week/

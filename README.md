@@ -17,12 +17,12 @@ npm start          # dev server → http://localhost:4200 (hot reload)
 npm run build      # production build to dist/ims-web
 ```
 
-There are **no Karma specs** — verification is `npm run check:store`, 24 harnesses
+There are **no Karma specs** — verification is `npm run check:store`, 25 harnesses
 that compile the core services to JS and drive the *real* store from Node (no
 browser, no server), plus two hand-rolled audits:
 
 ```bash
-npm run check:store   # 202 runtime checks against the real store
+npm run check:store   # 209 runtime checks against the real store
 npm run lint:ctor     # class-field initializer order
 npm run lint:styles   # unused / re-set stylesheet rules
 npm run lint:dead     # imported & exported names nothing references

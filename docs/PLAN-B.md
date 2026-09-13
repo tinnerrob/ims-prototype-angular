@@ -60,7 +60,7 @@ Three asks drive it, and they turn out to be the same ask seen from three sides:
   five derived stock columns, and every table `auditedRows()` writes ↔ the map).
 - **Verified without a browser.** `npm run check:store` compiles the core
   services and drives the real store from Node — it held 140 checks in 13 harnesses
-  when this plan was written and holds **202 in 24** today. This
+  when this plan was written and holds **209 in 25** today. This
   is where a new model/mutator gets its proof, and where the form/level/receiving
   invariants below will be proven too.
 

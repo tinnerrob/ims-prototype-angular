@@ -47,7 +47,7 @@ everywhere (**27** `standalone: true`, **0** `NgModule`).
 | Signals | 12 `signal(`/`computed(`/`effect(` uses; the store is a **mutable singleton**, not signal-based | `grep signal(` |
 | Change detection | **0** `ChangeDetectionStrategy` / `OnPush` — all components are default | `grep ChangeDetectionStrategy` |
 | Tests | **0** `*.spec.ts` (Karma is configured but empty) | `find src -name '*.spec.ts'` |
-| Verification culture | `npm run check:store` = 24 Node harnesses = **202 checks**; plus 2 hand-rolled audits and the build | `scripts/`, `package.json` |
+| Verification culture | `npm run check:store` = 25 Node harnesses = **209 checks** (202 at baseline; P9 added check25 over the pure helpers); plus 2 hand-rolled audits and the build | `scripts/`, `package.json` |
 | Bundle | build warns `initial exceeded maximum budget … 500 kB` at **~830 kB** (error budget 1 MB); **all routes eager** (0 `loadComponent`) | `ng build`, `angular.json`, `app.routes.ts` |
 | Marker hygiene | **0** `console.*`, `TODO`, `FIXME`, `XXX`, `HACK` in `src` | `grep -rnE …` |
 | Selectors | **All** `ims-*` except the shell's `app-root`; one mismatch: `ims-admin-verticals` lives in `verticals.component.ts` (`VerticalsComponent`) | `grep 'selector:'` |
@@ -596,11 +596,37 @@ site, and a wrong answer is another invisible stale view.
 store reads are signals, `OnPush` (or `Zoneless`) becomes safe and this whole question disappears; that
 is a project, not a phase, and it is not proposed here.
 
-### P9 — Component/template test gap · `HIGH` · ⛔ **approval required**
-**Scope:** the 0-spec Karma setup.
-**Do:** propose the smallest useful investment — a handful of specs for the shared widgets, or extend
-the Node harness pattern with a template-render check — and record that today's real safety net is
-build-time type-checking plus the store harnesses.
+### P9 — The component/template test gap · `HIGH` · status: **done (2026-09-12) — one real harness added, plus the finding about the box**
+**What the gap actually is:** the 24 harnesses that existed cover the **store** — tables, mutators,
+guards, the fixture, the data-model document. They never covered the small **pure helpers every page
+prints through**, and with no Chrome on this dev box Karma cannot run, so template rendering cannot be
+checked at all. Of those two halves, the first is fixable today; the second is not.
+**Added `check25.mjs`** (7 checks, registered in `scripts/check-store.sh`) for the helpers that had *no*
+coverage: `statusClass` (every status badge) with its fallback; `needsReorder` (the dashboard's reorder
+list) including its boundary and its `qty` fallback for unit rows; the four type predicates, with the
+invariants that a counted type is always level-tracked and never a unit row; `behaviourOfType` /
+`typeForBehaviour` as a round trip over every catalog type; `verticalLabel` / `roleLabel` including the
+unknown-key fallback; `periodPhrase` (day/week/month); and `DataService.fmtDate`. `check:store` is now
+**209 checks in 25 harnesses**, 0 failures.
+**Writing it pinned two contract facts:** `periodPhrase`/`periodLabel` format the date they are *given* —
+the Monday-anchoring is the pager's job (every pager keeps the cursor on the period's first day), so a
+mid-week date yields a mid-week label; and the period helpers live in `period.ts` (the store re-exports
+them), which my first version imported from the wrong module — caught by the harness on its first run,
+which is the most direct demonstration that a check earns its keep.
+**What is still not testable here, and the honest options:** template rendering, `OnPush` staleness, drag
+interactions, anything needing layout. Without a browser Karma is a no-op, so the credible options are
+(a) install a browser (or `karma-chrome-launcher` + headless Chromium) and revive Karma — the real fix;
+(b) a headless runner such as Playwright driving the built app through a handful of smoke flows, which
+would *also* give the P5b restructure and the P8 pilot the visual verification neither can have now; or
+(c) keep extending the harness pattern wherever logic can be lifted out of components as pure functions
+— exactly what P6's `scheduler-view.ts` proposal would make possible, which is why those two phases
+point at each other.
+**Recommendation:** (b) if a dev dependency is acceptable — it buys visual verification for the CSS and
+OnPush questions too; (c) if not. Both recorded, neither started: adding a browser dependency is a
+project decision, not a refactor step.
+**Verified:** `check:store` **209 ok / 0 FAIL**; README, HANDOFF, PLAN.md, PLAN-B.md, this log's recipe
+and its baseline row all updated to the new count. The log's per-phase entries keep the numbers they
+were written with, because those record what the gates read *then*.
 
 ---
 
@@ -625,7 +651,7 @@ npm run lint:ctor    # expect: "✓ field-initializer order OK (8 method-based i
 npm run lint:styles  # expect: "0 class(es) no template mentions", then "3 declaration(s) re-set"
                      #         (the grouped rules P5c must not touch — see P2c)
 npm run lint:dead    # expect: "0 imported name(s)…", "0 export(s)…"
-npm run check:store  # expect: 24 harnesses, 202 "ok  " lines, 0 FAIL
+npm run check:store  # expect: 25 harnesses, 209 "ok  " lines, 0 FAIL
 ```
 
 One-liner used to compare a phase against the baseline:
@@ -637,7 +663,7 @@ npm run check:store 2>&1 | grep -cE '^  ok' ; npm run check:store 2>&1 | grep -c
 ```
 
 **Baseline values to match:** `complete` · `✓ field-initializer order OK (8 …)` ·
-`0 class(es) no template mentions` · **2** (`lint:dead`'s two "0 …" lines) · **202** · **0**.
+`0 class(es) no template mentions` · **2** (`lint:dead`'s two "0 …" lines) · **209** · **0**.
 
 A phase is not finished until those five numbers/strings are unchanged (or *better*, e.g. more checks
 because the phase added coverage — which must be stated in the log).
@@ -677,7 +703,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 6 | 2026-09-12 | **P6** — Store & component decomposition study | Measured 32 store sections (lines/methods/outbound/inbound/external call sites) + the Scheduler's 105 methods; wrote the ordered proposal | `HIGH` | **done (proposal)** — 1,595 external call sites define the facade; 2 extractions are provable (`format` → module, seeds → `core/seed/`, already scoped in PLAN-B); everything else is spine work with no correctness payoff; component extraction filed for P9 |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; identified `field-editor` as the only safe pilot | `HIGH` | **done (study)** — no sweep recommended and none applied: a stale view is invisible to every gate here. Pilot (one line) ready on request; the real fix is signals in the store |
-| 9 | 2026-09-12 | **P9** — Component/template tests | | `HIGH` | ⛔ awaiting approval |
+| 9 | 2026-09-12 | **P9** — Component/template test gap | Added `check25.mjs` (7 checks) over the previously untested pure helpers; registered it; updated the count everywhere | `HIGH` | **done** — `check:store` **209 ok / 0 FAIL in 25 harnesses**; two contract facts pinned by the new checks; template/visual verification still blocked (no browser) with three options recorded |
 
 ### Findings ledger (evidence for the phases above)
 
@@ -707,6 +733,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
+| No unit tests | 0 `*.spec.ts` | **P9 ✔** (partly) — `check25` covers the pure helpers (209 checks in 25 harnesses); templates/visuals still need a browser: options (a) Karma+browser, (b) Playwright smoke flows, (c) more pure-function harnesses |
 | No `OnPush` | 0 of 27 components | **P8 ✔** (study) — 18 templates read the mutable store inline; no sweep; `field-editor` is the one safe pilot, unapplied pending a browser look |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** — measured; proposal: extract `format` (0 inbound) and the ~1,050 seed lines (pure data, PLAN-B-scoped). No spine split. |

@@ -331,7 +331,7 @@ carried unremarked since its first commit.
 
 ```bash
 npm run build          # AOT + strict templates
-npm run check:store    # 202 runtime checks in 24 harnesses, against the real store, no browser
+npm run check:store    # 209 runtime checks in 25 harnesses, against the real store, no browser
 npm run lint:ctor      # class-field initializer order
 npm run lint:styles    # duplicate/unused stylesheet rules
 ```
@@ -520,6 +520,11 @@ hand-roll `localStorage` and assert on the store's own output:
   catalog and nothing else.
 - `check24.mjs` — **Phase C, 4 checks:** a field key identifies a field *in its own
   list* — two categories may both declare `rate`, one list may not declare it twice.
+- `check25.mjs` — **7 checks:** the pure helpers the pages print through — `statusClass` and its
+  fallback, `needsReorder`'s threshold and its `qty` fallback, the type predicates and their mutual
+  invariants (counted ⇒ level-tracked, never a unit row), `behaviourOfType`/`typeForBehaviour` as a
+  round trip, the `verticalLabel`/`roleLabel` fallbacks, `periodPhrase` for day/week/month (and the
+  contract that it formats the date it is given), and `DataService.fmtDate`.
 
 Add a check with each increment — the seed is the fixture, so a harness check is
 the cheapest way to prove an invariant still holds.
