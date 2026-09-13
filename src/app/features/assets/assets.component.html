@@ -2,20 +2,20 @@
 
 <div class="card">
   <!-- The page header already names this view ("Assets"), so this bar
-       carries no title of its own: the type strip anchors the left, the "add"
+       carries no title of its own: the category strip anchors the left, the "add"
        action the right, and the divider under the bar separates both from the
        search / record-count row below. -->
   <div class="card-header">
     <div class="subtabs">
-      @for (t of tabs(); track t.key) {
-        <button class="subtab" type="button" [class.active]="type === t.key" (click)="selectType(t.key)">
-          <i class="bi {{ t.icon }}"></i>{{ t.label }}
-          <span class="count-pill">{{ count(t.key) }}</span>
+      @for (t of tabs(); track t.id) {
+        <button class="subtab" type="button" [class.active]="categoryId === t.id" (click)="selectCategory(t)">
+          <i class="bi {{ t.icon }}"></i>{{ t.name }}
+          <span class="count-pill">{{ count(t) }}</span>
         </button>
       }
     </div>
     <button class="btn btn-ims btn-create btn-sm2" type="button" (click)="openForm()">
-      <i class="bi bi-plus-lg"></i> {{ activeTab()?.addLabel }}
+      <i class="bi bi-plus-lg"></i> {{ addLabel() }}
     </button>
   </div>
   <div class="card-body">
@@ -96,7 +96,7 @@
           } @empty {
             <tr>
               <td [attr.colspan]="columns().length + 1" class="text-center text-muted2 py-4">
-                No {{ noun().toLowerCase() }} yet — add one with "{{ activeTab()?.addLabel }}".
+                No {{ noun().toLowerCase() }} yet — add one with "{{ addLabel() }}".
               </td>
             </tr>
           }
@@ -112,7 +112,7 @@
       <div class="modal-content">
         <div class="modal-header">
           <h5 class="modal-title">
-            <i class="bi bi-box-seam"></i>{{ editingId ? 'Edit' : activeTab()?.addLabel }} — {{ type }}
+            <i class="bi bi-box-seam"></i>{{ editingId ? 'Edit' : addLabel() }}
           </h5>
           <button type="button" class="btn-close" aria-label="Close"></button>
         </div>
@@ -130,9 +130,10 @@
             </div>
             <div class="col-md-6 field-group">
               <label class="form-label">Category</label>
-              <select class="form-select" [(ngModel)]="form.category">
-                @for (c of categories(); track c) {
-                  <option [value]="c">{{ c }}</option>
+              <select class="form-select" [(ngModel)]="form.categoryId">
+                <option value="">— none —</option>
+                @for (c of categoryOptions(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
                 }
               </select>
             </div>
@@ -244,17 +245,23 @@
             </div>
           }
 
-          @if (type !== 'labor' && !stockLocked()) {
+          @if (itemSchema(); as schema) {
+            <!-- The tenant's custom fields for this type, from its form schema (B2). -->
+            <ims-dynamic-form [schema]="schema" [values]="form.attributes" [errors]="formErrors" />
+          }
+
+          @if (!stockLocked()) {
             <div class="divider"></div>
-            <!-- Placement is one field for every type that *has* a place: a
-                 machine, a pallet, a kit on a shelf. Labour rows are people, so
-                 they get no picker — and no made-up default. For counted stock
-                 the editor's place is the *opening* one: once the row exists its
-                 shelves are written by Move and Count, so this field is gone. -->
+            <!-- Placement is one field for every type, labour included: a machine, a
+                 pallet, a kit on a shelf — and since Phase C a person's **home
+                 base** (a crew member is based somewhere; the row is the one fact,
+                 so no made-up default). For counted stock the editor's place is the
+                 *opening* one: once the row exists its shelves are written by Move
+                 and Count, so this field is gone. -->
             <div class="strong mb-2">Placement</div>
             <div class="row g-2">
               <div class="col-md-6 field-group">
-                <label class="form-label">{{ countable() && !editingId ? 'Opening place' : 'Location' }}</label>
+                <label class="form-label">{{ placeFieldLabel() }}</label>
                 <select class="form-select" [(ngModel)]="form.locationId">
                   <option value="">— Not placed —</option>
                   @for (o of locationOptions(); track o.id) {

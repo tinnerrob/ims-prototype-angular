@@ -4,12 +4,17 @@ import { FormsModule } from '@angular/forms';
 import { DataService, PeriodView, dayAt, mondayOf, periodBounds, periodLabel, periodPhrase } from '../../core/data.service';
 import { PageSearchService } from '../../core/page-search.service';
 import {
+  FormField,
+  FormSchema,
   Inspection,
-  InspectionCheckKey,
-  INSPECTION_CHECKS,
-  INSPECTION_CHECK_LABEL,
+  InspectionResult,
+  InspectionSeverity,
+  INSPECTION_OUTCOMES,
+  INSPECTION_SEVERITIES,
   statusClass,
 } from '../../core/models';
+import { FormsService } from '../../core/forms.service';
+import { EvidenceComponent } from '../../shared/evidence/evidence.component';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { stampDate } from '../../shared/tip/tip-format';
@@ -49,13 +54,13 @@ interface Overage {
 @Component({
   selector: 'ims-inspections',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, TipDirective],
+  imports: [EvidenceComponent, FormsModule, ModalDismissDirective, TipDirective],
   templateUrl: './inspections.component.html',
   styleUrl: './inspections.component.scss',
 })
 export class InspectionsComponent {
-  readonly checkKeys = INSPECTION_CHECKS;
-  readonly checkLabel = INSPECTION_CHECK_LABEL;
+  readonly outcomes = INSPECTION_OUTCOMES;
+  readonly severities = INSPECTION_SEVERITIES;
   readonly logRanges = LOG_RANGES;
   readonly logRangeLabelOf = (v: LogRange): string => LOG_RANGE_LABEL[v];
 
@@ -71,6 +76,7 @@ export class InspectionsComponent {
 
   constructor(
     readonly data: DataService,
+    readonly forms: FormsService,
     readonly search: PageSearchService,
   ) {
     // The topbar search box is this page's search: report how much of the log
@@ -168,6 +174,7 @@ export class InspectionsComponent {
 
   /** The "Log Inspection" button: the editor opens on a blank draft. */
   newInspection(): void {
+    const template = this.data.inspectionTemplate();
     this.openEditor({
       id: '',
       itemId: '',
@@ -178,16 +185,17 @@ export class InspectionsComponent {
       meterIn: null,
       fuelOut: null,
       fuelIn: null,
-      checks: this.allChecks(true),
-      photos: 0,
+      templateId: template?.id ?? '',
+      results: this.blankResults(template),
       status: 'Open',
     });
   }
 
   /** Log row click → the same editor the Log button opens (prototype `inspectionModal`). */
   openEdit(r: Inspection): void {
-    // Edit a copy: the stored record only changes on Save.
-    this.openEditor({ ...r, checks: { ...r.checks } });
+    // Edit a copy — including a copy of every result, so an unsaved edit can never
+    // write through to the stored record.
+    this.openEditor({ ...r, results: this.copyResults(r.results) });
   }
 
   /** True while the editor holds a draft that Save will create. */
@@ -210,6 +218,8 @@ export class InspectionsComponent {
   saveEdit(): void {
     const r = this.editRecord;
     if (!r) return;
+    // A required checklist item that failed blocks a `Closed` record (B7).
+    if (this.blockedByFailures()) return;
     if (this.isNew()) {
       if (!r.itemId) return; // a new inspection needs an asset
       const rec = this.data.createInspection({
@@ -218,8 +228,8 @@ export class InspectionsComponent {
         direction: r.direction,
         date: r.date || new Date().toISOString().slice(0, 10),
         ...this.directionReadings(r),
-        checks: { ...r.checks },
-        photos: r.photos ?? 0,
+        templateId: r.templateId,
+        results: this.copyResults(r.results),
         status: r.status,
       });
       // A check-out puts the unit on rent; a check-in frees it (prototype side-effect).
@@ -241,10 +251,68 @@ export class InspectionsComponent {
         meterIn: r.meterIn ?? null,
         fuelOut: r.fuelOut ?? null,
         fuelIn: r.fuelIn ?? null,
-        checks: { ...r.checks },
+        results: this.copyResults(r.results),
       });
     }
     this.closeEdit();
+  }
+
+  /* ------------------------------ checklist ------------------------------ */
+
+  /** The template a record used: its own, else the current default (B7). */
+  templateFor(r: Inspection): FormSchema | null {
+    return this.data.getFormSchema(r.templateId) ?? this.data.inspectionTemplate() ?? null;
+  }
+
+  /**
+   * The checklist rows the editor renders: the template's fields, each with the
+   * result it currently holds. A field a record predates gets a default result, so
+   * an old inspection still renders and edits.
+   */
+  checklist(r: Inspection): { field: FormField; result: InspectionResult }[] {
+    const t = this.templateFor(r);
+    return (t?.fields ?? []).map((field) => ({ field, result: this.resultOf(r, field.key) }));
+  }
+
+  resultOf(r: Inspection, key: string): InspectionResult {
+    r.results[key] ??= { outcome: 'pass' };
+    return r.results[key];
+  }
+
+  /** Pass / fail / n-a counts and the worst severity, for the tip and the header. */
+  summary(r: Inspection) {
+    return this.data.inspectionSummary(r);
+  }
+
+  /** The open editor has a failure — the consequence (a work order) can be raised. */
+  hasFailure(): boolean {
+    return !!this.editRecord && this.data.inspectionSummary(this.editRecord).worst !== null;
+  }
+
+  /** A `Closed` record with a failed *required* item is refused until it is fixed. */
+  blockedByFailures(): boolean {
+    const r = this.editRecord;
+    if (!r || r.status !== 'Closed') return false;
+    const t = this.templateFor(r);
+    return (t?.fields ?? []).some((f) => f.required && this.resultOf(r, f.key).outcome !== 'pass');
+  }
+
+  /** A failure's consequence (B7): raise a work order for the inspected unit. */
+  raiseWorkOrder(): void {
+    const r = this.editRecord;
+    if (!r || this.isNew()) return;
+    const wo = this.data.raiseWorkOrderForInspection(r.id);
+    if (wo) this.editRecord = { ...r, workOrderId: wo.id };
+  }
+
+  private blankResults(t: FormSchema | undefined): Record<string, InspectionResult> {
+    const out: Record<string, InspectionResult> = {};
+    for (const f of t?.fields ?? []) out[f.key] = { outcome: 'pass', value: f.options?.[0] };
+    return out;
+  }
+
+  private copyResults(results: Record<string, InspectionResult>): Record<string, InspectionResult> {
+    return Object.fromEntries(Object.entries(results ?? {}).map(([k, v]) => [k, { ...v }]));
   }
 
   closeEdit(): void {
@@ -302,16 +370,6 @@ export class InspectionsComponent {
     return periodBounds(this.logRange === 'all' ? 'day' : this.logRange, this.logAnchor);
   }
 
-  private allChecks(v: boolean): Record<InspectionCheckKey, boolean> {
-    return {
-      tires: v,
-      fluids: v,
-      guards: v,
-      lights: v,
-      engine: v,
-    };
-  }
-
   /* ------------------------------ tooltips ------------------------------ */
 
   /** Inspection row: the asset, the direction, its meter/fuel readings, state. */
@@ -324,7 +382,7 @@ export class InspectionsComponent {
       r.orderId ? { label: 'Order', value: r.orderId } : null,
       out ? { label: 'Out', value: `${this.data.int(r.meterOut ?? 0)} h · ${this.data.int(r.fuelOut ?? 0)} gal` } : null,
       back ? { label: 'In', value: `${this.data.int(r.meterIn ?? 0)} h · ${this.data.int(r.fuelIn ?? 0)} gal` } : null,
-      { label: 'Photos', value: String(r.photos ?? 0) },
+      { label: 'Photos', value: String(this.data.photoCount('inspection', r.id)) },
       r.notes ?? '',
     ], { badge: r.status });
   }

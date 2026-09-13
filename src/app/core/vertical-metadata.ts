@@ -12,10 +12,10 @@ import { CatalogType, ItemStatus, VerticalKey, VERTICALS, verticalLabel } from '
  * code change in a component that has nothing to do with the industry.
  *
  * Here it is *data*: one entry per `VerticalKey`, and the page asks the store for
- * the active tenant's entry (`DataService.verticalMeta()`). Flipping the tenant's
- * vertical therefore re-shapes the page with no reload and no component knowing
- * what a "lumberyard" is — which is what makes it a licence-level fact rather than
- * a UI preference, and what the API has to store per tenant.
+ * the entry its **business type** maps to (`DataService.verticalMeta()`). Changing
+ * the business type therefore re-shapes the page with no reload and no component
+ * knowing what a "lumberyard" is — which is what makes it a licence-level fact
+ * rather than a UI preference, and what the API has to store per tenant.
  *
  * Two deliberate limits, so this stays a registry rather than a second app:
  *
@@ -25,8 +25,13 @@ import { CatalogType, ItemStatus, VerticalKey, VERTICALS, verticalLabel } from '
  *    schema conversation, not a label.
  * 2. **Nothing here decides what is *allowed*.** Which modules a tenant may use is
  *    the licence (`Tenant.disabledModules`); a vertical's tab list is what its
- *    catalog *is*, not a permission. Per-vertical category seeds and per-vertical
- *    view gating are their own decisions, not this file's.
+ *    catalog *is*, not a permission. Per-vertical view gating is its own decision,
+ *    not this file's.
+ *
+ * Phase C keeps this file only as a **seed**: the workspace's categories are rows
+ * (`asset_categories`) and the page reads those for its tab strip, its wording and
+ * its fields. What is still read from here is the grid's columns and the per-type
+ * statuses, until C6 makes those tenant data too.
  */
 
 /** `[field, header, align?]` — `align` is `num` for right-aligned figures. */
@@ -40,6 +45,13 @@ export interface VerticalTabMeta {
   icon: string;
   /** The tab's "add" button, in this vertical's words ("New Equipment"). */
   addLabel: string;
+  /**
+   * The `FormSchema` id this tab's editor loads (B3) — the vertical's *fields*
+   * where `columns` are the vertical's *columns*. Read through `verticalMeta()`,
+   * so a page still keeps no vertical map of its own; B2's `FormsService` resolves
+   * it to the schema row.
+   */
+  formSchema: string;
   /** Grid columns, in print order. */
   columns: ColumnMeta[];
   /** What a new record of this type starts as (the editor's blank form). */
@@ -87,6 +99,7 @@ const SERIALIZED: VerticalTabMeta = {
   label: 'Assets (Serialized)',
   icon: 'bi-truck-front',
   addLabel: 'New Equipment',
+  formSchema: 'FS-item-serialized',
   columns: [
     COL_ID,
     ['serial', 'Serial / VIN'],
@@ -107,6 +120,7 @@ const BULK: VerticalTabMeta = {
   label: 'Assets (Bulk)',
   icon: 'bi-boxes',
   addLabel: 'New Bulk Resource',
+  formSchema: 'FS-item-bulk',
   columns: [COL_ID, COL_NAME, COL_CATEGORY, COL_OWNED, COL_AVAILABLE, COL_OUT, COL_LOCATION, COL_RATE, COL_MONTHLY],
   defaults: { status: 'Available', qty: 0 },
 };
@@ -116,6 +130,7 @@ const CONSUMABLE: VerticalTabMeta = {
   label: 'Consumables',
   icon: 'bi-capsule',
   addLabel: 'New Consumable',
+  formSchema: 'FS-item-consumable',
   columns: [COL_ID, COL_NAME, COL_CATEGORY, COL_ON_HAND, COL_REORDER, COL_COST, COL_RETAIL, COL_LOCATION, COL_STATUS],
   defaults: { status: 'In Stock', qty: 0 },
 };
@@ -125,6 +140,7 @@ const PART: VerticalTabMeta = {
   label: 'Stock Inventory',
   icon: 'bi-wrench-adjustable',
   addLabel: 'New Part',
+  formSchema: 'FS-item-part',
   columns: [['id', 'Part ID'], COL_NAME, COL_CATEGORY, COL_LOCATION, COL_ON_HAND, COL_REORDER, COL_COST, COL_STATUS],
   defaults: { status: 'In Stock', qty: 0 },
 };
@@ -134,11 +150,13 @@ const LABOR: VerticalTabMeta = {
   label: 'Labor / Employees',
   icon: 'bi-person-badge',
   addLabel: 'New Labor Item',
+  formSchema: 'FS-item-labor',
   columns: [
     ['id', 'Emp ID'],
     COL_NAME,
     ['role', 'Role'],
     COL_CATEGORY,
+    COL_LOCATION,
     ['hourlyCost', 'Cost / hr', 'num'],
     ['hourlyBillable', 'Billable / hr', 'num'],
     COL_SPREAD,
@@ -152,6 +170,7 @@ const KIT: VerticalTabMeta = {
   label: 'Kits',
   icon: 'bi-boxes',
   addLabel: 'New Kit',
+  formSchema: 'FS-item-kit',
   columns: [['id', 'Kit ID'], COL_NAME, COL_CATEGORY, COL_QTY, COL_RATE, COL_LOCATION, COL_STATUS],
   defaults: { status: 'Available', qty: 1 },
 };
@@ -161,6 +180,7 @@ const ATTACHMENT: VerticalTabMeta = {
   label: 'Attachments',
   icon: 'bi-puzzle',
   addLabel: 'New Attachment',
+  formSchema: 'FS-item-attachment',
   columns: [['id', 'Acc ID'], COL_NAME, COL_CATEGORY, COL_QTY, COL_RATE, COL_LOCATION, COL_STATUS],
   defaults: { status: 'Available', qty: 1 },
 };
@@ -206,6 +226,9 @@ const CLINIC_CONSUMABLE: VerticalTabMeta = {
   ...CONSUMABLE,
   label: 'Supplies',
   addLabel: 'New Supply',
+  // The clinic's supply fields are its own (lot, expiry, storage temperature) —
+  // the same tab type, a different schema: this is what B3 is for.
+  formSchema: 'FS-item-consumable-clinic',
   columns: [COL_ID, COL_NAME, COL_CATEGORY, COL_REORDER, COL_ON_HAND, COL_COST, COL_LOCATION, COL_STATUS],
 };
 

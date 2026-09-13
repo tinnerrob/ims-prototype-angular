@@ -4,6 +4,7 @@ import { DataService, hmMin, periodLabel, periodPhrase } from '../../core/data.s
 import {
   CatalogType,
   CATALOG_TYPES,
+  Category,
   ITEM_STATUSES,
   Item,
   Order,
@@ -996,7 +997,7 @@ export class SchedulerComponent implements OnDestroy {
   openRes(): void {
     this.resForm = {
       ...this.emptyRes(),
-      category: this.data.categoriesFor(this.poolType)[0] ?? '',
+      categoryId: this.categoryOptions()[0]?.id ?? '',
       status: ITEM_STATUSES[this.poolType][0],
       lat: this.data.yard.lat,
       lng: this.data.yard.lng,
@@ -1005,13 +1006,27 @@ export class SchedulerComponent implements OnDestroy {
     this.resOpen = true;
   }
 
+  /**
+   * The categories this pool type can be filed under (Phase C): the workspace's
+   * business type's rows — the same list the Assets editor offers.
+   */
+  categoryOptions(): Category[] {
+    return this.data
+      .categoriesForVertical(this.data.activeVertical()?.id ?? '', true)
+      .filter((c) => c.type === this.poolType);
+  }
+
   /** Create the resource so it lands in the pool immediately (prototype `itemWrite`). */
   saveRes(): void {
     const f = this.resForm;
     if (!f.name.trim()) return;
+    // The category is a row (Phase C); `category` keeps the name older readers
+    // print, derived from the row so the two cannot disagree.
+    const chosen = this.categoryOptions().find((c) => c.id === f.categoryId);
     const patch: Record<string, unknown> = {
       name: f.name.trim(),
-      category: f.category,
+      category: chosen?.name ?? '',
+      categoryId: f.categoryId || undefined,
       status: f.status,
       qty: Number(f.qty) || 0,
       rateDaily: Number(f.rateDaily) || 0,
@@ -1527,7 +1542,7 @@ export class SchedulerComponent implements OnDestroy {
   private emptyRes() {
     return {
       name: '',
-      category: '',
+      categoryId: '',
       status: 'Available' as Item['status'],
       qty: 1,
       rateDaily: 0,

@@ -2,9 +2,11 @@ import { Component, effect } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
+import { FormError, FormsService } from '../../core/forms.service';
 import { PageSearchService } from '../../core/page-search.service';
-import { CatalogType, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
+import { CatalogType, Category, FormSchema, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
 import { ColumnMeta, VerticalTabMeta } from '../../core/vertical-metadata';
+import { DynamicFormComponent } from '../../shared/dynamic-form/dynamic-form.component';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { isInteractiveTarget, auditSections, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -30,6 +32,8 @@ const NO_LOCATION = '__none__';
 const BLANK_ITEM_FORM = {
   name: '',
   category: '',
+  /** The tenant category row it belongs to (Phase C) — the picker's value. */
+  categoryId: '',
   status: 'Available' as Item['status'],
   qty: 1,
   rateDaily: 0,
@@ -47,22 +51,40 @@ const BLANK_ITEM_FORM = {
   role: '',
   hourlyCost: 0,
   hourlyBillable: 0,
+  /** The schema-captured fields (B2). Always replaced per editor (never shared). */
+  attributes: {} as Record<string, unknown>,
 };
 
 /**
  * Assets (core) — port of the prototype's Inventory view
- * (js/pages/inventory.js): a vertical-driven tab strip with per-type record
- * counts and the per-type column set (fleet telemetry, stock levels, labor rates).
+ * (js/pages/inventory.js): a category-driven tab strip (Phase C) with per-tab
+ * record counts, the per-type column set (fleet telemetry, stock levels, labor
+ * rates) and the fields the open category carries.
  */
 @Component({
   selector: 'ims-assets',
   standalone: true,
-  imports: [FormsModule, ModalDismissDirective, RecordViewComponent, TipDirective],
+  imports: [FormsModule, DynamicFormComponent, ModalDismissDirective, RecordViewComponent, TipDirective],
   templateUrl: './assets.component.html',
   styleUrl: './assets.component.scss',
 })
 export class AssetsComponent {
-  type: CatalogType = 'serialized';
+  /**
+   * The open **tab** — a category row, not a spine type (Phase C). A business type
+   * may hold two categories of the same type ("Pumps" and "Compressors" are both
+   * serialized), so the page is keyed on the *category*: selecting one must never
+   * select the other.
+   */
+  categoryId = '';
+
+  /**
+   * The spine type behind the open category — what the store's calls take
+   * (`listItems`, `createItem`, `isCountedStock`). **Derived**, never a second piece
+   * of state: the category is what the reader selected, the type follows it.
+   */
+  get type(): CatalogType {
+    return this.activeCategory()?.type ?? this.data.verticalMeta().defaultTab;
+  }
 
   /** Location scope for the table: '' = anywhere, `NO_LOCATION` = not placed. */
   locationFilter = '';
@@ -72,6 +94,8 @@ export class AssetsComponent {
   form = { ...BLANK_ITEM_FORM };
   /** Editor values as they were when it opened (drives the discard prompt). */
   private formSnap = '';
+  /** Schema-validation errors from the last save attempt (shown by `<ims-dynamic-form>`). */
+  formErrors: FormError[] = [];
 
   /**
    * Move editor — the ledger-writing placement change (a `transfer` movement).
@@ -103,42 +127,53 @@ export class AssetsComponent {
 
   constructor(
     readonly data: DataService,
+    readonly forms: FormsService,
     readonly search: PageSearchService,
   ) {
-    // The page opens on the vertical's own first tab (Healthcare lands on
-    // Supplies, a warehouse on stock), not on a hard-coded type.
-    this.type = this.data.verticalMeta().defaultTab;
-    // The store's revision moves on every write, so the tenant switching vertical
-    // (Admin → Feature Modules) lands here: when the open tab isn't one this
-    // vertical has, the page follows the tenant onto its default tab — no reload,
-    // no vertical map, nothing to keep in step by hand.
+    // The page opens on the tenant vertical's **first category** (Phase C): the tab
+    // strip is the vertical's categories, so the opening tab is a row, not a type.
+    this.categoryId = this.tabs()[0]?.id ?? '';
+    // The store's revision moves on every write, so the tenant switching business
+    // type lands here: when the open tab isn't one this type has, the page follows
+    // onto its first category — no reload, no map, nothing to keep in step by hand.
     effect(() => {
       this.data.revision();
-      const meta = this.data.verticalMeta();
-      if (meta.tabs.some((t) => t.key === this.type)) return;
+      const cats = this.tabs();
+      if (cats.some((c) => c.id === this.categoryId)) return;
       // Only a *hidden* tab moves the page: every other write leaves the reader
       // where they are, viewer and all.
-      this.type = meta.defaultTab;
+      this.categoryId = cats[0]?.id ?? '';
       this.closeViewer();
     });
     // The topbar search box is this page's search: report how many of the active
     // tab's records survive it (the shell shows "shown of total" next to the box).
     this.search.report(() => ({
       shown: this.rows().length,
-      total: this.data.listItems(this.type).length,
+      total: this.categoryItems(this.activeCategory()).length,
     }));
   }
 
   /**
-   * The tabs this vertical exposes, in its own order, straight from the tenant's
-   * registry (`core/vertical-metadata.ts` → `DataService.verticalMeta()`). The
-   * page keeps no vertical map of its own: a new industry, a new tab order or a
-   * re-worded tab is data on the tenant, not a conditional here.
+   * The tab strip: the **tenant's categories** for the active vertical, in the
+   * order the tenant put them (Phase C). The page keeps no map of its own — a new
+   * category, a new order or a re-worded tab is a row on the tenant, and the
+   * heading below reads the category, not a registry.
    */
-  tabs(): VerticalTabMeta[] {
-    return this.data.verticalMeta().tabs;
+  tabs(): Category[] {
+    return this.data.categoriesForVertical(this.data.activeVertical()?.id ?? '', true);
   }
 
+  /** The category the open tab is — its icon, label, fields and `type` come from here. */
+  activeCategory(): Category | undefined {
+    return this.tabs().find((c) => c.id === this.categoryId);
+  }
+
+  /**
+   * The catalog tab this type's *grid* still reads for its **columns** and
+   * **statuses** (Phase C, C6): those become tenant data next, so until then the
+   * page reads the registry's tab meta. The **strip**, the **editor's fields** and
+   * the **"add" wording** (`addLabel()`) already come from the tenant's categories.
+   */
   activeTab(): VerticalTabMeta | undefined {
     return this.data.tabMeta(this.type);
   }
@@ -149,34 +184,63 @@ export class AssetsComponent {
   }
 
   /**
+   * What the "add" action is called: **`New <title>`**, where the title is the open
+   * tab's own — the tenant's category name, so renaming a category renames its
+   * button. The registry's fixed `addLabel` ("New Equipment") is only the fallback
+   * for a business type that doesn't carry the open type at all.
+   */
+  addLabel(): string {
+    const title = this.activeCategory()?.name ?? this.activeTab()?.label;
+    return title ? `New ${title}` : 'Add';
+  }
+
+  /**
+   * Every row filed under a category, before the grid narrows it (its base — the
+   * tab pill counts and the unplaced hint read this).
+   */
+  private categoryItems(category: Category | undefined): Item[] {
+    if (!category) return [];
+    return this.data.listItems(category.type).filter((i) => this.inCategory(i, category));
+  }
+
+  /**
+   * Is the row filed under this category? A row the editor left as "— none —" (or
+   * one that predates categories) belongs to the **first** category of its type, so
+   * a tab never hides a row that has one.
+   */
+  private inCategory(item: Item, category: Category): boolean {
+    if (item.categoryId) return item.categoryId === category.id;
+    return this.tabs().find((c) => c.type === category.type)?.id === category.id;
+  }
+
+  /**
    * One tab's records, narrowed by the location scope and the page search. The
    * search spans every tab on this page: a query typed while "Assets (Serialized)"
-   * is open also filters the other types, so the tab counts say where the
-   * matches are.
+   * is open also filters the other tabs, so the tab counts say where the matches
+   * are.
    */
-  private tabRows(type: CatalogType): Item[] {
-    return this.data
-      .listItems(type)
-      .filter(
-        (i) =>
-          this.inLocationScope(i) &&
-          this.search.matches(
-            i.id,
-            i.name,
-            i.category,
-            i.status,
-            i.serial,
-            i.make,
-            i.model,
-            i.role,
-            // The whole path, so "Aisle 1" finds the bays' stock as well — and the
-            // raw id, so a location can be pasted in from the Locations grid. Every
-            // *place* the row holds stock in, since a split row lives in several.
-            ...this.data.placements(i).flatMap((p) => [this.data.locationPath(p.locationId), p.locationId]),
-            i.locationId,
-            i.fuelType,
-          ),
-      );
+  private tabRows(category: Category | undefined): Item[] {
+    return this.categoryItems(category).filter((i) => this.inLocationScope(i) && this.matchesSearch(i));
+  }
+
+  /** The page search's predicate — the fields a row is found by. */
+  private matchesSearch(i: Item): boolean {
+    return this.search.matches(
+      i.id,
+      i.name,
+      i.category,
+      i.status,
+      i.serial,
+      i.make,
+      i.model,
+      i.role,
+      // The whole path, so "Aisle 1" finds the bays' stock as well — and the
+      // raw id, so a location can be pasted in from the Locations grid. Every
+      // *place* the row holds stock in, since a split row lives in several.
+      ...this.data.placements(i).flatMap((p) => [this.data.locationPath(p.locationId), p.locationId]),
+      i.locationId,
+      i.fuelType,
+    );
   }
 
   /**
@@ -205,6 +269,16 @@ export class AssetsComponent {
   }
 
   /**
+   * The placement field's label: a counted row's *opening* place while it is new
+   * (after that its shelves are written by Move and Count), a person's **home
+   * base**, and a plain place for everything else.
+   */
+  placeFieldLabel(): string {
+    if (this.countable() && !this.editingId) return 'Opening place';
+    return this.type === 'labor' ? 'Home base' : 'Location';
+  }
+
+  /**
    * True when the editor may *not* set the stock fields: a counted row that
    * already exists. Its quantities are its level rows' sum and its place is
    * their busiest holding (see `StockLevel`), so the editor shows them read-only
@@ -220,17 +294,17 @@ export class AssetsComponent {
 
   /** How many of the active tab's records are unplaced (the scope select hint). */
   unplacedCount(): number {
-    return this.data.listItems(this.type).filter((i) => this.data.placements(i).length === 0).length;
+    return this.categoryItems(this.activeCategory()).filter((i) => this.data.placements(i).length === 0).length;
   }
 
-  /** Tab-strip pill: matching records of that type (all of them when idle). */
-  count(type: CatalogType): number {
-    return this.tabRows(type).length;
+  /** Tab-strip pill: the tab's matching records (its own, all of them when idle). */
+  count(category: Category): number {
+    return this.tabRows(category).length;
   }
 
-  /** Rows for the active tab, filtered by the page search. */
+  /** Rows for the active tab, filtered by the location scope and the page search. */
   rows(): Item[] {
-    return this.tabRows(this.type);
+    return this.tabRows(this.activeCategory());
   }
 
   columns(): ColumnMeta[] {
@@ -238,8 +312,8 @@ export class AssetsComponent {
   }
 
   /** Switching tabs keeps the page search — it spans every tab (see `tabRows`). */
-  selectType(t: CatalogType): void {
-    this.type = t;
+  selectCategory(category: Category): void {
+    this.categoryId = category.id;
     this.closeViewer();
   }
 
@@ -275,8 +349,13 @@ export class AssetsComponent {
     return needsReorder(item);
   }
 
-  categories(): string[] {
-    return this.data.categoriesFor(this.type);
+  /**
+   * The categories an item of the open type can be in (Phase C): the active
+   * vertical's category rows of that type — the tenant's own rows, not the legacy
+   * per-type name list the old picker read.
+   */
+  categoryOptions(): Category[] {
+    return this.tabs().filter((c) => c.type === this.type);
   }
 
   /** Status options offered for the active type (prototype `ITEM_STATUSES`). */
@@ -292,6 +371,7 @@ export class AssetsComponent {
       ? {
           name: item.name,
           category: item.category,
+          categoryId: item.categoryId ?? '',
           status: item.status,
           qty: item.qty,
           rateDaily: item.rateDaily,
@@ -309,27 +389,41 @@ export class AssetsComponent {
           role: item.role ?? '',
           hourlyCost: item.hourlyCost ?? 0,
           hourlyBillable: item.hourlyBillable ?? 0,
+          attributes: { ...(item.attributes ?? {}) },
         }
       : this.emptyForm();
     this.formSnap = snapshotForm(this.form);
+    this.formErrors = [];
     this.modalOpen = true;
   }
 
   save(): void {
     const f = this.form;
     if (!f.name.trim()) return;
+    // The schema's fields are coerced (typed, undeclared keys dropped) and
+    // validated *before* anything is written; a required field blocks the save
+    // and shows its message inline (see `docs/PLAN-B.md`, B2).
+    const schema = this.itemSchema();
+    const attributes = this.forms.coerce(schema, f.attributes);
+    this.formErrors = this.forms.validate(schema, attributes);
+    if (this.formErrors.length) return;
+    const chosen = this.categoryOptions().find((c) => c.id === f.categoryId);
     const patch: Record<string, unknown> = {
       name: f.name,
-      category: f.category,
+      // The category row is the join (Phase C); `category` keeps the name the older
+      // readers still print, derived from the row so the two cannot disagree.
+      category: chosen?.name ?? f.category,
+      categoryId: f.categoryId || undefined,
       status: f.status,
       qty: Number(f.qty) || 0,
       rateDaily: Number(f.rateDaily) || 0,
-      // Placement is written for every type that has a place (labour has none): an
-      // empty choice clears the FK rather than storing an empty-string location,
-      // so "unplaced" is one fact, not two. For counted stock this is the
-      // *opening* place on a new row (and nothing at all on an existing one —
-      // see `stockLocked`), because a placed quantity there is a level row.
+      // Placement is written for **every** type: an empty choice clears the FK
+      // rather than storing an empty-string location, so "unplaced" is one fact,
+      // not two. For counted stock this is the *opening* place on a new row (and
+      // nothing at all on an existing one — see `stockLocked`), because a placed
+      // quantity there is a level row. A person's is their home base.
       locationId: f.locationId || undefined,
+      attributes,
     };
     if (this.type === 'serialized') {
       Object.assign(patch, {
@@ -370,7 +464,11 @@ export class AssetsComponent {
    * two modals offer, and the row's own record view reads the movements back.
    */
 
-  /** Labor is a person, so it has no place to move and no count to correct. */
+  /**
+   * A place to move *stock* between, and a count to correct. A person is neither:
+   * labour is not level-tracked (no shelves to split) and has no quantity to
+   * count, so their base is set on the row — the editor's Placement field.
+   */
   movable(): boolean {
     return this.type !== 'labor';
   }
@@ -495,6 +593,7 @@ export class AssetsComponent {
     this.modalOpen = false;
     this.editingId = null;
     this.formSnap = '';
+    this.formErrors = [];
   }
 
   /* --------------------------- record viewer ---------------------------- */
@@ -510,12 +609,12 @@ export class AssetsComponent {
     this.viewer = {
       title: item.name,
       subtitle: `${item.id} · ${item.category}`,
-      icon: this.activeTab()?.icon ?? 'bi-box-seam',
+      icon: this.activeCategory()?.icon ?? this.activeTab()?.icon ?? 'bi-box-seam',
       badge: item.status,
       badgeClass: 'st-' + statusClass(item.status),
       sections: [
         {
-          title: this.activeTab()?.label ?? 'Record',
+          title: this.activeCategory()?.name ?? this.activeTab()?.label ?? 'Record',
           fields: this.columns().map((c) => ({
             label: c[1],
             // The viewer has the room the grid doesn't: show where the stock
@@ -525,11 +624,49 @@ export class AssetsComponent {
             mono: c[0] === 'id',
           })),
         },
+        this.schemaSection(item),
+        this.evidenceSection(item),
         // Who set the record up and who last touched it — the two facts the store
         // stamps on every write, so the screen that produces them can read them.
         ...auditSections(item, (id) => this.data.userName(id), (iso) => this.data.fmtDT(iso)),
         this.ledgerSection(item),
       ],
+    };
+  }
+
+  /** Evidence attached to the record (B8), read through the documents table. */
+  private evidenceSection(item: Item): ViewModel['sections'][number] {
+    const docs = this.data.documentsFor('item', item.id);
+    return {
+      title: 'Evidence',
+      fields: docs.length
+        ? docs.map((doc) => ({ label: doc.kind, value: doc.caption || '—' }))
+        : [{ label: 'Documents', value: 'None attached.' }],
+    };
+  }
+
+  /**
+   * A record's schema-captured fields (B2), each read through the schema so the
+   * *label* and the *unit* come from the row that declared them. Absent when the
+   * type has no schema or the record captured nothing — an empty "Custom fields"
+   * heading would be noise.
+   */
+  private schemaSection(item: Item): ViewModel['sections'][number] {
+    // The row's **own** category is what its fields were captured with, so a
+    // re-labelled or re-fielded category reads back correctly.
+    const category = item.categoryId ? this.data.getCategory(item.categoryId) : undefined;
+    const schema = this.itemSchemaFor(category) ?? this.forms.schemaFor('item', item.type) ?? null;
+    const fields = (schema?.fields ?? [])
+      .filter((f) => item.attributes?.[f.key] !== undefined)
+      .map((f) => ({
+        label: f.label,
+        value: f.kind === 'multiselect'
+          ? (Array.isArray(item.attributes?.[f.key]) ? (item.attributes?.[f.key] as unknown[]).join(', ') : String(item.attributes?.[f.key]))
+          : `${String(item.attributes?.[f.key])}${f.unit ? ' ' + f.unit : ''}`,
+      }));
+    return {
+      title: 'Custom fields',
+      fields: fields.length ? fields : [{ label: 'Captured', value: 'None recorded.' }],
     };
   }
 
@@ -580,8 +717,30 @@ export class AssetsComponent {
       status: tab?.defaults.status ?? BLANK_ITEM_FORM.status,
       qty: tab?.defaults.qty ?? BLANK_ITEM_FORM.qty,
       qtyOnHand: tab?.defaults.qty ?? BLANK_ITEM_FORM.qtyOnHand,
-      category: this.data.categoriesFor(this.type)[0] ?? '',
+      category: '',
+      // A new row lands in the tab that is open — that is where the reader asked
+      // for it — falling back to the first category the type offers.
+      categoryId: this.categoryId || this.categoryOptions()[0]?.id || '',
+      // A fresh object every time: the editor writes into it, so it must not be
+      // the shared `BLANK_ITEM_FORM.attributes`.
+      attributes: {} as Record<string, unknown>,
     };
+  }
+
+  /**
+   * The item schema a **category** reads: the tenant's stock set unioned with the
+   * category's own fields, with the legacy type-scoped schema as the fallback for a
+   * type the workspace has no category for. One place, so the editor and a row's
+   * viewer can never read different field sets.
+   */
+  private itemSchemaFor(category: Category | undefined): FormSchema | null {
+    if (!category) return null;
+    return this.forms.schemaForCategory(category.id) ?? this.forms.schemaFor('item', category.type) ?? null;
+  }
+
+  /** The item schema the open tab's editor renders (B2/B3, Phase C). */
+  itemSchema(): FormSchema | null {
+    return this.itemSchemaFor(this.activeCategory());
   }
 
   /* ------------------------------ tooltips ------------------------------ */

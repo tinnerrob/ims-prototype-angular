@@ -4,12 +4,21 @@ import {
   AuditFields,
   CatalogType,
   CATALOG_TYPE_KEYS,
-  CategoryOption,
+  Category,
+  CategoryDraft,
+  CountSession,
   Dispatch,
   DispatchStatus,
+  Document,
+  DocumentKind,
+  DocumentScope,
+  FormField,
+  FormSchema,
+  FormScope,
   INDUSTRY_MODULES,
   Inspection,
-  InspectionCheckKey,
+  InspectionResult,
+  InspectionSeverity,
   Invoice,
   InvoiceStatus,
   InvoiceTotals,
@@ -36,8 +45,11 @@ import {
   PurchaseProgress,
   Receipt,
   ReceiptLine,
+  ReceivingCondition,
+  ReceivingSettings,
   RentalSub,
   StockLevel,
+  StockSchema,
   TaxSchedule,
   Tenant,
   Timesheet,
@@ -45,6 +57,7 @@ import {
   User,
   Vehicle,
   VERTICAL_KEYS,
+  Vertical,
   VerticalKey,
   WorkOrder,
   WorkOrderCost,
@@ -52,28 +65,44 @@ import {
   WorkOrderStatus,
   Yard,
   isCountedStock,
+  isLevelTracked,
   isPurchasable,
   isUnitStock,
   needsReorder,
+  behaviourOfType,
+  typeForBehaviour,
+  uniqueFields,
+  verticalLabel,
 } from './models';
-import { VerticalMetadata, VerticalTabMeta, verticalMetaFor, tabMetaFor } from './vertical-metadata';
+import { VERTICAL_METADATA, VerticalMetadata, VerticalTabMeta, verticalMetaFor, tabMetaFor } from './vertical-metadata';
 
-/** Money helper — round to 2dp (prototype `round2`). */
-const round2 = (n: number): number => Math.round(n * 100) / 100;
+/*
+ * The pure date/period and money helpers live in their own modules (B1) — the
+ * store is a store, not a toolkit. They are re-exported at the bottom of this
+ * block so every existing `from '../../core/data.service'` import keeps working
+ * unchanged; only `DataService` itself reads them locally.
+ */
+import {
+  dISO,
+  hmMin,
+  minHM,
+  snap15,
+  daysBetween,
+  countWeekdays,
+  dayOffset,
+  addDays,
+  periodBounds,
+  periodLabel,
+} from './period';
+import type { PeriodView } from './period';
+import { round2, movingCost, billableDaysBetween, wholeUnitsBilled, BILLING_CYCLES } from './pricing';
 
-const pad2 = (n: number) => String(n).padStart(2, '0');
-
+/** `pad3` — id-generator formatting (`PO-2026-003`, `RC-2026-001`, `INSP-001`). */
 const pad3 = (n: number) => String(n).padStart(3, '0');
 
-/**
- * Moving-average unit cost after receiving `qty` at `unitCost` — what a receipt
- * does to a stocked row's cost, so a screen can show one cost per SKU without
- * storing a cost history (the receipts *are* the history).
- */
-function movingCost(onHand: number, current: number | undefined, qty: number, unitCost: number): number {
-  if (!current || onHand <= 0) return round2(unitCost);
-  return round2((onHand * current + qty * unitCost) / (onHand + qty));
-}
+/** The public helper surface, unchanged (period pagers, logs, purchasing lists). */
+export { hmMin, minHM, snap15, dISO, periodLabel, periodPhrase, mondayOf, dayAt, periodBounds } from './period';
+export type { PeriodView } from './period';
 
 /**
  * What `logMovement` is written from. `at` / `byUserId` default to now and the
@@ -94,182 +123,47 @@ export interface MovementInput {
   note?: string;
 }
 
-/** What `receiveAgainst` is posted from (see the rules on that method). */
+/** One place a quantity of a PO line landed on a receipt (B6). */
+export interface ReceiveLandingInput {
+  /** FK -> `settings.locations`. Absent = the receipt's own `locationId` (or the
+   *  quarantine place when the landing is `damaged`). */
+  locationId?: string;
+  qty: number;
+  /** How it arrived (B6); a `damaged` landing is quarantined when one is set. */
+  condition?: ReceivingCondition;
+  reasonCode?: string;
+  /** The receipt-line schema payload (lot / expiry) — B2. */
+  attributes?: Record<string, unknown>;
+}
+
+/** One received PO line: the quantities that landed, place by place (B6). */
+export interface ReceiveLineInput {
+  poLineId: string;
+  /** A line may split across places ("50 in Bay A-03, 100 in Bay B-01"). */
+  landings: ReceiveLandingInput[];
+}
+
+/**
+ * What `receiveAgainst` is posted from (see the rules on that method).
+ *
+ * Two shapes, both normalised to per-line landings: the **whole-receipt** shape
+ * (`qty` keyed by PO line id, everything put away at `locationId` — the seed and
+ * the simple case) and the **per-line** shape (`lines`, where a line names each
+ * place it landed). A landing that names no place falls back to the receipt's.
+ */
 export interface ReceiveInput {
   poId: string;
-  /** FK -> `settings.locations`: where the stock is put away. */
+  /** FK -> `settings.locations`: the receipt's header (default) put-away. */
   locationId: string;
-  /** Quantity to receive *now*, keyed by PO line id (missing = not delivered). */
-  qty: Record<string, number>;
+  /** Whole-receipt shape: quantity to receive *now*, keyed by PO line id. */
+  qty?: Record<string, number>;
+  /** Per-line shape: one entry per received line, each with its own landings. */
+  lines?: ReceiveLineInput[];
   note?: string;
   at?: string;
   byUserId?: string;
 }
 
-/** "HH:mm" -> minutes past midnight (prototype `hmMin`). */
-export function hmMin(s: string | null | undefined): number {
-  if (s == null) return 0;
-  const p = String(s).split(':').map(Number);
-  return (p[0] || 0) * 60 + (p[1] || 0);
-}
-
-/** Minutes past midnight -> "HH:mm" (prototype `minHM`). */
-export function minHM(m: number): string {
-  return pad2(Math.floor((((m % 1440) + 1440) % 1440) / 60)) + ':' + pad2(((m % 60) + 60) % 60);
-}
-
-/** Snap minutes to the nearest 15 (prototype `snap15`), clamped to the day. */
-export function snap15(m: number): number {
-  const r = Math.round(m / 15) * 15;
-  return r < 0 ? 0 : r >= 1440 ? 1439 : r;
-}
-
-/** Local "YYYY-MM-DD" for a date (prototype `dISO`). */
-export function dISO(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-}
-
-/** Period a date navigator can page through (Scheduler / Labor & Timesheets / inspection log). */
-export type PeriodView = 'day' | 'week' | 'month';
-
-/**
- * Label for a period in the date navigators, anchored on its first day — one
- * wording for every pager in the app: "Monday, Aug 17, 2026", "Week of Aug 17, 2026"
- * or "Month of August 2026". Week/month name the period and its first day only
- * (no end date).
- */
-export function periodLabel(view: PeriodView, date: Date): string {
-  if (view === 'month') return 'Month of ' + date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  if (view === 'week') {
-    return 'Week of ' + date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  }
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-/**
- * Sentence form of `periodLabel` for prose ("free for the week of Aug 17, 2026"):
- * the week/month labels are lower-cased and take an article, a day label is
- * already a date so it is returned as-is.
- */
-export function periodPhrase(view: PeriodView, date: Date): string {
-  const label = periodLabel(view, date);
-  return view === 'day' ? label : `the ${label.charAt(0).toLowerCase()}${label.slice(1)}`;
-}
-
-/** Monday of the week containing `d` — the app's one week convention (see `periodBounds`). */
-export function mondayOf(d: Date): Date {
-  return dayAt(d, -((d.getDay() + 6) % 7));
-}
-
-/** `d` moved by `days`, as a new Date (a period pager's step). */
-export function dayAt(d: Date, days: number): Date {
-  const x = new Date(d);
-  x.setDate(x.getDate() + days);
-  return x;
-}
-
-/**
- * Inclusive ISO bounds of the period a `day` / `week` / `month` navigator shows,
- * anchored on the day its label names — Monday-based weeks and a month ending on
- * its last day, the same day `periodLabel()` words.
- *
- * This is the window a **list** filter tests its rows against (`date >= start &&
- * date <= end`); the two calendars build their own columns from the same
- * convention rather than asking for bounds, so only the logs share this.
- */
-export function periodBounds(view: PeriodView, anchor: Date): { start: string; end: string } {
-  if (view === 'month') {
-    return {
-      start: dISO(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
-      end: dISO(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)),
-    };
-  }
-  if (view === 'week') {
-    const start = mondayOf(anchor);
-    return { start: dISO(start), end: dISO(dayAt(start, 6)) };
-  }
-  return { start: dISO(anchor), end: dISO(anchor) };
-}
-
-
-/** Calendar days spanned by [a, b], minimum 1 (prototype `daysBetween`). */
-function daysBetween(a: string, b: string): number {
-  const diff = (Date.parse(b + 'T00:00:00') - Date.parse(a + 'T00:00:00')) / 86400000;
-  return Math.max(1, Math.round(diff));
-}
-
-/** Mon–Fri weekdays spanned by [a, b], minimum 1 (prototype `countWeekdays`). */
-function countWeekdays(a: string, b: string): number {
-  const end = new Date(Date.parse(b + 'T00:00:00'));
-  const cur = new Date(Date.parse(a + 'T00:00:00'));
-  let n = 0;
-  while (cur <= end) {
-    const d = cur.getDay();
-    if (d !== 0 && d !== 6) n++;
-    cur.setDate(cur.getDate() + 1);
-  }
-  return Math.max(1, n);
-}
-
-/** Whole days from `a` to `b`: the day *index* of `b` (prototype `dayOffset`). */
-function dayOffset(a: string, b: string): number {
-  return Math.round((Date.parse(b + 'T00:00:00') - Date.parse(a + 'T00:00:00')) / 86400000);
-}
-
-/** A day ISO shifted by whole days (prototype `addDays`). */
-function addDays(iso: string, days: number): string {
-  return new Date(Date.parse(iso + 'T00:00:00') + days * 86400000).toISOString().slice(0, 10);
-}
-
-/** Billable days in a day range, honouring a line's weekend policy (prototype `billableDays`). */
-function billableDaysBetween(policy: OrderLine['weekendPolicy'], a: string, b: string): number {
-  if (policy === 'skip') return countWeekdays(a, b);
-  if (policy === 'overtime') return daysBetween(a, b) * 1.5;
-  return daysBetween(a, b);
-}
-
-/** A party's billing cadence → the length of one cycle, in days (prototype `BILLING_CYCLES`). */
-const BILLING_CYCLES: Record<string, number> = {
-  daily: 1,
-  weekly: 7,
-  'bi-weekly': 14,
-  monthly: 28,
-  quarterly: 84,
-};
-
-/**
- * Whole rate units (weeks or months) of a booking that bill inside the day range
- * `[sDay, eDay]` — the prototype's `wholeUnitsBilled()`. A rental on the weekly or
- * monthly basis bills in **whole units**, never `rate x days`, so every unit has to
- * land in exactly one billing cycle: a unit is billed by the cycle that holds the
- * majority of its days, decided by the unit's upper-median day (the tie going to
- * the later cycle, which is what "run the next cycle" means). Every unit lands in
- * exactly one cycle, so summing cycles never double-bills and always adds up to
- * the line's own `lineTotal()`.
- *
- * @param sDay first day of the cycle, as an index from the line's first day
- * @param eDay last day of the cycle, as an index from the line's first day
- * @param unitDays 7 for the weekly basis, 28 for the monthly
- * @param totalDays the line's own length in days
- */
-function wholeUnitsBilled(sDay: number, eDay: number, unitDays: number, totalDays: number): number {
-  if (eDay < sDay) return 0;
-  const units = Math.ceil(totalDays / unitDays);
-  let billed = 0;
-  for (let k = 0; k < units; k++) {
-    const unitStart = k * unitDays;
-    const unitEnd = Math.min((k + 1) * unitDays - 1, totalDays - 1);
-    if (unitEnd < sDay) continue;
-    const billDay = unitStart + Math.ceil((unitEnd - unitStart) / 2);
-    if (billDay >= sDay && billDay <= eDay) billed++;
-  }
-  return billed;
-}
 
 /** The seeded demo workspace + the person the session starts as. */
 const DEMO_TENANT_ID = 'TNT-NORTHLINE';
@@ -290,6 +184,16 @@ const YARD_STAGING = 'LOC-03'; // Yard A — equipment staging (machines, bulk, 
 const WAREHOUSE_1 = 'LOC-05'; // Warehouse 1 (kits, the shop's own stock)
 /** Where a unit that is in the shop sits (vs. staged in the yard). */
 const SHOP_STATUS = 'In Shop';
+
+/**
+ * Where a crew member is **based**, by the department they work in (Phase C): a
+ * person carries a place too (their home base), the same single FK a machine has.
+ */
+const CREW_BASE: Record<string, string> = {
+  Field: YARD_STAGING, // operators muster in the yard
+  Shop: WAREHOUSE_1, // technicians work out of the shop
+  Dispatch: 'LOC-04', // drivers park up in Yard B
+};
 
 /**
  * A counted row's derived quantities (see `StockLevel`): the fields that are
@@ -320,6 +224,38 @@ function contentSignature(row: object): string {
 }
 
 /**
+ * The default field set per catalog type (B2) — shared by the seeded `form_schemas`
+ * **and** the seeded asset categories (Phase C), so the two cannot drift. A
+ * category seeded from the registry starts with its type's fields; a tenant then
+ * owns them.
+ */
+const ASSET_FIELD_DEFAULTS: Record<CatalogType, FormField[]> = {
+  serialized: [
+    { key: 'emissionsTier', label: 'Emissions Tier', kind: 'select', options: ['Tier 4 Final', 'Tier 4', 'Tier 3'] },
+    { key: 'warrantyExpiry', label: 'Warranty Expiry', kind: 'date' },
+    { key: 'gpsTrackerId', label: 'GPS Tracker ID', kind: 'text' },
+  ],
+  bulk: [
+    { key: 'grade', label: 'Grade', kind: 'text' },
+    { key: 'moisturePct', label: 'Moisture', kind: 'measurement', unit: '%', min: 0, max: 100 },
+  ],
+  consumable: [{ key: 'manufacturerPartNo', label: 'Manufacturer Part No.', kind: 'text' }],
+  part: [
+    { key: 'manufacturerPartNo', label: 'Manufacturer Part No.', kind: 'text' },
+    { key: 'torqueSpec', label: 'Torque Spec', kind: 'measurement', unit: 'Nm', min: 0 },
+  ],
+  labor: [
+    { key: 'licenceNo', label: 'Licence No.', kind: 'text' },
+    { key: 'certExpiry', label: 'Certification Expiry', kind: 'date' },
+  ],
+  attachment: [
+    { key: 'couplerType', label: 'Coupler Type', kind: 'select', options: ['Pin-on', 'Quick Coupler', 'Hydraulic'] },
+    { key: 'weightKg', label: 'Weight', kind: 'measurement', unit: 'kg', min: 0 },
+  ],
+  kit: [],
+};
+
+/**
  * IMS — DataService (the JSON store / API seam).
  *
  * Port of the prototype's `IMS` seed (js/data.js) + `IMS.store`: one typed
@@ -331,7 +267,7 @@ function contentSignature(row: object): string {
 export class DataService {
   private readonly KEY = 'ims-web.store';
   /** Bumped whenever the seed shape changes, so stale snapshots reseed. */
-  private readonly VERSION = 11;
+  private readonly VERSION = 14;
 
   /* `rev` is bumped on every persisted write, so a service can derive reactive
      state (the session, the tenant's module flags) from this one store instead
@@ -370,7 +306,10 @@ export class DataService {
       taxSchedules: TaxSchedule[];
       overheads: Overhead[];
       pricing: PricingSettings;
-      categories: Record<string, CategoryOption[]>;
+      /** The receiving desk's rules (B6) — tolerance, quarantine, short-close. */
+      receiving: ReceivingSettings;
+      /** The fields every asset carries (Phase C) — the "stock set". */
+      stockSchema: StockSchema;
     };
     /** Customer workspaces — the tenancy root (one today, many via the API). */
     tenants: Tenant[];
@@ -410,6 +349,16 @@ export class DataService {
     vehicles: Vehicle[];
     dispatches: Dispatch[];
     invoices: Invoice[];
+    /** Tenant-owned form schemas (B2) — the extra fields a record type captures. */
+    formSchemas: FormSchema[];
+    /** Tenant-authored industry verticals (Phase C) — groups of categories. */
+    verticals: Vertical[];
+    /** Tenant-authored asset categories (Phase C) — a vertical's tabs. */
+    assetCategories: Category[];
+    /** Posted count sheets (B5) — a place's levels, reviewed then adjusted. */
+    countSessions: CountSession[];
+    /** Evidence attached to records (B8) — photos, packing slips, certificates. */
+    documents: Document[];
   } = {
     settings: {
       locations: this.seedLocations(),
@@ -417,7 +366,8 @@ export class DataService {
       taxSchedules: this.seedTaxSchedules(),
       overheads: this.seedOverheads(),
       pricing: this.seedPricing(),
-      categories: this.seedCategories(),
+      receiving: this.seedReceiving(),
+      stockSchema: this.seedStockSchema(),
     },
     tenants: this.seedTenants(),
     users: this.seedUsers(),
@@ -444,6 +394,11 @@ export class DataService {
     vehicles: this.seedVehicles(),
     dispatches: this.seedDispatches(),
     invoices: this.seedInvoices(),
+    formSchemas: this.seedFormSchemas(),
+    verticals: this.seedVerticals(),
+    assetCategories: this.seedAssetCategories(),
+    countSessions: [],
+    documents: this.seedDocuments(),
   };
 
   constructor() {
@@ -465,6 +420,10 @@ export class DataService {
     // restored snapshot already contains them — posting twice would land the
     // stock twice.
     if (seeded) this.seedReceipts();
+    // Phase C: link the workspace's rows to the tenant's categories, so the catalog
+    // starts *in use* — the fixture predates categories, and an item with no
+    // `categoryId` is exactly the "garbage" this cleans up.
+    this.linkItemsToCategories();
     // Attribute the rows we start with (and remember them), so the first write
     // of the session is diffed against a known baseline.
     this.attributeSeed();
@@ -482,12 +441,13 @@ export class DataService {
       const snap = raw ? JSON.parse(raw) : null;
       if (snap && snap._v === this.VERSION) {
         this.restored = true;
-        if (snap.settings?.categories) this.db.settings.categories = snap.settings.categories;
         if (Array.isArray(snap.settings?.locations)) this.db.settings.locations = snap.settings.locations;
         if (Array.isArray(snap.settings?.locationTypes)) this.db.settings.locationTypes = snap.settings.locationTypes;
         if (snap.settings?.taxSchedules) this.db.settings.taxSchedules = snap.settings.taxSchedules;
         if (snap.settings?.overheads) this.db.settings.overheads = snap.settings.overheads;
         if (snap.settings?.pricing) this.db.settings.pricing = snap.settings.pricing;
+        if (snap.settings?.receiving) this.db.settings.receiving = snap.settings.receiving;
+        if (snap.settings?.stockSchema) this.db.settings.stockSchema = snap.settings.stockSchema;
         if (snap.yard) this.db.yard = snap.yard;
         if (Array.isArray(snap.parties)) this.db.parties = snap.parties;
         if (Array.isArray(snap.priceCards)) this.db.priceCards = snap.priceCards;
@@ -504,7 +464,20 @@ export class DataService {
         if (Array.isArray(snap.vehicles)) this.db.vehicles = snap.vehicles;
         if (Array.isArray(snap.dispatches)) this.db.dispatches = snap.dispatches;
         if (Array.isArray(snap.invoices)) this.db.invoices = snap.invoices;
+        if (Array.isArray(snap.formSchemas)) this.db.formSchemas = snap.formSchemas;
+        if (Array.isArray(snap.countSessions)) this.db.countSessions = snap.countSessions;
+        if (Array.isArray(snap.documents)) this.db.documents = snap.documents;
+        if (Array.isArray(snap.verticals)) this.db.verticals = snap.verticals;
+        if (Array.isArray(snap.assetCategories)) this.db.assetCategories = snap.assetCategories;
         if (Array.isArray(snap.tenants) && snap.tenants.length) this.db.tenants = snap.tenants;
+        // A snapshot from before the business type owned the industry carried it as a
+        // registry key (`Tenant.vertical`). Point `vertical_id` at the row that key
+        // seeds, so the workspace's choice survives the move; drop the stale field.
+        for (const t of this.db.tenants as (Tenant & { vertical?: string })[]) {
+          if (!t.vertical) continue;
+          t.verticalId ??= this.db.verticals.find((v) => v.slug === t.vertical?.toLowerCase())?.id;
+          delete t.vertical;
+        }
         if (Array.isArray(snap.users) && snap.users.length) this.db.users = snap.users;
         if (snap.session?.userId) this.db.session = snap.session;
       } else if (snap) {
@@ -574,6 +547,11 @@ export class DataService {
           vehicles: this.db.vehicles,
           dispatches: this.db.dispatches,
           invoices: this.db.invoices,
+          formSchemas: this.db.formSchemas,
+          countSessions: this.db.countSessions,
+          documents: this.db.documents,
+          verticals: this.db.verticals,
+          assetCategories: this.db.assetCategories,
         }),
       );
     } catch {
@@ -640,15 +618,19 @@ export class DataService {
     add('vehicles', this.db.vehicles);
     add('dispatches', this.db.dispatches);
     add('invoices', this.db.invoices);
+    add('formSchemas', this.db.formSchemas);
+    add('countSessions', this.db.countSessions);
+    add('documents', this.db.documents);
+    add('verticals', this.db.verticals);
+    add('assetCategories', this.db.assetCategories);
+    add('stockSchema', [this.db.settings.stockSchema], () => 'settings');
     add('locations', this.db.settings.locations);
     // Configuration (A9): the rows Admin edits, stamped like everything else.
     add('locationTypes', this.db.settings.locationTypes, (r) => (r as LocationType).name);
-    for (const [type, rows] of Object.entries(this.db.settings.categories)) {
-      add(`categories:${type}`, rows, (r) => (r as CategoryOption).name);
-    }
     add('taxSchedules', this.db.settings.taxSchedules, (r) => (r as TaxSchedule).code);
     add('overheads', this.db.settings.overheads);
     add('pricing', [this.db.settings.pricing], () => 'settings');
+    add('receiving', [this.db.settings.receiving], () => 'settings');
     add('yard', [this.db.yard], () => 'settings');
     return out;
   }
@@ -1339,10 +1321,10 @@ export class DataService {
 
   createItem(type: CatalogType, data: Omit<Item, 'type' | 'id'>): Item {
     const rec = this.addItemRow(type, data);
-    // A *new* counted row arrives with an opening balance, and an opening
+    // A *new* level-tracked row arrives with an opening balance, and an opening
     // balance is a placed quantity: the form's place + count become its first
     // level row (see `openStock`). Nothing else about the row's totals is stored.
-    if (isCountedStock(type)) this.openStock(rec);
+    if (isLevelTracked(type)) this.openStock(rec);
     this.save();
     return rec;
   }
@@ -1371,10 +1353,22 @@ export class DataService {
     const it = this.getItem(type, id);
     if (it) {
       const next: Record<string, unknown> = { ...patch };
-      if (isCountedStock(type)) for (const k of DERIVED_STOCK_KEYS) delete next[k];
+      const strip = this.derivedStockKeys(type);
+      if (strip.length) for (const k of strip) delete next[k];
       Object.assign(it, next, { type });
       this.save();
     }
+  }
+
+  /**
+   * The fields a level write owns, per type — stripped from any patch. Counted
+   * stock's five derived keys (see `DERIVED_STOCK_KEYS`); a kit or attachment's
+   * `qty` and place, which became levels in B4.
+   */
+  private derivedStockKeys(type: CatalogType): readonly string[] {
+    if (isCountedStock(type)) return DERIVED_STOCK_KEYS;
+    if (isLevelTracked(type)) return ['qty', 'locationId'];
+    return [];
   }
 
   removeItem(type: CatalogType, id: string): void {
@@ -1521,72 +1515,6 @@ export class DataService {
     return prefix + String(max + 1).padStart(3, '0');
   }
 
-  /* ----------------------------- categories ----------------------------- */
-
-  /** Live, mutable per-type category records, seeded for every type. */
-  get categories(): Record<string, CategoryOption[]> {
-    return this.db.settings.categories;
-  }
-
-  /** Category records for a type (Categories grid). */
-  categoryRecordsFor(type: CatalogType): CategoryOption[] {
-    return [...(this.db.settings.categories[type] ?? [])];
-  }
-
-  /** Active category names for a type — what item pickers offer. */
-  categoriesFor(type: CatalogType): string[] {
-    return (this.db.settings.categories[type] ?? [])
-      .filter((c) => c.active !== false)
-      .map((c) => c.name);
-  }
-
-  /** Item count in a category (Categories grid "Items" column). */
-  categoryCount(type: CatalogType, name: string): number {
-    return this.listItems(type).filter((i) => i.category === name).length;
-  }
-
-  addCategory(type: CatalogType, name: string, active = true): void {
-    const list = (this.db.settings.categories[type] ??= []);
-    const clean = name.trim();
-    if (!clean || list.some((c) => c.name === clean)) return;
-    list.push({ name: clean, active });
-    this.save();
-  }
-
-  renameCategory(type: CatalogType, oldName: string, newName: string, active = true): void {
-    const list = this.db.settings.categories[type];
-    const clean = newName.trim();
-    if (!list || !clean) return;
-    const rec = list.find((c) => c.name === oldName);
-    if (!rec || list.some((c) => c.name === clean && c.name !== oldName)) return;
-    rec.name = clean;
-    rec.active = active;
-    // Keep items in the renamed category consistent (prototype `renameRecords`).
-    for (const it of this.db.items[type] ?? []) {
-      if (it.category === oldName) it.category = clean;
-    }
-    this.save();
-  }
-
-  removeCategory(type: CatalogType, name: string): void {
-    const list = this.db.settings.categories[type];
-    if (!list) return;
-    const i = list.findIndex((c) => c.name === name);
-    if (i >= 0) {
-      list.splice(i, 1);
-      this.save();
-    }
-  }
-
-  /** Ensure every catalog type has a (possibly empty) category table. */
-  ensureCategoryTables(): void {
-    for (const t of CATALOG_TYPE_KEYS) {
-      this.db.settings.categories[t] ??= [];
-    }
-    this.save();
-  }
-
-
   /* ------------------------------ locations ----------------------------- */
 
   /** Locations in insertion order (the view assembles the tree by `parentId`). */
@@ -1641,7 +1569,7 @@ export class DataService {
   locationRemovalBlockers(id: string): string[] {
     const out: string[] = [];
     const items = this.locationItemCount(id);
-    if (items > 0) out.push(`${items} item(s) stored here`);
+    if (items > 0) out.push(`${items} item(s) placed here`);
     const moves = this.locationMovementCount(id);
     // History is append-only: a logged movement can never be re-pointed at
     // another location, so a place the ledger mentions has to stay (deactivate
@@ -1798,7 +1726,11 @@ export class DataService {
     return this.allItems().filter((i) => this.placements(i).some((p) => ids.has(p.locationId)));
   }
 
-  /** Items stored *at* this node — the number that blocks its removal. */
+  /**
+   * Items placed *at* this node — the number that blocks its removal. A person
+   * based here counts like anything else: their `location_id` points at this row,
+   * so the row has to stay.
+   */
   locationItemCount(id: string): number {
     return this.itemsAtLocation(id).length;
   }
@@ -1815,9 +1747,16 @@ export class DataService {
    */
   locationStockQty(id: string, subtree = false): number {
     const ids = subtree ? this.locationSubtreeIds(id) : new Set<string>([id]);
-    return this.itemsAtLocation(id, subtree).reduce(
-      (sum, i) => sum + this.placements(i).reduce((n, p) => n + (ids.has(p.locationId) ? p.qty : 0), 0),
-      0,
+    return (
+      this.itemsAtLocation(id, subtree)
+        // A person is *placed* here, not stocked: labour carries no stock quantity,
+        // so a home base never counts as units on the shelf. (The row still counts
+        // as an item at the node — see `locationItemCount`, which guards removal.)
+        .filter((i) => i.type !== 'labor')
+        .reduce(
+          (sum, i) => sum + this.placements(i).reduce((n, p) => n + (ids.has(p.locationId) ? p.qty : 0), 0),
+          0,
+        )
     );
   }
 
@@ -1847,6 +1786,11 @@ export class DataService {
     );
   }
 
+  /** The level row for one (row, place), if that place holds any (B5 helper). */
+  levelAt(type: CatalogType, refId: string, locationId: string): StockLevel | undefined {
+    return this.db.stockLevels.find((l) => l.type === type && l.refId === refId && l.locationId === locationId);
+  }
+
   /**
    * Where a row's stock is, as (place, quantity) pairs — the level rows for
    * counted stock, or the row's one `locationId` for everything else. This is
@@ -1854,13 +1798,16 @@ export class DataService {
    * receipt's default destination and a location scope all agree.
    */
   placements(item: Item): { locationId: string; qty: number }[] {
-    if (isCountedStock(item.type)) {
+    if (isLevelTracked(item.type)) {
       return this.db.stockLevels
         .filter((l) => l.type === item.type && l.refId === item.id)
         .sort((a, b) => b.qty - a.qty || (a.locationId < b.locationId ? -1 : 1))
         .map((l) => ({ locationId: l.locationId, qty: l.qty }));
     }
-    if (item.type === 'labor' || !item.locationId) return [];
+    // A unit is one thing in one place — a machine, and since Phase C a *person*
+    // too: labour's `locationId` is their home base, read the same way (one row,
+    // qty 1). Only an unplaced row has no placement at all.
+    if (!item.locationId) return [];
     return [{ locationId: item.locationId, qty: this.countedQty(item) }];
   }
 
@@ -1899,15 +1846,26 @@ export class DataService {
   }
 
   /** Write a level row: `qty <= 0` *removes* it (a level exists only while it holds stock). */
-  private writeLevel(type: CatalogType, refId: string, locationId: string, qty: number): void {
+  private writeLevel(
+    type: CatalogType,
+    refId: string,
+    locationId: string,
+    qty: number,
+    attributes?: Record<string, unknown>,
+  ): void {
     const n = Math.floor(Number(qty));
     const i = this.db.stockLevels.findIndex((l) => l.type === type && l.refId === refId && l.locationId === locationId);
     if (!Number.isFinite(n) || n <= 0) {
       if (i >= 0) this.db.stockLevels.splice(i, 1);
       return;
     }
-    if (i >= 0) this.db.stockLevels[i].qty = n;
-    else this.db.stockLevels.push({ id: this.levelId(refId, locationId), type, refId, locationId, qty: n });
+    const attrs = attributes && Object.keys(attributes).length ? attributes : undefined;
+    if (i >= 0) {
+      this.db.stockLevels[i].qty = n;
+      if (attrs) this.db.stockLevels[i].attributes = attrs;
+    } else {
+      this.db.stockLevels.push({ id: this.levelId(refId, locationId), type, refId, locationId, qty: n, attributes: attrs });
+    }
   }
 
   /**
@@ -1917,7 +1875,7 @@ export class DataService {
    * app has two numbers for one shelf.
    */
   private syncStockTotals(item: Item): void {
-    if (!isCountedStock(item.type)) return;
+    if (!isLevelTracked(item.type)) return;
     const total = this.db.stockLevels
       .filter((l) => l.type === item.type && l.refId === item.id)
       .reduce((sum, l) => sum + l.qty, 0);
@@ -1925,8 +1883,11 @@ export class DataService {
       item.qtyAvailable = total;
       item.totalOwned = total + (item.qtyOut ?? 0);
       item.qty = total;
-    } else {
+    } else if (isCountedStock(item.type)) {
       item.qtyOnHand = total;
+      item.qty = total;
+    } else {
+      // A kit or attachment: `qty` *is* its stock (B4), now held in levels.
       item.qty = total;
     }
     item.locationId = this.homePlace(item);
@@ -2090,9 +2051,9 @@ export class DataService {
     return this.listItems('serialized').filter((i) => this.isOut(i.id));
   }
 
-  /** Serialized items free to issue. */
+  /** Serialized items free to issue — not out on rent and not on hold (B8). */
   availableItems(): Item[] {
-    return this.listItems('serialized').filter((i) => !this.isOut(i.id));
+    return this.listItems('serialized').filter((i) => !this.isOut(i.id) && !i.hold);
   }
 
   /**
@@ -2111,8 +2072,8 @@ export class DataService {
    * A placement change by hand leaves no trace, so this is the action that
    * *logs* a `transfer`. What it refuses is as deliberate as what it does:
    *
-   * - **Labor is a person**, not stock (`isPurchasable`), so it has no place to
-   *   move from.
+   * - **Labor is a person**, not stock (`isPurchasable`), so there are no shelves
+   *   to move between: a person's place is their base, set on the row.
    * - **A unit that is out on rent** is not on a shelf; its place changes when it
    *   comes back (the `return` movement re-homes it), so a transfer now would
    *   record a shelf it isn't on.
@@ -2146,16 +2107,21 @@ export class DataService {
     const held = this.stockAt(item, fromLocationId);
     if (held <= 0 || n > held) return null;
 
-    if (isCountedStock(type)) {
+    if (isLevelTracked(type)) {
+      // A level that carries per-place facts (a lot, an expiry — B5) can only move
+      // *whole*: half a lot is not a fact the model can state, so a partial move is
+      // refused rather than silently splitting the attributes.
+      const attrs = this.levelAt(type, id, fromLocationId)?.attributes;
+      if (attrs && n !== held) return null;
       // The two level writes, then the totals they imply: the source keeps what
       // it didn't send, the destination gains it, and an emptied place loses its
-      // row (see `writeLevel`).
+      // row (see `writeLevel`). A whole-level move carries its attributes.
       this.writeLevel(type, id, fromLocationId, held - n);
-      this.writeLevel(type, id, toLocationId, this.stockAt(item, toLocationId) + n);
+      this.writeLevel(type, id, toLocationId, this.stockAt(item, toLocationId) + n, n === held ? attrs : undefined);
       this.syncStockTotals(item);
     } else {
-      // One place, one count: only the whole row can move, and the FK *is* the
-      // placement — there is no level row to move.
+      // A serialized unit: one place, one count, and the FK *is* the placement —
+      // only the whole row can move, and there is no level row to move.
       if (n !== held) return null;
       item.locationId = toLocationId;
     }
@@ -2202,7 +2168,7 @@ export class DataService {
     note = '',
   ): Movement | null {
     const item = this.getItem(type, id);
-    if (!item || !isCountedStock(type)) return null;
+    if (!item || !isLevelTracked(type)) return null;
     if (!this.getLocation(locationId)) return null;
     const counted = Math.floor(Number(countedQty));
     if (!Number.isFinite(counted) || counted < 0) return null;
@@ -2236,6 +2202,147 @@ export class DataService {
     if (!isCountedStock(item.type)) return;
     if (needsReorder(item)) item.status = 'Low';
     else if (item.status === 'Low') item.status = 'In Stock';
+  }
+
+  /* ---------------------------- count sessions ---------------------------- */
+  /*
+   * A cycle count as a *document* (B5): open a sheet on a place (or its subtree),
+   * the sheet freezes what the levels hold, the counter enters what was found, and
+   * posting writes one `adjust` per difference. `adjustStock()` stays the only
+   * thing that moves a number, so a posted session is exactly the sum of its rows'
+   * movements.
+   */
+
+  listCountSessions(): CountSession[] {
+    return [...this.db.countSessions].sort((a, b) => (a.openedAt < b.openedAt ? 1 : -1));
+  }
+
+  getCountSession(id: string): CountSession | undefined {
+    return this.db.countSessions.find((s) => s.id === id);
+  }
+
+  /** Freeze a place's levels into a draft sheet (`null` when the place holds none). */
+  openCountSession(locationId: string, subtree = false): CountSession | null {
+    if (!this.getLocation(locationId)) return null;
+    const ids = subtree ? this.locationSubtreeIds(locationId) : new Set<string>([locationId]);
+    const levels = this.db.stockLevels.filter((l) => ids.has(l.locationId));
+    if (!levels.length) return null;
+    const rec: CountSession = {
+      id: 'CS-' + pad3(this.maxIdSequence(this.db.countSessions, /^CS-(\d+)$/) + 1),
+      locationId,
+      subtree,
+      status: 'draft',
+      openedAt: new Date().toISOString(),
+      lines: levels.map((l) => ({
+        id: this.levelId(l.refId, l.locationId),
+        itemType: l.type,
+        itemId: l.refId,
+        locationId: l.locationId,
+        expected: l.qty,
+        counted: l.qty,
+      })),
+    };
+    this.db.countSessions.push(rec);
+    this.save();
+    return rec;
+  }
+
+  /** Record what a counter found on one row of a draft sheet. */
+  setCountLine(sessionId: string, lineId: string, counted: number): boolean {
+    const s = this.getCountSession(sessionId);
+    if (!s || s.status === 'posted') return false;
+    const line = s.lines.find((l) => l.id === lineId);
+    if (!line) return false;
+    line.counted = Math.max(0, Math.floor(Number(counted) || 0));
+    this.save();
+    return true;
+  }
+
+  /**
+   * Post a sheet: one `adjust` movement per difference, in one reviewable batch.
+   * Rows that match write nothing (there is nothing to record), and a posted sheet
+   * cannot be posted twice.
+   */
+  postCountSession(sessionId: string): Movement[] | null {
+    const s = this.getCountSession(sessionId);
+    if (!s || s.status === 'posted') return null;
+    const moved: Movement[] = [];
+    for (const line of s.lines) {
+      const counted = Math.floor(Number(line.counted ?? line.expected));
+      const mv = this.adjustStock(line.itemType, line.itemId, line.locationId, counted, `Count session ${s.id}`);
+      if (mv) moved.push(mv);
+    }
+    s.status = 'posted';
+    s.postedAt = new Date().toISOString();
+    this.save();
+    return moved;
+  }
+
+  /** Discard a *draft* sheet (a posted one is a document — it is not removed). */
+  removeCountSession(id: string): void {
+    const i = this.db.countSessions.findIndex((s) => s.id === id && s.status === 'draft');
+    if (i >= 0) {
+      this.db.countSessions.splice(i, 1);
+      this.save();
+    }
+  }
+
+  /* ---------------------------- documents (B8) ---------------------------- */
+  /*
+   * Evidence rows, scoped to a record. The port has no file store: `url` is where
+   * a file *will* live and a row without one is a placeholder the UI still shows,
+   * so the scoping, the counts and the panel are real before the blob store is.
+   * A record's photo count is **derived** from these rows (`photoCount`), never a
+   * stored column — the same "derive, don't duplicate" rule as the stock totals.
+   */
+
+  listDocuments(scope?: DocumentScope, refId?: string): Document[] {
+    return this.db.documents.filter(
+      (d) => (scope === undefined || d.scope === scope) && (refId === undefined || d.refId === refId),
+    );
+  }
+
+  /** Evidence on one record, oldest first. */
+  documentsFor(scope: DocumentScope, refId: string): Document[] {
+    return this.listDocuments(scope, refId);
+  }
+
+  /** How many `photo` documents a record has — the derived count a cell prints. */
+  photoCount(scope: DocumentScope, refId: string): number {
+    return this.listDocuments(scope, refId).filter((d) => d.kind === 'photo').length;
+  }
+
+  createDocument(data: Omit<Document, 'id'>): Document {
+    const rec: Document = { ...data, id: this.nextDocumentId() };
+    this.db.documents.push(rec);
+    this.save();
+    return rec;
+  }
+
+  removeDocument(id: string): void {
+    const i = this.db.documents.findIndex((d) => d.id === id);
+    if (i >= 0) {
+      this.db.documents.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextDocumentId(): string {
+    return 'DOC-' + pad3(this.maxIdSequence(this.db.documents, /^DOC-(\d+)$/) + 1);
+  }
+
+  /** Whether a row is on hold (B8) — see `Item.hold`. */
+  isHeld(type: CatalogType, refId: string): boolean {
+    return !!this.getItem(type, refId)?.hold;
+  }
+
+  /** Put a row on hold, or release it. */
+  setHold(type: CatalogType, id: string, hold: boolean): void {
+    const it = this.getItem(type, id);
+    if (it) {
+      it.hold = hold;
+      this.save();
+    }
   }
 
   /** A serialized asset is out while its latest movement is an issue (prototype `assetOutInfo`). */
@@ -2361,17 +2468,91 @@ export class DataService {
     return sum;
   }
 
-  /** Still to arrive on a line (never negative). */
+  /** Still to arrive on a line (never negative; a short-closed line is complete). */
   poLineOutstanding(line: PurchaseOrderLine): number {
+    if (line.shortClosed) return 0;
     return Math.max(0, line.qty - this.poLineReceived(line.id));
   }
 
-  /** Delivery progress across the PO — derived, so it can't drift from receipts. */
+  /**
+   * Delivery progress across the PO — derived, so it can't drift from receipts.
+   * A **short-closed** line (B6) counts as complete: the desk decided the rest is
+   * not coming, so the order reads `received` without inventing stock.
+   */
   poProgress(po: PurchaseOrder): PurchaseProgress {
     if (!po.lines.length) return 'none';
     const arrived = po.lines.map((l) => this.poLineReceived(l.id));
-    if (arrived.every((n, i) => n >= po.lines[i].qty)) return 'received';
-    return arrived.some((n) => n > 0) ? 'partial' : 'none';
+    if (arrived.every((n, i) => po.lines[i].shortClosed || n >= po.lines[i].qty)) return 'received';
+    return arrived.some((n) => n > 0) || po.lines.some((l) => l.shortClosed) ? 'partial' : 'none';
+  }
+
+  /**
+   * Close a purchase order's outstanding quantity as **not coming** (B6). The line
+   * is kept (its history is the receipts against it); it is only marked so
+   * `poLineOutstanding()` reads zero and the order can reach `received`. With no
+   * `lineId`, every line that still owes stock is closed.
+   */
+  closePurchaseOrderShort(poId: string, lineId?: string): boolean {
+    const po = this.getPurchaseOrder(poId);
+    if (!po) return false;
+    let changed = false;
+    for (const line of po.lines) {
+      if (lineId && line.id !== lineId) continue;
+      if (!line.shortClosed && this.poLineReceived(line.id) < line.qty) {
+        line.shortClosed = true;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+    return changed;
+  }
+
+  /** The receiving desk's rules (B6) — tolerance, quarantine, short-close. */
+  receivingSettings(): ReceivingSettings {
+    return this.db.settings.receiving;
+  }
+
+  updateReceivingSettings(patch: Partial<ReceivingSettings>): void {
+    Object.assign(this.db.settings.receiving, patch);
+    this.save();
+  }
+
+  /**
+   * Send stock back to the supplier (B6) — a stock-out with a reason, not a
+   * silent adjust. Counted stock is drawn down at a place (the place must hold
+   * that much); a serialized unit goes back whole (its row leaves with it). Logs
+   * one `return-to-vendor` movement with a negative quantity. A kit or attachment
+   * is not level-tracked until B4, so it is refused here for now.
+   */
+  returnToVendor(type: CatalogType, refId: string, locationId: string, qty: number, note = ''): Movement | null {
+    const item = this.getItem(type, refId);
+    if (!item || !this.getLocation(locationId)) return null;
+    const n = Math.floor(Number(qty) || 0);
+    if (n <= 0) return null;
+    if (isLevelTracked(type)) {
+      const held = this.stockAt(item, locationId);
+      if (held < n) return null;
+      this.writeLevel(type, refId, locationId, held - n);
+      this.syncStockTotals(item);
+      this.refreshStockStatus(item);
+    } else if (isUnitStock(type)) {
+      const list = this.db.items[type] ?? [];
+      const i = list.findIndex((x) => x.id === refId);
+      if (i < 0) return null;
+      list.splice(i, 1);
+    } else {
+      return null;
+    }
+    const rec = this.appendMovement({
+      type,
+      refId,
+      kind: 'return-to-vendor',
+      qty: -n,
+      locationId,
+      note: note || `Returned to vendor from ${this.locationPath(locationId)}`,
+    });
+    this.save();
+    return rec;
   }
 
   /** What the grid shows: the lifecycle status unless the receipts say more. */
@@ -2454,13 +2635,64 @@ export class DataService {
   receiveAgainst(input: ReceiveInput): Receipt | null {
     const po = this.getPurchaseOrder(input.poId);
     if (!po || po.status === 'draft' || po.status === 'cancelled') return null;
-    if (!this.getLocation(input.locationId)) return null;
-    const wanted: { line: PurchaseOrderLine; qty: number }[] = [];
+    const header = input.locationId;
+    if (!header || !this.getLocation(header)) return null;
+    const cfg = this.db.settings.receiving;
+    if (cfg.requirePoReference && !(po.reference ?? '').trim()) return null;
+    // A damaged landing is quarantined when the desk names a place for it.
+    const quarantine =
+      cfg.quarantineLocationId && this.getLocation(cfg.quarantineLocationId) ? cfg.quarantineLocationId : '';
+
+    type Landing = {
+      locationId: string;
+      qty: number;
+      condition: ReceivingCondition;
+      reasonCode: string;
+      attributes: Record<string, unknown>;
+    };
+
+    // Normalise both call shapes into per-line landings. A landing that names no
+    // place falls back to the receipt's header (or the quarantine place, when it
+    // arrived damaged) — so the whole-receipt shape (and the seed) is simply "one
+    // landing per line at the default place".
+    const byLine = new Map<string, Landing[]>();
+    if (input.lines?.length) {
+      for (const l of input.lines) {
+        const rows = (l.landings ?? [])
+          .map((x) => {
+            const condition = x.condition ?? 'good';
+            return {
+              locationId: x.locationId || (condition === 'damaged' && quarantine ? quarantine : header),
+              qty: Math.floor(Number(x.qty) || 0),
+              condition,
+              reasonCode: x.reasonCode ?? '',
+              attributes: x.attributes ?? {},
+            };
+          })
+          .filter((x) => x.qty > 0);
+        if (rows.length) byLine.set(l.poLineId, rows);
+      }
+    } else {
+      for (const [poLineId, n] of Object.entries(input.qty ?? {})) {
+        const qty = Math.floor(Number(n) || 0);
+        if (qty > 0) {
+          byLine.set(poLineId, [{ locationId: header, qty, condition: 'good', reasonCode: '', attributes: {} }]);
+        }
+      }
+    }
+
+    // Validate everything before writing anything: the line must exist, every
+    // place must be real, and the *sum* of a line's landings can never exceed
+    // what is outstanding plus the desk's over-receipt tolerance (B6).
+    const wanted: { line: PurchaseOrderLine; rows: Landing[] }[] = [];
     for (const line of po.lines) {
-      const qty = Math.floor(Number(input.qty[line.id] ?? 0));
-      if (qty <= 0) continue;
-      if (qty > this.poLineOutstanding(line)) return null;
-      wanted.push({ line, qty });
+      const rows = byLine.get(line.id);
+      if (!rows) continue;
+      if (rows.some((r) => !this.getLocation(r.locationId))) return null;
+      const total = rows.reduce((sum, r) => sum + r.qty, 0);
+      const over = Math.floor((line.qty * cfg.overReceiptTolerancePct) / 100);
+      if (total > this.poLineOutstanding(line) + over) return null;
+      wanted.push({ line, rows });
     }
     if (!wanted.length) return null;
 
@@ -2468,35 +2700,42 @@ export class DataService {
       id: this.nextReceiptId(),
       poId: po.id,
       supplierId: po.supplierId,
-      locationId: input.locationId,
+      locationId: header,
       at: input.at ?? new Date().toISOString(),
       note: input.note ?? '',
       lines: [],
     };
     this.db.receipts.push(rec);
     const by = input.byUserId ?? this.sessionUserId();
-    for (const { line, qty } of wanted) {
-      for (const landed of this.landStock(line, qty, input.locationId)) {
-        rec.lines.push({
-          id: `${rec.id}-${rec.lines.length + 1}`,
-          poLineId: line.id,
-          type: line.type,
-          refId: landed.refId,
-          qty: landed.qty,
-          unitCost: line.unitCost,
-        });
-        this.appendMovement({
-          type: line.type,
-          refId: landed.refId,
-          kind: 'receive',
-          qty: landed.qty,
-          party: this.partyName(po.supplierId),
-          locationId: input.locationId,
-          receiptId: rec.id,
-          byUserId: by,
-          at: rec.at,
-          note: `Received against ${po.id}`,
-        });
+    for (const { line, rows } of wanted) {
+      for (const landing of rows) {
+        for (const landed of this.landStock(line, landing.qty, landing.locationId, landing.attributes)) {
+          rec.lines.push({
+            id: `${rec.id}-${rec.lines.length + 1}`,
+            poLineId: line.id,
+            type: line.type,
+            refId: landed.refId,
+            qty: landed.qty,
+            unitCost: line.unitCost,
+            locationId: landing.locationId,
+            condition: landing.condition,
+            damagedQty: landing.condition === 'damaged' ? landing.qty : undefined,
+            reasonCode: landing.reasonCode || undefined,
+            attributes: Object.keys(landing.attributes).length ? landing.attributes : undefined,
+          });
+          this.appendMovement({
+            type: line.type,
+            refId: landed.refId,
+            kind: 'receive',
+            qty: landed.qty,
+            party: this.partyName(po.supplierId),
+            locationId: landing.locationId,
+            receiptId: rec.id,
+            byUserId: by,
+            at: rec.at,
+            note: landing.condition === 'damaged' ? `Received against ${po.id} (damaged)` : `Received against ${po.id}`,
+          });
+        }
       }
     }
     this.save();
@@ -2513,7 +2752,12 @@ export class DataService {
    *   row is topped up, its cost becomes a moving average, and it is placed at
    *   the destination — stock that arrived is stock that is *there*.
    */
-  private landStock(line: PurchaseOrderLine, qty: number, locationId: string): ReceiptLine[] {
+  private landStock(
+    line: PurchaseOrderLine,
+    qty: number,
+    locationId: string,
+    attributes?: Record<string, unknown>,
+  ): ReceiptLine[] {
     const catalog = line.refId ? this.getItem(line.type, line.refId) : undefined;
     if (isUnitStock(line.type)) {
       const out: ReceiptLine[] = [];
@@ -2529,30 +2773,21 @@ export class DataService {
           locationId,
           active: true,
         });
-        out.push({ id: '', poLineId: line.id, type: line.type, refId: unit.id, qty: 1, unitCost: line.unitCost });
+        out.push({ id: '', poLineId: line.id, type: line.type, refId: unit.id, qty: 1, unitCost: line.unitCost, locationId });
       }
       return out;
     }
     if (!catalog) return [];
     const onHand = this.countedQty(catalog);
     catalog.costPrice = movingCost(onHand, catalog.costPrice, qty, line.unitCost);
-    if (isCountedStock(catalog.type)) {
-      // The stock lands as a *level*: receiving into a bin the SKU already sits in
-      // tops that place up, receiving elsewhere adds a place — which is exactly how
-      // one part ends up stocked in two bins. The row's totals and its home place
-      // follow from the levels (see `syncStockTotals`), so nothing here writes
-      // `qtyOnHand` or re-places the row by hand.
-      this.writeLevel(catalog.type, catalog.id, locationId, this.stockAt(catalog, locationId) + qty);
-      this.syncStockTotals(catalog);
-    } else {
-      // A kit or an attachment is an owned count in one place rather than a set of
-      // units or a shelved quantity: its `qty` *is* its stock, so a receipt tops
-      // the row up and places it, and it needs no level row (see `StockLevel`).
-      catalog.qty = (catalog.qty ?? 0) + qty;
-      catalog.locationId = locationId;
-    }
+    // The stock lands as a *level* — for a kit or attachment too, now that they
+    // are level-tracked (B4). Receiving into a place the row already sits in tops
+    // it up; receiving elsewhere adds a place. The row's totals and its home place
+    // follow from the levels (see `syncStockTotals`), so nothing writes them here.
+    this.writeLevel(catalog.type, catalog.id, locationId, this.stockAt(catalog, locationId) + qty, attributes);
+    this.syncStockTotals(catalog);
     if (catalog.status === 'Low' && !needsReorder(catalog)) catalog.status = 'In Stock';
-    return [{ id: '', poLineId: line.id, type: line.type, refId: catalog.id, qty, unitCost: line.unitCost }];
+    return [{ id: '', poLineId: line.id, type: line.type, refId: catalog.id, qty, unitCost: line.unitCost, locationId }];
   }
 
   /** Normalise a PO on its way into the store: line ids, numbers, descriptions. */
@@ -2649,6 +2884,61 @@ export class DataService {
     const days = order ? daysBetween(order.startDate, order.endDate) : 1;
     const p = this.db.settings.pricing;
     return days >= 7 ? p.weeklyHours : p.dailyMinHours * days;
+  }
+
+  /** The `inspection`-scope schema an inspection's checklist comes from (B7). */
+  inspectionTemplate(): FormSchema | undefined {
+    return (
+      this.db.formSchemas.find((s) => s.scope === 'inspection' && s.active) ??
+      this.db.formSchemas.find((s) => s.scope === 'inspection')
+    );
+  }
+
+  /** Pass / fail / n-a counts and the worst failure — what a log cell prints (B7). */
+  inspectionSummary(r: Inspection): { pass: number; fail: number; na: number; worst: InspectionSeverity | null } {
+    const rank: Record<InspectionSeverity, number> = { minor: 1, major: 2, critical: 3 };
+    const list = Object.values(r.results ?? {});
+    let worst: InspectionSeverity | null = null;
+    for (const x of list) {
+      if (x.outcome !== 'fail' || !x.severity) continue;
+      if (!worst || rank[x.severity] > rank[worst]) worst = x.severity;
+    }
+    return {
+      pass: list.filter((x) => x.outcome === 'pass').length,
+      fail: list.filter((x) => x.outcome === 'fail').length,
+      na: list.filter((x) => x.outcome === 'na').length,
+      worst,
+    };
+  }
+
+  /** The outcome recorded for one template field (an absent result reads `na`). */
+  resultFor(r: Inspection, key: string): InspectionResult {
+    return r.results?.[key] ?? { outcome: 'na' };
+  }
+
+  /**
+   * A failure's consequence (B7): raise a work order for the inspected unit and
+   * link it back, so a critical item has an owner. A `critical` failure raises a
+   * `Repair`, anything else an `Inspection`. Nothing is raised twice, and a
+   * checklist with no failure raises nothing.
+   */
+  raiseWorkOrderForInspection(inspectionId: string): WorkOrder | null {
+    const r = this.getInspection(inspectionId);
+    if (!r || r.workOrderId) return null;
+    const worst = this.inspectionSummary(r).worst;
+    if (!worst) return null;
+    const wo = this.createWorkOrder({
+      itemId: r.itemId,
+      type: worst === 'critical' ? 'Repair' : 'Inspection',
+      meterReading: r.meterIn ?? r.meterOut ?? 0,
+      status: 'Scheduled',
+      parts: [],
+      laborHours: 0,
+      date: r.date,
+      notes: `Raised by inspection ${r.id}`,
+    });
+    this.updateInspection(r.id, { workOrderId: wo.id });
+    return wo;
   }
 
   private nextInspectionId(): string {
@@ -3326,12 +3616,15 @@ export class DataService {
   /* --------------------------- policies / pricing ------------------------ */
 
   /**
-   * Active industry vertical. This is tenant configuration (it drives the
-   * catalog tabs and the per-vertical field sets) — not a browser preference, so
-   * it lives with the workspace.
+   * The workspace's industry, as the compiled registry keys it (`VerticalKey`) —
+   * **derived** from the business type the workspace is on, never a setting of its
+   * own. Choosing a business type *is* choosing the key: the seeded rows carry the
+   * key as their slug, so the registry follows the row (a type a tenant authored
+   * borrows the default catalog until its own columns/statuses are data).
    */
   get vertical(): string {
-    return this.activeTenant?.vertical ?? 'HeavyEquipment';
+    const slug = this.activeVertical()?.slug ?? '';
+    return VERTICAL_KEYS.find((k) => k.toLowerCase() === slug) ?? 'HeavyEquipment';
   }
 
   /**
@@ -3350,13 +3643,6 @@ export class DataService {
   /** The tab metadata for one type in the active vertical (undefined if hidden). */
   tabMeta(type: CatalogType): VerticalTabMeta | undefined {
     return tabMetaFor(this.verticalMeta(), type);
-  }
-
-  setVertical(v: string): void {
-    const t = this.activeTenant;
-    if (!t || !VERTICAL_KEYS.includes(v as VerticalKey)) return;
-    t.vertical = v as VerticalKey;
-    this.save();
   }
 
   /** Live pricing-rules engine settings (prototype `IMS.settings.pricing`). */
@@ -3431,6 +3717,371 @@ export class DataService {
     }
   }
 
+  /* ---------------------------- form schemas ---------------------------- */
+  /*
+   * A tenant's form schemas (B2): the extra fields a record type captures, held as
+   * `jsonb` values on the record and validated against the schema row. The defaults
+   * are seeded (one per catalog type); B3 will source them from the vertical
+   * registry. A schema row is tenant data — it is in `auditedRows()` like any other
+   * configuration row (see `docs/PLAN-B.md`, D2).
+   */
+
+  /** Schemas for a scope, optionally narrowed to a catalog type (exact or `*`). */
+  listFormSchemas(scope?: FormScope, type?: CatalogType): FormSchema[] {
+    return this.db.formSchemas.filter(
+      (s) =>
+        (scope === undefined || s.scope === scope) &&
+        (type === undefined || !s.type || s.type === '*' || s.type === type),
+    );
+  }
+
+  getFormSchema(id: string): FormSchema | undefined {
+    return this.db.formSchemas.find((s) => s.id === id);
+  }
+
+  /* ------------------- the tenant's catalog (Phase C) ------------------- */
+  /*
+   * Verticals and categories are the tenant's own rows (see `docs/PLAN-C.md`): a
+   * vertical groups categories and orders them, a category is a tab and carries its
+   * own fields, and the tenant's `StockSchema` holds the fields every asset shares.
+   * These are seeded from the compiled registry, then owned — the registry is never
+   * read at runtime once C3 lands.
+   */
+
+  listVerticals(activeOnly = false): Vertical[] {
+    return this.db.verticals.filter((v) => !activeOnly || v.active);
+  }
+
+  getVertical(id: string): Vertical | undefined {
+    return this.db.verticals.find((v) => v.id === id);
+  }
+
+  verticalBySlug(slug: string): Vertical | undefined {
+    return this.db.verticals.find((v) => v.slug === slug.toLowerCase());
+  }
+
+  /**
+   * The business type the workspace is on — the `verticals` row named by
+   * `tenants.vertical_id`, falling back to the seeded default. A workspace has one,
+   * so this is the single place its industry comes from: the registry key
+   * (`vertical`), the catalog tabs and the categories all read through here.
+   */
+  activeVertical(): Vertical | undefined {
+    const chosen = this.activeTenant?.verticalId;
+    return (
+      (chosen ? this.getVertical(chosen) : undefined) ??
+      this.db.verticals.find((v) => v.isDefault) ??
+      this.db.verticals[0]
+    );
+  }
+
+  /**
+   * The workspace's **business type** (Phase C) — a workspace has one, and it is
+   * what decides the categories (tabs) its catalog shows. Changing it switches the
+   * catalog; the categories authored under the other type are kept.
+   */
+  setActiveVertical(id: string): void {
+    const t = this.activeTenant;
+    if (!t || !this.getVertical(id)) return;
+    t.verticalId = id;
+    this.save();
+  }
+
+  /**
+   * The Phase C migration, run once at construction: link every row that predates
+   * categories to the active vertical's category of its type, and make its
+   * denormalised `category` name the row's own name. Idempotent — a row that
+   * already names a category with the right label is left alone.
+   */
+  private linkItemsToCategories(): void {
+    const vertical = this.activeVertical();
+    if (!vertical) return;
+    const byType = new Map(this.categoriesForVertical(vertical.id).map((c) => [c.type, c]));
+    let changed = false;
+    for (const item of this.allItems()) {
+      const category = item.categoryId ? this.getCategory(item.categoryId) : byType.get(item.type);
+      if (!category) continue;
+      if (item.categoryId !== category.id) {
+        item.categoryId = category.id;
+        changed = true;
+      }
+      if (item.category !== category.name) {
+        item.category = category.name;
+        changed = true;
+      }
+    }
+    if (changed) this.save();
+  }
+
+  /**
+   * **Start clean** (Phase C): drop the sample catalog and every operation that
+   * names a catalog row, so a workspace defines its own verticals, categories and
+   * fields without the fixture in the way.
+   *
+   * What a workspace *is* — its tenant, people, locations, partners, price cards,
+   * pricing and **business type** — is kept; only the things it holds and the
+   * paperwork about them go. The item-scope `form_schemas` go too: a category
+   * carries its own fields now.
+   */
+  resetCatalog(): void {
+    this.db.items = {};
+    for (const type of CATALOG_TYPE_KEYS) this.db.items[type] = [];
+    this.db.stockLevels = [];
+    this.db.movements = [];
+    this.db.orders = [];
+    this.db.purchaseOrders = [];
+    this.db.receipts = [];
+    this.db.inspections = [];
+    this.db.workOrders = [];
+    this.db.timesheets = [];
+    this.db.rentals = [];
+    this.db.dispatches = [];
+    this.db.invoices = [];
+    this.db.documents = [];
+    this.db.countSessions = [];
+    this.db.assetCategories = [];
+    this.db.formSchemas = this.db.formSchemas.filter((s) => s.scope !== 'item');
+    this.db.settings.stockSchema.fields = [];
+    this.save();
+  }
+
+  createVertical(data: Omit<Vertical, 'id'>): Vertical {
+    const rec: Vertical = { ...data, id: this.nextVerticalId() };
+    this.db.verticals.push(rec);
+    this.save();
+    return rec;
+  }
+
+  updateVertical(id: string, patch: Partial<Vertical>): void {
+    const v = this.getVertical(id);
+    if (v) {
+      Object.assign(v, patch);
+      this.save();
+    }
+  }
+
+  /**
+   * What blocks a business type's removal: it is the **last** one a workspace could
+   * be (a workspace must be *something*), or items still name one of its categories.
+   *
+   * Being the type the workspace is **on** is deliberately not a block: removing it
+   * moves the workspace onto another one, so the list stays cleanable.
+   */
+  verticalRemovalBlockers(id: string): string[] {
+    const reasons: string[] = [];
+    if (this.listVerticals().length <= 1) reasons.push('the only business type left');
+    const ids = new Set(this.db.assetCategories.filter((c) => c.verticalId === id).map((c) => c.id));
+    const used = this.allItems().filter((i) => i.categoryId && ids.has(i.categoryId)).length;
+    if (used) reasons.push(`${used} item(s)`);
+    return reasons;
+  }
+
+  /**
+   * Remove a business type with its categories. Refused when it is the last one, or
+   * while an item names one of its categories.
+   *
+   * Removing the type the workspace is **on** is allowed — the choice is cleared and
+   * `activeVertical()` falls back to the default type, so `vertical_id` can never
+   * point at a row that is gone.
+   */
+  removeVertical(id: string): boolean {
+    if (!this.getVertical(id) || this.verticalRemovalBlockers(id).length) return false;
+    this.db.verticals = this.db.verticals.filter((v) => v.id !== id);
+    this.db.assetCategories = this.db.assetCategories.filter((c) => c.verticalId !== id);
+    const tenant = this.activeTenant;
+    if (tenant?.verticalId === id) delete tenant.verticalId;
+    this.save();
+    return true;
+  }
+
+  /** A vertical's categories, in the order the tenant put them (C1: its tabs). */
+  categoriesForVertical(verticalId: string, activeOnly = false): Category[] {
+    return this.db.assetCategories
+      .filter((c) => c.verticalId === verticalId && (!activeOnly || c.active))
+      .sort((a, b) => a.sort - b.sort || (a.name < b.name ? -1 : 1));
+  }
+
+  getCategory(id: string): Category | undefined {
+    return this.db.assetCategories.find((c) => c.id === id);
+  }
+
+  /** Add a category to the end of a vertical's strip (its `type` follows its behaviour). */
+  createCategory(verticalId: string, data: CategoryDraft): Category {
+    const rec: Category = {
+      ...data,
+      // A key names one field *in its list*: a list that repeats one is normalised to
+      // the first definition, so `fields` and `attributes` can never disagree about
+      // what a key means (the authoring editor refuses the save instead).
+      fields: uniqueFields(data.fields),
+      type: typeForBehaviour(data.behaviour),
+      id: this.nextCategoryId(),
+      verticalId,
+      sort: this.categoriesForVertical(verticalId).length,
+    };
+    this.db.assetCategories.push(rec);
+    this.save();
+    return rec;
+  }
+
+  /** Patch a category; only a *changed* behaviour moves its spine type with it. */
+  updateCategory(id: string, patch: Partial<Category>): void {
+    const c = this.getCategory(id);
+    if (!c) return;
+    const was = c.name;
+    const behaviourChanged = patch.behaviour !== undefined && patch.behaviour !== c.behaviour;
+    // A key names one field in *this* list (see `uniqueFields`): the first
+    // definition wins, so a category can never hold two fields for one key.
+    Object.assign(c, patch.fields ? { ...patch, fields: uniqueFields(patch.fields) } : patch);
+    if (behaviourChanged && !patch.type) c.type = typeForBehaviour(c.behaviour);
+    // A rename is a cascading write: `items.category` carries the name for display,
+    // so every row in the category follows it (see `docs/DATA-MODEL.md`, items).
+    if (c.name !== was) {
+      for (const item of this.allItems()) {
+        if (item.categoryId === c.id) item.category = c.name;
+      }
+    }
+    this.save();
+  }
+
+  /** Move a category to a new position in its vertical (0-based), renumbering the rest. */
+  moveCategory(id: string, toIndex: number): void {
+    const c = this.getCategory(id);
+    if (!c) return;
+    const list = this.categoriesForVertical(c.verticalId);
+    const from = list.findIndex((x) => x.id === id);
+    if (from < 0) return;
+    const to = Math.max(0, Math.min(list.length - 1, Math.floor(toIndex)));
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    list.forEach((x, i) => (x.sort = i));
+    this.save();
+  }
+
+  /** How many items use a category (its removal guard, and a grid cell). */
+  categoryItemCount(id: string): number {
+    return this.allItems().filter((i) => i.categoryId === id).length;
+  }
+
+  /** Remove a **category row**; refused while an item is still in it (the row a
+   *  screen deletes, and the one `items.category_id` points at). */
+  removeAssetCategory(id: string): boolean {
+    if (!this.getCategory(id) || this.categoryItemCount(id) > 0) return false;
+    this.db.assetCategories = this.db.assetCategories.filter((c) => c.id !== id);
+    this.save();
+    return true;
+  }
+
+  /** The fields every asset carries (Phase C) — the "stock set". */
+  stockSchema(): StockSchema {
+    return this.db.settings.stockSchema;
+  }
+
+  updateStockSchema(fields: FormField[]): void {
+    this.db.settings.stockSchema.fields = uniqueFields(fields);
+    this.save();
+  }
+
+  private nextVerticalId(): string {
+    return 'VT-' + pad3(this.maxIdSequence(this.db.verticals, /^VT-(\d+)$/) + 1);
+  }
+
+  private nextCategoryId(): string {
+    return 'CAT-' + pad3(this.maxIdSequence(this.db.assetCategories, /^CAT-(\d+)$/) + 1);
+  }
+
+  createFormSchema(data: Omit<FormSchema, 'id'>): FormSchema {
+    const rec: FormSchema = { ...data, fields: uniqueFields(data.fields), id: this.nextFormSchemaId() };
+    this.db.formSchemas.push(rec);
+    this.save();
+    return rec;
+  }
+
+  updateFormSchema(id: string, patch: Partial<FormSchema>): void {
+    const s = this.getFormSchema(id);
+    if (s) {
+      Object.assign(s, patch.fields ? { ...patch, fields: uniqueFields(patch.fields) } : patch);
+      this.save();
+    }
+  }
+
+  removeFormSchema(id: string): void {
+    const i = this.db.formSchemas.findIndex((s) => s.id === id);
+    if (i >= 0) {
+      this.db.formSchemas.splice(i, 1);
+      this.save();
+    }
+  }
+
+  private nextFormSchemaId(): string {
+    let max = 0;
+    for (const s of this.db.formSchemas) {
+      const m = s.id.match(/^FS-(\d+)$/);
+      if (m) max = Math.max(max, Number(m[1]));
+    }
+    return 'FS-' + String(max + 1).padStart(3, '0');
+  }
+
+  /**
+   * The default form schemas: one per catalog type, naming the extra facts that
+   * industry records carry beyond the fixed columns. A tenant may edit or extend
+   * these — the *fields* are the flexible layer; a fact that has to be queried
+   * still becomes a column (see `docs/PLAN-B.md`, §1).
+   */
+  private seedFormSchemas(): FormSchema[] {
+    const item = (type: CatalogType, name: string, seededFrom: VerticalKey, fields: FormField[]): FormSchema => ({
+      id: `FS-item-${type}`,
+      name,
+      scope: 'item',
+      type,
+      seededFrom,
+      active: true,
+      version: 1,
+      fields,
+    });
+    return [
+      item('serialized', 'Equipment details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.serialized),
+      item('bulk', 'Material details', 'Lumberyard', ASSET_FIELD_DEFAULTS.bulk),
+      item('consumable', 'Supply details', 'Warehouse', ASSET_FIELD_DEFAULTS.consumable),
+      // The clinic's supply schema (B3): the same catalog type, a different set of
+      // fields — a vertical's tab names it explicitly (`formSchema`).
+      {
+        id: 'FS-item-consumable-clinic',
+        name: 'Clinical supply details',
+        scope: 'item',
+        type: 'consumable',
+        seededFrom: 'Healthcare',
+        active: true,
+        version: 1,
+        fields: [
+          { key: 'manufacturerPartNo', label: 'Manufacturer Part No.', kind: 'text' },
+          { key: 'lot', label: 'Lot', kind: 'text' },
+          { key: 'expiry', label: 'Expiry', kind: 'date' },
+          { key: 'storageTemp', label: 'Storage Temp', kind: 'measurement', unit: '°C', min: -50, max: 60 },
+        ],
+      },
+      item('part', 'Part details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.part),
+      item('labor', 'Personnel details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.labor),
+      item('attachment', 'Attachment details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.attachment),
+      item('kit', 'Kit details', 'HeavyEquipment', ASSET_FIELD_DEFAULTS.kit),
+      // The default inspection checklist (B7): the five condition checks that used
+      // to be a fixed union, now data a tenant can edit or replace.
+      {
+        id: 'FS-inspection-default',
+        name: 'Yard in/out inspection',
+        scope: 'inspection',
+        seededFrom: 'HeavyEquipment',
+        active: true,
+        version: 1,
+        fields: [
+          { key: 'tires', label: 'Tires / Tracks', kind: 'select', options: ['Good', 'Worn', 'Damaged'] },
+          { key: 'fluids', label: 'Fluids', kind: 'select', options: ['Full', 'Low', 'Leaking'] },
+          { key: 'guards', label: 'Safety Guards', kind: 'select', options: ['In place', 'Loose', 'Missing'] },
+          { key: 'lights', label: 'Lights', kind: 'select', options: ['Working', 'Faulty'] },
+          { key: 'engine', label: 'Engine', kind: 'select', options: ['Normal', 'Noisy', 'Fault'] },
+        ],
+      },
+    ];
+  }
+
   private nextOverheadId(): string {
     return 'OH-' + String(this.db.settings.overheads.length + 1).padStart(3, '0');
   }
@@ -3486,31 +4137,6 @@ export class DataService {
 
 
   /* -------------------------------- seeds ------------------------------- */
-
-  /** Category options per catalog type (prototype `IMS.settings.categories`). */
-  private seedCategories(): Record<string, CategoryOption[]> {
-    const on = (names: string[]): CategoryOption[] => names.map((name) => ({ name, active: true }));
-    return {
-      serialized: on([
-        'Boom Lift',
-        'Skid Steer',
-        'Mini Excavator',
-        'Forklift',
-        'Generator',
-        'Telehandler',
-        'Compressor',
-        'Light Tower',
-        'Traffic Control',
-        'Safety',
-      ]),
-      bulk: on(['Scaffolding', 'Traffic', 'Shoring', 'Concrete', 'Safety']),
-      consumable: on(['Safety', 'Fluids', 'Hardware', 'General']),
-      labor: on(['Field', 'Shop', 'Dispatch']),
-      part: on(['Filters', 'Hoses', 'Hydraulics', 'Hardware', 'Electrical']),
-      kit: on(['Traffic Control', 'Confined Space', 'Fall Protection']),
-      attachment: on(['Bucket', 'Carriage', 'Platform', 'Hydraulic']),
-    };
-  }
 
   private seedParties(): Party[] {
     return [
@@ -3964,6 +4590,9 @@ export class DataService {
       certs,
       hourlyCost,
       hourlyBillable,
+      // A person's place is their home base (Phase C) — set from their department,
+      // and editable like any other row's Placement field.
+      locationId: CREW_BASE[category],
       active: true,
     };
   }
@@ -4062,7 +4691,7 @@ export class DataService {
    */
   private seedStockLevels(): void {
     this.db.stockLevels = [];
-    const counted = Object.entries(this.db.items).filter(([type]) => isCountedStock(type as CatalogType));
+    const counted = Object.entries(this.db.items).filter(([type]) => isLevelTracked(type as CatalogType));
     for (const [type, rows] of counted) {
       for (const row of rows) {
         const qty = Math.floor(Number(row.qtyOnHand ?? row.qtyAvailable ?? row.qty ?? 0));
@@ -4285,15 +4914,76 @@ export class DataService {
     };
   }
 
-  /** Yard in/out inspections (prototype `IMS.inspections`). */
-  private seedInspections(): Inspection[] {
-    const all: Record<InspectionCheckKey, boolean> = {
-      tires: true,
-      fluids: true,
-      guards: true,
-      lights: true,
-      engine: true,
+  /** Receiving desk defaults (B6): an exact receipt, no PO reference required. */
+  private seedReceiving(): ReceivingSettings {
+    return {
+      overReceiptTolerancePct: 0,
+      requirePoReference: false,
+      quarantineLocationId: null,
+      defaultPutAwayLocationId: null,
+      requireInspection: false,
     };
+  }
+
+  /** The fields every asset carries (Phase C) — none against the core columns to start. */
+  private seedStockSchema(): StockSchema {
+    return { fields: [] };
+  }
+
+  /**
+   * A workspace's default verticals: the compiled registry's five (Phase C). They
+   * are *seed* data — the tenant edits and adds to them from Admin.
+   */
+  private seedVerticals(): Vertical[] {
+    return VERTICAL_KEYS.map((key, i) => ({
+      id: `VT-${pad3(i + 1)}`,
+      name: verticalLabel(key),
+      slug: key.toLowerCase(),
+      active: true,
+      isDefault: key === 'HeavyEquipment',
+    }));
+  }
+
+  /**
+   * A workspace's default categories: each vertical's tabs become **its** categories
+   * — named by the tab, stocked by the tab's behaviour, in the tab's order — with the
+   * type's default fields copied on. Seeded from the registry so the demo workspace
+   * works out of the box, then owned by the tenant.
+   */
+  private seedAssetCategories(): Category[] {
+    const out: Category[] = [];
+    let n = 0;
+    VERTICAL_KEYS.forEach((key, vi) => {
+      const meta = VERTICAL_METADATA[key];
+      const verticalId = `VT-${pad3(vi + 1)}`;
+      meta.tabs.forEach((tab, sort) => {
+        const type = tab.key;
+        out.push({
+          id: `CAT-${pad3(++n)}`,
+          verticalId,
+          name: tab.label,
+          icon: tab.icon,
+          behaviour: behaviourOfType(type),
+          type,
+          active: true,
+          sort,
+          fields: (ASSET_FIELD_DEFAULTS[type] ?? []).map((f) => ({ ...f })),
+        });
+      });
+    });
+    return out;
+  }
+
+  /** Yard in/out inspections (prototype `IMS.inspections`), template-driven (B7). */
+  private seedInspections(): Inspection[] {
+    const ok = (value: string): InspectionResult => ({ value, outcome: 'pass' });
+    const allOk = () => ({
+      tires: ok('Good'),
+      fluids: ok('Full'),
+      guards: ok('In place'),
+      lights: ok('Working'),
+      engine: ok('Normal'),
+    });
     return [
       {
         id: 'INSP-001',
@@ -4305,8 +4995,8 @@ export class DataService {
         meterIn: null,
         fuelOut: 85,
         fuelIn: null,
-        checks: { ...all },
-        photos: 2,
+        templateId: 'FS-inspection-default',
+        results: allOk(),
         status: 'Open',
       },
       {
@@ -4319,8 +5009,11 @@ export class DataService {
         meterIn: null,
         fuelOut: 78,
         fuelIn: null,
-        checks: { ...all, lights: false },
-        photos: 1,
+        templateId: 'FS-inspection-default',
+        results: {
+          ...allOk(),
+          lights: { value: 'Faulty', outcome: 'fail', severity: 'major', note: 'Right lamp out' },
+        },
         status: 'Open',
       },
       {
@@ -4333,13 +5026,29 @@ export class DataService {
         meterIn: 3200,
         fuelOut: 60,
         fuelIn: 40,
-        checks: { ...all },
-        photos: 3,
+        templateId: 'FS-inspection-default',
+        results: allOk(),
         status: 'Closed',
       },
     ];
   }
 
+
+  /**
+   * Evidence rows (B8): the photos a check-in took, a receipt's packing slip, an
+   * item's certificate. `url` is left off where the port has no file to point at —
+   * the rows are real and a record's count is derived from them.
+   */
+  private seedDocuments(): Document[] {
+    return [
+      { id: 'DOC-001', scope: 'inspection', refId: 'INSP-002', kind: 'photo', caption: 'Right lamp out', mime: 'image/jpeg', size: 184320 },
+      { id: 'DOC-002', scope: 'inspection', refId: 'INSP-003', kind: 'photo', caption: 'Check-in — front', mime: 'image/jpeg', size: 210944 },
+      { id: 'DOC-003', scope: 'inspection', refId: 'INSP-003', kind: 'photo', caption: 'Check-in — rear', mime: 'image/jpeg', size: 198656 },
+      { id: 'DOC-004', scope: 'inspection', refId: 'INSP-003', kind: 'photo', caption: 'Check-in — meter', mime: 'image/jpeg', size: 176128 },
+      { id: 'DOC-005', scope: 'receipt', refId: 'RC-2026-001', kind: 'packing-slip', caption: 'Supplier packing slip' },
+      { id: 'DOC-006', scope: 'item', refId: 'BL-119', kind: 'certificate', caption: 'Annual inspection certificate' },
+    ];
+  }
 
   /** Service work orders (prototype `IMS.workOrders`). */
   private seedWorkOrders(): WorkOrder[] {
@@ -4454,7 +5163,9 @@ export class DataService {
         name: 'Northline Equipment Co.',
         slug: 'northline',
         plan: 'professional',
-        vertical: 'HeavyEquipment',
+        // The business type this workspace is — `VT-001` is the first seeded type
+        // (Heavy Equipment), which is also the default the fallback lands on.
+        verticalId: 'VT-001',
         disabledModules: [],
         createdAt: '2024-01-08',
       },

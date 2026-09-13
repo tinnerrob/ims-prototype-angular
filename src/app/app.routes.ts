@@ -3,7 +3,7 @@ import { Routes } from '@angular/router';
 import { requireModule } from './core/module.guard';
 import { AdminComponent } from './features/admin/admin.component';
 import { FeatureModulesComponent } from './features/admin/feature-modules.component';
-import { CategoriesComponent } from './features/categories/categories.component';
+import { VerticalsComponent } from './features/admin/verticals.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { HandoffComponent } from './features/handoff/handoff.component';
 import { InspectionsComponent } from './features/inspections/inspections.component';
@@ -35,17 +35,20 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'modules' },
       { path: 'locations', component: LocationsComponent },
-      { path: 'categories', component: CategoriesComponent },
+      { path: 'verticals', component: VerticalsComponent },
       { path: 'modules', component: FeatureModulesComponent },
       // Location Types merged into the Locations page as a sub-tab — keep the
       // old URL working for bookmarks.
       { path: 'location-types', redirectTo: 'locations', pathMatch: 'full' },
+      // Categories (the old per-type name list) are the business type's categories
+      // now — the same screen the verticals page edits.
+      { path: 'categories', redirectTo: 'verticals', pathMatch: 'full' },
       { path: '**', redirectTo: 'modules' },
     ],
   },
   // Legacy deep links: these views now live under Administration.
   { path: 'locations', redirectTo: 'admin/locations', pathMatch: 'full' },
-  { path: 'categories', redirectTo: 'admin/categories', pathMatch: 'full' },
+  { path: 'categories', redirectTo: 'admin/verticals', pathMatch: 'full' },
   { path: 'handoff', component: HandoffComponent },
   { path: 'inspections', component: InspectionsComponent },
   { path: 'invoicing', component: InvoicingComponent, canActivate: [requireModule('billing')] },

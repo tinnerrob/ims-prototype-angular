@@ -1,0 +1,45 @@
+<table class="table">
+  <thead>
+    <tr>
+      <th>Kind</th><th>Caption</th><th class="num">Size</th>
+      @if (!readOnly) {<th></th>}
+    </tr>
+  </thead>
+  <tbody>
+    @for (d of documents(); track d.id) {
+      <tr>
+        <td><span class="badge-status st-on">{{ d.kind }}</span></td>
+        <td>{{ d.caption || '—' }}</td>
+        <td class="num text-muted2">{{ sizeLabel(d) }}</td>
+        @if (!readOnly) {
+          <td class="text-end text-nowrap">
+            <button type="button" class="btn btn-ims-outline btn-sm2" title="Remove" (click)="remove(d)">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </td>
+        }
+      </tr>
+    } @empty {
+      <tr>
+        <td [attr.colspan]="readOnly ? 3 : 4" class="text-center text-muted2 py-3">No evidence attached.</td>
+      </tr>
+    }
+  </tbody>
+</table>
+@if (!readOnly) {
+  <div class="d-flex gap-2 align-items-center mt-2">
+    <select class="form-select form-select-sm evidence-kind" [(ngModel)]="draft.kind">
+      @for (k of kinds; track k) {
+        <option [ngValue]="k">{{ k }}</option>
+      }
+    </select>
+    <input
+      class="form-control form-control-sm"
+      [(ngModel)]="draft.caption"
+      placeholder="Caption — the file itself lives in the API's store"
+    />
+    <button type="button" class="btn btn-ims-quiet btn-sm2" [disabled]="!draft.caption.trim()" (click)="add()">
+      <i class="bi bi-paperclip"></i> Attach
+    </button>
+  </div>
+}

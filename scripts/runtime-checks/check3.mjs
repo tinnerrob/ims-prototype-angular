@@ -64,15 +64,20 @@ check('the walker prunes a node and its whole subtree (cycle guard)', () => {
   assert.equal(opts.some((o) => o.id === 'LOC-09'), true, 'its sibling rack stays');
 });
 
-check('every stock row is placed, and labour is deliberately not', () => {
+check('every stock row is placed, and so is every crew member', () => {
+  let basedPeople = 0;
   for (const i of d.allItems()) {
-    if (i.type === 'labor') {
-      assert.equal(i.locationId, undefined, `labor ${i.id} has no place`);
-      continue;
-    }
+    // Since Phase C a person carries a place too — their home base — set from the
+    // department they work in. (Stock rows are all placed; a *new* row may be
+    // created "— Not placed —", which is the editor's choice, not the fixture's.)
     assert.equal(typeof i.locationId, 'string', `${i.id} has a location FK`);
     assert.ok(d.getLocation(i.locationId), `${i.id} -> ${i.locationId} resolves`);
+    if (i.type === 'labor') {
+      basedPeople++;
+      assert.equal(['LOC-03', 'LOC-04', 'LOC-05'].includes(i.locationId), true, `${i.id} is based at one of the crew's bases`);
+    }
   }
+  assert.equal(basedPeople, 6, 'all six seeded people are based somewhere');
 });
 
 check('the prototype bin string became a node, not a second column', () => {
@@ -91,13 +96,22 @@ check('itemsAtLocation answers for a node and for its subtree', () => {
   const atBay = d.itemsAtLocation('LOC-07');
   assert.equal(atBay.length, 4, 'the safety bay: four PPE SKUs');
   assert.ok(atBay.every((i) => i.locationId === 'LOC-07'));
-  assert.equal(d.itemsAtLocation('LOC-05').length, 4, 'at the warehouse: three kits + the unit in the shop');
+  assert.equal(
+    d.itemsAtLocation('LOC-05').length,
+    6,
+    'at the warehouse: three kits + the unit in the shop + the two technicians based there',
+  );
   assert.equal(
     d.itemsAtLocation('LOC-05', true).length,
-    18,
+    20,
     'the subtree adds 8 consumables + 6 parts shelved at the bays',
   );
-  assert.equal(d.itemsAtLocation('LOC-04').length, 0, 'an empty zone holds nothing');
+  // The yard itself holds nothing *directly* — its zones do (a node and its
+  // subtree are different questions, which is the pair this check is about).
+  assert.equal(d.itemsAtLocation('LOC-02').length, 0, 'an empty node holds nothing');
+  assert.ok(d.itemsAtLocation('LOC-02', true).length > 0, 'but its zones hold the fleet');
+  // Drivers park up in Yard B, so that zone is no longer empty either.
+  assert.deepEqual(d.itemsAtLocation('LOC-04').map((i) => i.id), ['EMP-003'], 'the driver based there');
 });
 
 check('the removal guard blocks a node that holds stock', () => {
@@ -116,24 +130,35 @@ check('the removal guard blocks a node that holds stock', () => {
 
 check('an edit re-places a *unit* row, and the read-time path follows it', () => {
   const before = d.locationSubtreeItemCount('LOC-08');
-  // A kit is a unit-held row: one place, one count, so its FK *is* its placement
-  // and an edit moves it. (Counted stock is the opposite — see the next check.)
-  d.updateItem('kit', 'KT-003', { locationId: 'LOC-08' });
-  assert.equal(d.getItem('kit', 'KT-003').locationId, 'LOC-08');
+  // A *serialized* unit is unit-held: one place, one count, so its FK *is* its
+  // placement and an edit moves it. (Counted stock — and, since B4, a kit or an
+  // attachment — is the opposite: its place is a level, moved by a movement.)
+  const unit = d.listItems('serialized').find((i) => i.locationId === 'LOC-03');
+  assert.ok(unit, 'a seeded machine staged in the yard');
+  d.updateItem('serialized', unit.id, { locationId: 'LOC-08' });
+  assert.equal(d.getItem('serialized', unit.id).locationId, 'LOC-08');
   assert.equal(d.locationPath('LOC-08'), 'Atlanta Main Campus › Warehouse 1 › Aisle 1 › Bay A1-02');
   assert.equal(d.locationSubtreeItemCount('LOC-08'), before + 1);
-  assert.equal(d.getItem('kit', 'KT-003').updatedBy, 'USR-003', 'still attributed');
+  assert.equal(d.getItem('serialized', unit.id).updatedBy, 'USR-003', 'still attributed');
 });
 
-check('a counted row ignores an edit that would move its stock', () => {
+check('a level-tracked row ignores an edit that would move its stock', () => {
   // Counted stock's quantities are its stock levels' rows, and its `locationId`
   // is their busiest holding (see check7): a patch carrying either is stripped,
-  // so a field edit cannot move stock that only a `transfer` may move.
+  // so a field edit cannot move stock that only a `transfer` may move. Since B4 a
+  // kit and an attachment behave exactly the same way.
   const part = d.getItem('part', 'PRT-002');
   assert.equal(part.locationId, 'LOC-15', 'seeded in Bay A-07');
   d.updateItem('part', 'PRT-002', { locationId: 'LOC-08', qtyOnHand: 99 });
   assert.equal(d.getItem('part', 'PRT-002').locationId, 'LOC-15', 'the place did not move');
   assert.equal(d.getItem('part', 'PRT-002').qtyOnHand, 18, 'and the count did not change');
+
+  const kit = d.getItem('kit', 'KT-003');
+  const kitPlace = kit.locationId;
+  const kitQty = kit.qty;
+  d.updateItem('kit', 'KT-003', { locationId: 'LOC-08', qty: 99 });
+  assert.equal(d.getItem('kit', 'KT-003').locationId, kitPlace, 'a kit place is a level now');
+  assert.equal(d.getItem('kit', 'KT-003').qty, kitQty, 'and its qty is the levels sum');
 });
 
 console.log(`\n${n} checks, ${process.exitCode ? 'FAILURES' : 'all green'}`);

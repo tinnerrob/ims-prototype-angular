@@ -176,12 +176,88 @@
             }
           }
           <div class="divider"></div>
-          <div class="strong mb-2">Condition Checks</div>
-          @for (k of checkKeys; track k) {
-            <div class="form-check form-switch">
-              <input class="form-check-input" type="checkbox" [id]="'e-' + k" [(ngModel)]="editRecord.checks[k]" />
-              <label class="form-check-label" [for]="'e-' + k">{{ checkLabel[k] }}</label>
+          <div class="strong mb-2">
+            Checklist
+            <span class="text-muted2 text-12">— {{ templateFor(r)?.name ?? 'template' }}</span>
+          </div>
+          <!-- The checklist is the template's fields (B7): a reading, an outcome,
+               and a severity when it failed. -->
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Item</th><th>Reading</th><th>Outcome</th><th>Severity</th></tr>
+              </thead>
+              <tbody>
+                @for (row of checklist(r); track row.field.key) {
+                  <tr>
+                    <td class="strong">
+                      {{ row.field.label }}@if (row.field.required) {<span class="text-danger"> *</span>}
+                    </td>
+                    <td>
+                      @if (row.field.options?.length) {
+                        <select class="form-select form-select-sm" [(ngModel)]="row.result.value">
+                          @for (o of row.field.options ?? []; track o) {
+                            <option [ngValue]="o">{{ o }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input class="form-control form-control-sm" [(ngModel)]="row.result.value" />
+                      }
+                    </td>
+                    <td>
+                      <select class="form-select form-select-sm" [(ngModel)]="row.result.outcome">
+                        @for (o of outcomes; track o) {
+                          <option [ngValue]="o">{{ o }}</option>
+                        }
+                      </select>
+                    </td>
+                    <td>
+                      @if (row.result.outcome === 'fail') {
+                        <select class="form-select form-select-sm" [(ngModel)]="row.result.severity">
+                          <option [ngValue]="null">—</option>
+                          @for (s of severities; track s) {
+                            <option [ngValue]="s">{{ s }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <span class="text-muted2">—</span>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          @if (blockedByFailures()) {
+            <div class="field-error">
+              A required item failed — fix it, or leave the record Open.
             </div>
+          }
+          @if (hasFailure()) {
+            <div class="d-flex align-items-center gap-2 mt-2">
+              <button
+                type="button"
+                class="btn btn-ims-quiet btn-sm2"
+                [disabled]="isNew() || !!r.workOrderId"
+                (click)="raiseWorkOrder()"
+              >
+                <i class="bi bi-tools"></i>
+                {{ r.workOrderId ? 'Work order raised' : 'Raise Work Order' }}
+              </button>
+              <span class="text-12 text-muted2">
+                {{ isNew() ? 'save the record first' : r.workOrderId ? r.workOrderId : 'for the failed item' }}
+              </span>
+            </div>
+          }
+
+          <div class="divider"></div>
+          <div class="strong mb-2">Evidence</div>
+          <!-- The photographs and paperwork for this inspection (B8). A new record
+               has no id yet, so evidence waits until it is saved. -->
+          @if (isNew()) {
+            <div class="form-hint">Save the record before attaching evidence.</div>
+          } @else {
+            <ims-evidence scope="inspection" [refId]="r.id" />
           }
         </div>
         <div class="modal-footer">

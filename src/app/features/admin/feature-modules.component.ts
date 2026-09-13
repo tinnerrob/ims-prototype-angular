@@ -1,8 +1,6 @@
 import { Component } from '@angular/core';
 
-import { DataService } from '../../core/data.service';
-import { CatalogType, INDUSTRY_MODULES, ModuleKey, TENANT_PLAN_LABEL, VERTICALS } from '../../core/models';
-import { VerticalMetadata } from '../../core/vertical-metadata';
+import { INDUSTRY_MODULES, ModuleKey, TENANT_PLAN_LABEL } from '../../core/models';
 import { ModulesService } from '../../core/modules.service';
 import { SessionService } from '../../core/session.service';
 
@@ -19,8 +17,15 @@ const CORE_MODULES = [
 
 /**
  * Administration → Feature Modules — port of the prototype's `renderConfig`
- * (js/pages/config.js): the industry-vertical selector plus per-module on/off
- * switches that gate navigation + routes. Rendered as an Admin submenu.
+ * (js/pages/config.js) as it stands now: the per-module on/off switches that gate
+ * navigation + routes, rendered as an Admin submenu.
+ *
+ * The prototype's **Industry / Vertical** selector is gone: the workspace's
+ * business type — and with it the catalog's shape — is chosen on **Business type &
+ * Categories** (`/admin/verticals`), which owns the industry outright
+ * (`tenants.vertical_id`; the compiled registry's key is derived from it). Two
+ * screens setting the same thing is what made that switch redundant, so this page
+ * keeps only the licence flags.
  */
 @Component({
   selector: 'ims-feature-modules',
@@ -31,10 +36,8 @@ const CORE_MODULES = [
 export class FeatureModulesComponent {
   readonly modules = INDUSTRY_MODULES;
   readonly core = CORE_MODULES;
-  readonly verticals = VERTICALS;
 
   constructor(
-    readonly data: DataService,
     readonly mods: ModulesService,
     readonly session: SessionService,
   ) {}
@@ -42,16 +45,6 @@ export class FeatureModulesComponent {
   /** Workspace the licence flags belong to (they are tenant data, not a pref). */
   tenantName(): string {
     return this.session.tenant()?.name ?? '';
-  }
-
-  /** The active tenant's vertical metadata — what the switch above re-shapes. */
-  meta(): VerticalMetadata {
-    return this.data.verticalMeta();
-  }
-
-  /** Where a tab sits in the list (the panel marks the page's opening tab). */
-  tabIndex(type: CatalogType): number {
-    return this.meta().tabs.findIndex((t) => t.key === type);
   }
 
   planLabel(): string {
@@ -70,9 +63,5 @@ export class FeatureModulesComponent {
   /** Re-enable every optional module (prototype "Enable All"). */
   enableAll(): void {
     for (const m of this.modules) this.mods.setEnabled(m.key, true);
-  }
-
-  setVertical(v: string): void {
-    this.data.setVertical(v);
   }
 }

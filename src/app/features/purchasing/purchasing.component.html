@@ -411,7 +411,7 @@
             </div>
 
             <div class="field-group">
-              <label class="form-label" for="rec-location">Put away at *</label>
+              <label class="form-label" for="rec-location">Default put away at *</label>
               <select id="rec-location" class="form-select" [(ngModel)]="receiveLocationId">
                 <option value="">— choose a location —</option>
                 @for (o of data.locationOptions(); track o.id) {
@@ -419,8 +419,9 @@
                 }
               </select>
               <div class="form-hint">
-                Received stock lands here: an existing SKU is re-placed, and a new serialized unit is
-                created in this location. The movement is logged against the same place.
+                Where a landing goes unless its line names another place. Received stock lands as a
+                level: an SKU is topped up where it lands (so one line can be split across bins), and a
+                new serialized unit is created at its place. Each landing logs its own movement.
               </div>
             </div>
 
@@ -433,7 +434,7 @@
                 <thead>
                   <tr>
                     <th>Line</th><th class="num">Ordered</th><th class="num">Received</th>
-                    <th class="num">Outstanding</th><th class="num">Receive now</th>
+                    <th class="num">Outstanding</th><th>Receive now — place &amp; qty</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -448,14 +449,50 @@
                       <td class="num">{{ row.line.qty }}</td>
                       <td class="num text-muted2">{{ data.poLineReceived(row.line.id) }}</td>
                       <td class="num">{{ row.outstanding }}</td>
-                      <td class="num">
-                        <input
-                          class="form-control form-control-sm text-end"
-                          type="number"
-                          min="0"
-                          [max]="row.outstanding"
-                          [(ngModel)]="receiveQty[row.line.id]"
-                        />
+                      <td>
+                        <!-- One landing per place this line goes to: "50 in Bay A-03,
+                             100 in Bay B-01" is two rows here (B6). A blank place
+                             means the receipt's default put-away above. -->
+                        @for (l of landingsOf(row.line.id); track $index) {
+                          <div class="rec-landing">
+                            <select class="form-select form-select-sm" [(ngModel)]="l.locationId">
+                              <option value="">Default place</option>
+                              @for (o of data.locationOptions(); track o.id) {
+                                <option [value]="o.id">{{ o.label }}</option>
+                              }
+                            </select>
+                            <input
+                              class="form-control form-control-sm text-end rec-qty"
+                              type="number"
+                              min="0"
+                              [max]="row.outstanding"
+                              [(ngModel)]="l.qty"
+                            />
+                            @if (landingsOf(row.line.id).length > 1) {
+                              <button
+                                type="button"
+                                class="btn btn-ims-outline btn-sm2"
+                                title="Remove this place"
+                                (click)="removeLanding(row.line.id, $index)"
+                              >
+                                <i class="bi bi-x-lg"></i>
+                              </button>
+                            }
+                          </div>
+                        }
+                        <div class="d-flex justify-content-between align-items-center gap-2 mt-1">
+                          <button
+                            type="button"
+                            class="btn btn-ims-quiet btn-sm2"
+                            title="Split this line across another place"
+                            (click)="addLanding(row.line.id)"
+                          >
+                            <i class="bi bi-plus-lg"></i> Add place
+                          </button>
+                          <span class="text-12" [class.text-danger]="lineOver(row.line.id, row.outstanding)">
+                            {{ lineTotal(row.line.id) }} / {{ row.outstanding }}
+                          </span>
+                        </div>
                       </td>
                     </tr>
                   }

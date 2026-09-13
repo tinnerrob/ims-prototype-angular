@@ -1,0 +1,17 @@
+/* `<ims-dynamic-form>` — the form builder's view half (B2). Deliberately small:
+   the layout classes (`.field-group`, `.divider`, `.form-label`, `.row g-2`) are
+   shared with every other editor and live in `src/styles.scss`. */
+
+:host {
+  display: block;
+}
+
+.req {
+  color: var(--danger);
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}

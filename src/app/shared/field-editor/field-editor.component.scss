@@ -1,0 +1,19 @@
+/* `<ims-field-editor>` (Phase C) — a compact row-per-field grid. */
+.field-editor td {
+  vertical-align: middle;
+}
+.field-editor .fe-idx {
+  width: 2rem;
+  text-align: center;
+}
+
+/* A key that cannot be stored: unnamed, or stated twice in this list. The line
+   under it says which (the host keeps its Save disabled while any row is bad). */
+.fe-bad {
+  border-color: var(--danger);
+}
+.fe-bad-msg {
+  color: var(--danger);
+  font-size: 0.7rem;
+  margin-top: 2px;
+}

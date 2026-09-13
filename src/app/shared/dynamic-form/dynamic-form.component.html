@@ -1,0 +1,137 @@
+@if (hasFields()) {
+  @for (group of groups(); track group.name) {
+    <div class="divider"></div>
+    @if (group.name) {
+      <div class="strong mb-2">{{ group.name }}</div>
+    }
+    <div class="row g-2">
+      @for (f of group.fields; track f.key) {
+        <div class="col-md-6 field-group">
+          @if (f.kind === 'boolean') {
+            <div class="form-check form-switch">
+              <input
+                class="form-check-input"
+                type="checkbox"
+                [id]="'df-' + f.key"
+                [ngModel]="val(f)"
+                (ngModelChange)="set(f, $event)"
+                [disabled]="readOnly"
+              />
+              <label class="form-check-label" [for]="'df-' + f.key">{{ f.label }}</label>
+            </div>
+          } @else {
+            <label class="form-label" [for]="'df-' + f.key">
+              {{ f.label }}@if (f.required) {<span class="req"> *</span>}
+            </label>
+            @switch (f.kind) {
+              @case ('textarea') {
+                <textarea
+                  class="form-control"
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f)"
+                  (ngModelChange)="set(f, $event)"
+                  [readOnly]="readOnly"
+                ></textarea>
+              }
+              @case ('select') {
+                <select
+                  class="form-select"
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f)"
+                  (ngModelChange)="set(f, $event)"
+                  [disabled]="readOnly"
+                >
+                  <option value="">—</option>
+                  @for (o of f.options ?? []; track o) {
+                    <option [value]="o">{{ o }}</option>
+                  }
+                </select>
+              }
+              @case ('multiselect') {
+                <select
+                  class="form-select"
+                  multiple
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f) ?? []"
+                  (ngModelChange)="set(f, $event)"
+                  [disabled]="readOnly"
+                >
+                  @for (o of f.options ?? []; track o) {
+                    <option [value]="o">{{ o }}</option>
+                  }
+                </select>
+              }
+              @case ('date') {
+                <input
+                  class="form-control"
+                  type="date"
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f)"
+                  (ngModelChange)="set(f, $event)"
+                  [readOnly]="readOnly"
+                />
+              }
+              @case ('number') {
+                <input
+                  class="form-control"
+                  type="number"
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f)"
+                  (ngModelChange)="set(f, $event)"
+                  [attr.min]="f.min ?? null"
+                  [attr.max]="f.max ?? null"
+                  [readOnly]="readOnly"
+                />
+              }
+              @case ('integer') {
+                <input
+                  class="form-control"
+                  type="number"
+                  step="1"
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f)"
+                  (ngModelChange)="set(f, $event)"
+                  [attr.min]="f.min ?? null"
+                  [attr.max]="f.max ?? null"
+                  [readOnly]="readOnly"
+                />
+              }
+              @case ('measurement') {
+                <div class="input-group">
+                  <input
+                    class="form-control"
+                    type="number"
+                    [id]="'df-' + f.key"
+                    [ngModel]="val(f)"
+                    (ngModelChange)="set(f, $event)"
+                    [attr.min]="f.min ?? null"
+                    [attr.max]="f.max ?? null"
+                    [readOnly]="readOnly"
+                  />
+                  @if (f.unit) {
+                    <span class="input-group-text">{{ f.unit }}</span>
+                  }
+                </div>
+              }
+              @default {
+                <input
+                  class="form-control"
+                  type="text"
+                  [id]="'df-' + f.key"
+                  [ngModel]="val(f)"
+                  (ngModelChange)="set(f, $event)"
+                  [attr.maxlength]="f.maxLength ?? null"
+                  [readOnly]="readOnly"
+                  [placeholder]="f.help ?? ''"
+                />
+              }
+            }
+          }
+          @if (errorFor(f.key); as msg) {
+            <div class="field-error">{{ msg }}</div>
+          }
+        </div>
+      }
+    </div>
+  }
+}

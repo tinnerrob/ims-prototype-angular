@@ -2,55 +2,6 @@
 
 <div class="card mb-3">
   <div class="card-header">
-    <span class="card-title"><i class="bi bi-sliders2"></i> Industry / Vertical</span>
-  </div>
-  <div class="card-body">
-    <div class="row g-2 align-items-end">
-      <div class="col-md-6 field-group mb-0">
-        <label class="form-label">Active vertical</label>
-        <select class="form-select" [value]="data.vertical" (change)="setVertical($any($event.target).value)">
-          @for (v of verticals; track v.key) {
-            <option [value]="v.key">{{ v.label }}</option>
-          }
-        </select>
-      </div>
-      <div class="col-md-6">
-        <span class="text-muted2 text-12">
-          Selects which catalog types appear on <strong>Assets</strong> — the tab set, their
-          labels and the columns each grid prints all come from the vertical's metadata
-          (<code>core/vertical-metadata.ts</code>), so this switch re-shapes the catalog.
-        </span>
-      </div>
-    </div>
-
-    <!-- What the choice above *means*, read from the registry the Assets page reads:
-         the tabs this vertical exposes, in its order, each with its own "add" wording
-         and the number of columns its grid prints. It is here so an admin can see the
-         consequence of the switch without leaving the page. -->
-    <div class="divider"></div>
-    <div class="strong mb-2">
-      {{ meta().label }} catalog — "{{ meta().noun }}"
-    </div>
-    @for (t of meta().tabs; track t.key; let i = $index) {
-      <div class="list-line">
-        <span class="l">
-          <span class="strong"><i class="bi {{ t.icon }} me-1"></i>{{ t.label }}</span>
-          <div class="text-muted2 small">
-            adds "{{ t.addLabel }}" · starts {{ t.defaults.status }} ×{{ t.defaults.qty }}
-            · {{ t.columns.length }} column(s)
-            @if (i === tabIndex(meta().defaultTab)) {
-              · <span class="strong">the tab the page opens on</span>
-            }
-          </div>
-        </span>
-        <span class="r text-muted2 text-12">{{ t.key }}</span>
-      </div>
-    }
-  </div>
-</div>
-
-<div class="card mb-3">
-  <div class="card-header">
     <span class="card-title"><i class="bi bi-toggles"></i> Feature Modules</span>
     <button class="btn btn-ims-outline btn-sm2" type="button" (click)="enableAll()">
       <i class="bi bi-arrow-counterclockwise"></i> Enable All
@@ -64,6 +15,11 @@
     <p class="text-muted2 small mb-3">
       Licensed to <strong>{{ tenantName() }}</strong> on the {{ planLabel() }} plan — the flags
       belong to the workspace, not to this browser.
+    </p>
+    <p class="text-muted2 small mb-3">
+      The workspace's <strong>business type</strong> — the catalog's tabs, its wording and the
+      fields each category carries — is set on <strong>Business type &amp; Categories</strong>, not
+      here.
     </p>
     <div class="strong mb-2">Core · always on</div>
     <div class="d-flex flex-wrap gap-1 mb-3">

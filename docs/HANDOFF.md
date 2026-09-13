@@ -50,7 +50,7 @@ than editing a count, and a change of place or a physical count logs a
 | Area | Path | Notes |
 |---|---|---|
 | Dashboard / roadmap | `features/dashboard` | landing + port checklist |
-| **Administration** | `features/admin` | submenu shell: Locations · Categories · Feature Modules (the vertical switch + what it exposes) |
+| **Administration** | `features/admin` | submenu shell: Locations · Business type & Categories · Feature Modules (licence flags) |
 | Locations | `features/locations` | ragged hierarchy + location type vocabulary behind a tab strip (Admin submenu); a node's **items**, **units** (`Qty`) and its logged movements are shown, and stock **and** history block removal |
 | Categories | `features/categories` | type tabs (named by the tenant's vertical registry), add/rename/remove (Admin submenu) |
 | Pricing & Policies | `features/pricing` | the pricing rules engine · overhead / service fees · sales-tax schedules · **counterparty rate cards** (negotiated rates per party, read by the order screens and used as the PO editor's cost default) |
@@ -68,8 +68,10 @@ than editing a count, and a change of place or a physical count logs a
 | Fleet Telemetry | `features/telemetry` | live GPS sim + geofence feed |
 
 Routes: `/admin` redirects to `/admin/modules`; the Admin submenu entries are
-`/admin/locations`, `/admin/categories` and `/admin/modules`. The old
-`/categories` and `/locations` deep links redirect into the Admin section, and
+`/admin/locations`, `/admin/verticals` (Business type & Categories) and
+`/admin/modules`. The old `/categories` and `/locations` deep links redirect into
+the Admin section, `/admin/categories` redirects to `/admin/verticals` (the
+prototype's per-type category list is the tenant's categories now), and
 `/admin/location-types` redirects to `/admin/locations` (its types are now the
 second tab there). Core views added by the foundation pass: `/purchasing`
 (Purchasing & Receiving, in the *Movement & Custody* nav group).
@@ -400,12 +402,14 @@ The store models the SaaS boundary the API will implement, so these are load-bea
   the Assets catalog exposes (and in what order), what each is called, what its
   "add" button says, which columns its grid prints and what a new record starts as
   all live in `src/app/core/vertical-metadata.ts` — one entry per `VerticalKey`,
-  read through `DataService.verticalMeta()`. Admin → Feature Modules switches the
-  tenant's vertical and lists what it exposes (tab by tab), so the effect is
-  visible where it is chosen; the Assets page re-shapes itself with no reload (its
-  constructor `effect()` follows the store revision and moves to the vertical's
-  `defaultTab` if the open tab isn't one of its own), and the Categories page takes
-  its tab names from the same registry. Two rules keep it honest: a column may only
+  read through `DataService.verticalMeta()`. The workspace's **business type**
+  (`tenants.vertical_id`, chosen on Admin → Business type & Categories) is what
+  picks the entry: the registry key is derived from that row's slug, so there is one
+  place to set the industry and no "Industry / Vertical" switch on
+  Admin → Feature Modules (that page keeps only the licence flags). The Assets page
+  re-shapes itself with no reload (its constructor `effect()` follows the store
+  revision and moves to the vertical's `defaultTab` if the open tab isn't one of its
+  own). Two rules keep it honest: a column may only
   name a field the model has (check8 fails the build otherwise — it caught a
   warehouse bulk line reading a `qtyOnHand` a bulk row doesn't store), and a tab
   list is *not* a permission (that is the module licence, `Tenant.disabledModules`).

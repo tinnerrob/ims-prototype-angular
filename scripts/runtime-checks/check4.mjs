@@ -171,10 +171,11 @@ check('an empty, unreferenced node still removes (the guard is not a blanket ref
 
 check('both blockers come from the one guard the grid and the button share', () => {
   // LOC-03 is the equipment staging zone: it holds the machines, the bulk stock
-  // and the attachments — plus the units the A5 receipts landed there — *and* it
-  // is where the seeded issues left from (plus BL-118's own issue above).
+  // and the attachments — plus the units the A5 receipts landed there, *plus* the
+  // three field operators and drivers based in it — *and* it is where the seeded
+  // issues left from (plus BL-118's own issue above).
   assert.deepEqual(d.locationRemovalBlockers('LOC-03'), [
-    '29 item(s) stored here',
+    '32 item(s) placed here',
     '9 movement(s) logged here',
   ]);
   assert.equal(d.removeLocation('LOC-03'), false);

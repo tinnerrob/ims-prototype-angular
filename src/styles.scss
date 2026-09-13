@@ -725,30 +725,6 @@
 
 /* ---------- Checkbox list (pick lists) ---------- */
 
-/* ---------- Category chips (settings) ---------- */
-.cat-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: var(--slate-100);
-  border: 1px solid var(--slate-200);
-  border-radius: 20px;
-  padding: 4px 8px 4px 12px;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-.cat-btn {
-  border: none;
-  background: transparent;
-  color: var(--slate-600);
-  padding: 2px 4px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-  line-height: 1;
-}
-.cat-btn:hover { background: var(--slate-200); color: var(--ink); }
-
 /* ---------- Overhead rows (order modal) ---------- */
 
 .oh-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }

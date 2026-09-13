@@ -1,0 +1,289 @@
+<div class="page-head"></div>
+
+<!-- ===== Business type (a workspace is one) ===== -->
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-diagram-3"></i> Your business type</span>
+    <span class="d-flex gap-2">
+      <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove the sample catalog" (click)="startClean()">
+        <i class="bi bi-eraser"></i> Start clean
+      </button>
+      <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openAddVertical()">
+        <i class="bi bi-plus-lg"></i> Add a type
+      </button>
+    </span>
+  </div>
+  <div class="card-body">
+    <p class="text-muted2 small mb-3">
+      A workspace is <strong>one</strong> business type — a warehouse, a lumber yard, a hospital, a
+      fleet. It decides the categories (tabs) the Assets page shows. Click a type to use it; the
+      categories you authored under another type are kept. <strong>×</strong> removes a type with
+      its categories (removing the one you are on moves the workspace onto another).
+    </p>
+    @if (notice) { <div class="form-hint text-danger mb-2">{{ notice }}</div> }
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th></th><th>Business type</th><th>URL</th><th class="num">Categories</th>
+            <th class="num">Items</th><th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (v of verticals(); track v.id) {
+            <tr class="row-open" [class.row-active]="isMine(v)" (click)="chooseVertical(v)">
+              <td class="fe-idx">
+                <i class="bi" [class.bi-check-circle-fill]="isMine(v)" [class.bi-circle]="!isMine(v)"></i>
+              </td>
+              <td class="strong">
+                {{ v.name }}<span class="text-muted2 text-12 ms-2 mono">{{ v.id }}</span>
+              </td>
+              <td class="mono text-muted2">{{ v.slug }}</td>
+              <td class="num">{{ data.categoriesForVertical(v.id).length }}</td>
+              <td class="num">{{ verticalItemCount(v) }}</td>
+              <td class="text-end text-nowrap" (click)="$event.stopPropagation()">
+                @if (isMine(v)) {
+                  <span class="badge-status st-active me-2"><i class="bi bi-circle-fill"></i>Yours</span>
+                }
+                <button
+                  class="btn btn-ims-outline btn-sm2"
+                  type="button"
+                  [title]="'Edit ' + v.name"
+                  (click)="openEditVertical(v)"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button
+                  class="btn btn-ims-outline btn-sm2"
+                  type="button"
+                  [title]="removeTitle(v)"
+                  (click)="removeVertical(v)"
+                >
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Categories of your business type ===== -->
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-tags"></i> {{ myVertical()?.name ?? '—' }} — categories</span>
+    <button class="btn btn-ims-outline btn-sm2" type="button" [disabled]="!myVertical()" (click)="openAddCategory()">
+      <i class="bi bi-plus-lg"></i> Add category
+    </button>
+  </div>
+  <div class="card-body">
+    <p class="text-muted2 small mb-3">
+      Each category is a tab: its own name, how it is stocked, and its own fields. Click a row
+      to edit it; the <strong>stock fields</strong> below are added to every category.
+    </p>
+    @if (categoryNotice) { <div class="form-hint text-danger mb-2">{{ categoryNotice }}</div> }
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="fe-idx"></th><th>Category</th><th>Behaviour</th>
+            <th class="num">Fields</th><th class="num">Items</th><th class="text-end"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of myCategories(); track c.id) {
+            <tr class="row-open" (click)="openEditCategory(c)" [imsTip]="categoryTip(c)">
+              <td class="fe-idx text-muted2">{{ c.sort + 1 }}</td>
+              <td class="strong">
+                <i class="bi {{ c.icon }} me-1"></i>{{ c.name }}
+                @if (!c.active) { <span class="badge-status st-out ms-2"><i class="bi bi-circle-fill"></i>Inactive</span> }
+              </td>
+              <td><span class="badge-status st-on">{{ c.behaviour }}</span></td>
+              <td class="num">{{ c.fields.length }}</td>
+              <td class="num">{{ data.categoryItemCount(c.id) }}</td>
+              <td class="text-end text-nowrap" (click)="$event.stopPropagation()">
+                <button
+                  class="btn btn-ims-outline btn-sm2" type="button"
+                  [title]="'Edit ' + c.name"
+                  (click)="openEditCategory(c)"
+                >
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button
+                  class="btn btn-ims-outline btn-sm2" type="button" title="Move up"
+                  (click)="moveCategory(c, -1)"
+                >
+                  <i class="bi bi-arrow-up"></i>
+                </button>
+                <button
+                  class="btn btn-ims-outline btn-sm2" type="button" title="Move down"
+                  (click)="moveCategory(c, 1)"
+                >
+                  <i class="bi bi-arrow-down"></i>
+                </button>
+                <button
+                  class="btn btn-ims-outline btn-sm2" type="button"
+                  [title]="categoryBlocked(c) ? 'Holds items — cannot be removed' : 'Remove'"
+                  (click)="removeCategory(c)"
+                >
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="text-center text-muted2 py-3">No categories yet — add one.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Stock set ===== -->
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="card-title"><i class="bi bi-stack"></i> Stock fields</span>
+    <button class="btn btn-ims-outline btn-sm2" type="button" (click)="openStock()">
+      <i class="bi bi-pencil"></i> Edit
+    </button>
+  </div>
+  <div class="card-body">
+    <p class="text-muted2 small mb-0">
+      Fields <strong>every</strong> asset carries, whatever its category — a category's editor
+      shows these plus its own. {{ data.stockSchema().fields.length }} field(s).
+    </p>
+  </div>
+</div>
+
+<!-- ===== Category editor ===== -->
+@if (categoryOpen) {
+  <div
+    class="modal show d-block"
+    tabindex="-1"
+    role="dialog"
+    imsModalDismiss
+    [imsDirty]="categoryDirty()"
+    (dismiss)="closeCategory()"
+  >
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-tags"></i>{{ categoryId ? 'Edit category' : 'Add category' }}</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="row g-2">
+            <div class="col-md-4 field-group">
+              <label class="form-label">Name *</label>
+              <input class="form-control" [(ngModel)]="categoryForm.name" placeholder="Pumps" />
+            </div>
+            <div class="col-md-3 field-group">
+              <label class="form-label">Behaviour *</label>
+              <select class="form-select" [(ngModel)]="categoryForm.behaviour">
+                @for (b of behaviours; track b) {
+                  <option [ngValue]="b">{{ behaviourLabel[b] }}</option>
+                }
+              </select>
+            </div>
+            <div class="col-md-3 field-group">
+              <label class="form-label">Icon</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi {{ categoryForm.icon }}"></i></span>
+                <select class="form-select" [(ngModel)]="categoryForm.icon">
+                  @for (i of icons; track i) {
+                    <option [value]="i">{{ i }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+            <div class="col-md-2 field-group">
+              <label class="form-label">Active</label>
+              <div class="form-check form-switch pt-2">
+                <input class="form-check-input" type="checkbox" [(ngModel)]="categoryForm.active" />
+              </div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="strong mb-2">Fields</div>
+          <ims-field-editor [fields]="categoryFields" />
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-ims"
+            [disabled]="!categoryForm.name.trim() || !fieldsValid(categoryFields)"
+            (click)="saveCategory()"
+          >
+            <i class="bi bi-check2"></i> Save
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- ===== Vertical add modal ===== -->
+@if (verticalOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss (dismiss)="verticalOpen = false">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-diagram-3"></i>{{ verticalFormId ? 'Edit' : 'Add a' }} business type</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          @if (!verticalFormId) {
+            <p class="text-muted2 small">
+              For a business that isn't one of the templates. It becomes your type, with no
+              categories yet.
+            </p>
+          } @else {
+            <p class="text-muted2 small">
+              Renaming the type keeps its categories: they hang off the type's row, not its name.
+            </p>
+          }
+          <div class="field-group">
+            <label class="form-label">Name *</label>
+            <input class="form-control" [(ngModel)]="verticalForm.name" (ngModelChange)="syncSlug()" placeholder="Marine" />
+          </div>
+          <div class="field-group">
+            <label class="form-label">URL handle</label>
+            <input class="form-control" [(ngModel)]="verticalForm.slug" placeholder="marine" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!verticalForm.name.trim()" (click)="saveVertical()">
+            <i class="bi bi-check2"></i> {{ verticalFormId ? 'Save' : 'Create' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+
+<!-- ===== Stock-set editor ===== -->
+@if (stockOpen) {
+  <div class="modal show d-block" tabindex="-1" role="dialog" imsModalDismiss [imsDirty]="stockDirty()" (dismiss)="closeStock()">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-stack"></i>Stock fields</h5>
+          <button type="button" class="btn-close" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted2 small">Every asset carries these, whatever its category.</p>
+          <ims-field-editor [fields]="stockFields" />
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ims" [disabled]="!fieldsValid(stockFields)" (click)="saveStock()"><i class="bi bi-check2"></i> Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal-backdrop show d-block"></div>
+}
+

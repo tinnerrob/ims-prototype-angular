@@ -36,6 +36,7 @@ const KIND_CLASS: Record<MovementKind, string> = {
   receive: 'st-active',
   transfer: 'st-on',
   adjust: 'st-reorder',
+  'return-to-vendor': 'st-out',
 };
 
 /**

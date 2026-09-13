@@ -25,13 +25,18 @@ const check = (label, fn) => {
 /* ============ A9: configuration is a tenant's data too ============
  *
  * A8's document closed with a hole it named out loud: the settings tables
- * (`location_types`, `categories`, `tax_schedules`, `overheads`, `pricing`,
- * `yard`) were the only rows a screen writes that `auditedRows()` did not cover,
- * so Admin could add a category and nothing recorded who did. These checks hold
- * the other side of that: every configuration row is stamped, a write through any
- * settings mutator is attributed to the acting user, an edit re-stamps without
- * touching the create stamps, and a *rename* — which moves a settings row's
- * natural key — keeps the row's history instead of reading as a delete + create.
+ * (`location_types`, `tax_schedules`, `overheads`, `pricing`, `yard`) were the
+ * only rows a screen writes that `auditedRows()` did not cover, so Admin could add
+ * a location type and nothing recorded who did. These checks hold the other side
+ * of that: every configuration row is stamped, a write through any settings
+ * mutator is attributed to the acting user, an edit re-stamps without touching the
+ * create stamps, and a *rename* — which moves a settings row's natural key, or
+ * cascades into the rows that print a category's name — keeps the row's history
+ * instead of reading as a delete + create.
+ *
+ * Phase C folded the prototype's per-type category list into the tenant's
+ * `asset_categories`, so the category half of this file now exercises *those* rows
+ * — the same surface, one table.
  */
 
 mem.clear();
@@ -39,12 +44,18 @@ const d = new DataService();
 
 const TENANT = 'TNT-NORTHLINE';
 
+/** The workspace's business type (a workspace is one). */
+const MY_VERTICAL = d.activeVertical().id;
+
+/** A category **name** of a catalog type — the derived label items carry. */
+const catName = (type) => d.categoriesForVertical(MY_VERTICAL).find((c) => c.type === type)?.name ?? '';
+
 /** Every configuration row in the store, labelled for the failure messages. */
 function configRows() {
   const out = [];
   for (const t of d.locationTypeRecords()) out.push([`location type ${t.name}`, t]);
-  for (const [type, rows] of Object.entries(d.categories)) {
-    for (const c of rows) out.push([`category ${type}/${c.name}`, c]);
+  for (const v of d.listVerticals()) {
+    for (const c of d.categoriesForVertical(v.id)) out.push([`category ${c.name}`, c]);
   }
   for (const t of d.listTaxSchedules()) out.push([`tax schedule ${t.code}`, t]);
   for (const o of d.listOverheads()) out.push([`overhead ${o.id}`, o]);
@@ -75,8 +86,14 @@ check('a workspace row is authored by a user the store knows', () => {
 
 check('a new category is attributed to the acting user', () => {
   d.setSessionUser('USR-004');
-  d.addCategory('part', 'Bench Consumables');
-  const rec = d.categoryRecordsFor('part').find((c) => c.name === 'Bench Consumables');
+  d.createCategory(MY_VERTICAL, {
+    name: 'Bench Consumables',
+    icon: 'bi-box',
+    behaviour: 'quantity',
+    active: true,
+    fields: [],
+  });
+  const rec = d.categoriesForVertical(MY_VERTICAL).find((c) => c.name === 'Bench Consumables');
   assert.ok(rec, 'the category was added');
   assert.equal(rec.tenantId, TENANT);
   assert.equal(rec.createdBy, 'USR-004');
@@ -111,20 +128,40 @@ check('a rename keeps the row it renamed, not a new one', () => {
   assert.equal(after.createdAt, born.at, 'a rename is not a re-create');
   assert.equal(after.createdBy, born.by, 'the original author survives the rename');
   assert.equal(after.updatedBy, 'USR-005', 'and the rename has an author of its own');
-  assert.notEqual(after.updatedAt, after.createdAt);
+  // `>=`, not `!=`: a create and a rename inside the same millisecond are
+  // legitimate, and the created-at/created-by checks above already prove the row
+  // was not re-created. The flaky `!=` form failed intermittently in CI.
+  assert.ok(after.updatedAt >= after.createdAt, 'the rename is stamped at or after the row was created');
   d.setSessionUser('USR-003');
 });
 
-check('a renamed category keeps its history too', () => {
-  const born = d.categoryRecordsFor('part').find((c) => c.name === 'Bench Consumables');
+check('a renamed category keeps its history — and carries its rows with it', () => {
+  const born = d.categoriesForVertical(MY_VERTICAL).find((c) => c.name === 'Bench Consumables');
   const at = born.createdAt;
+  // A row filed under it: the name it prints is denormalised, so the rename has to
+  // cascade (the prototype's `renameCategory` did the same for its list).
   d.setSessionUser('USR-004');
-  d.renameCategory('part', 'Bench Consumables', 'Bench Stock');
-  const after = d.categoryRecordsFor('part').find((c) => c.name === 'Bench Stock');
-  assert.ok(after, 'the category is under its new name');
+  const filed = d.createItem('part', {
+    name: 'Filing Probe',
+    category: born.name,
+    categoryId: born.id,
+    status: 'In Stock',
+    qty: 1,
+    rateDaily: 0,
+  });
+  assert.equal(filed.category, 'Bench Consumables');
+
+  d.setSessionUser('USR-005');
+  d.updateCategory(born.id, { name: 'Bench Stock' });
+  const after = d.categoriesForVertical(MY_VERTICAL).find((c) => c.id === born.id);
+  assert.equal(after.name, 'Bench Stock', 'the category is under its new name');
   assert.equal(after.createdAt, at, 'the rename moved the key, not the row');
   assert.equal(after.createdBy, 'USR-004');
-  assert.equal(after.updatedBy, 'USR-004');
+  assert.equal(after.updatedBy, 'USR-005', 'and the rename has an author of its own');
+  const moved = d.allItems().find((i) => i.id === filed.id);
+  assert.equal(moved.category, 'Bench Stock', 'the row it was filed under followed the name');
+  assert.equal(moved.categoryId, born.id, 'and still points at the same category');
+  d.setSessionUser('USR-003');
 });
 
 
@@ -145,7 +182,7 @@ check('a configuration write does not smear its neighbours', () => {
   const yard = { at: d.yard.updatedAt, by: d.yard.updatedBy };
   const overhead = d.listOverheads()[0];
   const untouched = { at: overhead.updatedAt, by: overhead.updatedBy };
-  d.addCategory('part', 'Another One');
+  d.createCategory(MY_VERTICAL, { name: 'Another One', icon: 'bi-box', behaviour: 'quantity', active: true, fields: [] });
   assert.equal(d.yard.updatedAt, yard.at, 'the yard row was not written');
   assert.equal(d.yard.updatedBy, yard.by);
   const after = d.listOverheads()[0];
@@ -159,7 +196,7 @@ check('the whole settings surface is stamped after an unrelated write', () => {
   // listed in `auditedRows()` for this to pass.
   d.createItem('part', {
     name: 'Sweep Probe',
-    category: d.categoriesFor('part')[0],
+    category: catName('part'),
     status: 'In Stock',
     qty: 1,
     rateDaily: 0,
@@ -173,10 +210,15 @@ check('the whole settings surface is stamped after an unrelated write', () => {
 
 check('the user the stamps name is the acting user', () => {
   d.setSessionUser('USR-002');
-  d.addCategory('bulk', 'Session Probe');
-  const rec = d.categoryRecordsFor('bulk').find((c) => c.name === 'Session Probe');
-  assert.equal(rec.createdBy, 'USR-002');
-  assert.equal(d.userName(rec.createdBy), 'Priya Raman');
+  const made = d.createCategory(MY_VERTICAL, {
+    name: 'Session Probe',
+    icon: 'bi-box',
+    behaviour: 'quantity',
+    active: true,
+    fields: [],
+  });
+  assert.equal(made.createdBy, 'USR-002');
+  assert.equal(d.userName(made.createdBy), 'Priya Raman');
   d.setSessionUser('USR-003');
 });
 

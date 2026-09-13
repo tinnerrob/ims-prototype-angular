@@ -35,3 +35,15 @@
 .table-wrap.po-lines select.form-select-sm {
   min-width: 90px;
 }
+
+/* Receiving editor (B6): one landing per place a line goes to — a place
+   select and a quantity, with "Add place" splitting the line further. */
+.rec-landing {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.25rem;
+}
+.rec-landing .rec-qty {
+  max-width: 5.5rem;
+}

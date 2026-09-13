@@ -98,16 +98,18 @@ check('a move with no note says where the stock came from', () => {
 });
 
 check('moving an unplaced row places it, and says so', () => {
-  // A unit-held row that sits nowhere can be placed by re-pointing its FK — its
-  // `locationId` *is* its placement, so there is nothing to transfer from and no
-  // shelf for the ledger to have seen it leave.
-  const unit = d.getItem('attachment', 'ACC-005'); // 2 @ Yard A staging
-  d.updateItem('attachment', 'ACC-005', { locationId: undefined });
+  // A *serialized* unit that sits nowhere can be placed by re-pointing its FK —
+  // its `locationId` *is* its placement, so there is nothing to transfer from and
+  // no shelf for the ledger to have seen it leave. (A level-tracked row cannot be
+  // placed this way: its place is a level, so the patch is stripped — see B4.)
+  const unit = d.listItems('serialized').find((i) => i.locationId && !d.isOut(i.id));
+  assert.ok(unit, 'a placed machine that is not out on rent');
+  d.updateItem('serialized', unit.id, { locationId: undefined });
   assert.deepEqual(d.placements(unit), [], 'it holds nothing anywhere');
-  assert.equal(d.moveStock('attachment', 'ACC-005', 'LOC-03', 'LOC-01', 2), null, 'nowhere to move it from');
-  d.updateItem('attachment', 'ACC-005', { locationId: 'LOC-21' });
+  assert.equal(d.moveStock('serialized', unit.id, 'LOC-03', 'LOC-01', 1), null, 'nowhere to move it from');
+  d.updateItem('serialized', unit.id, { locationId: 'LOC-21' });
   assert.equal(unit.locationId, 'LOC-21', 'the edit places it');
-  assert.equal(d.stockAt(unit, 'LOC-21'), 2, 'and the place holds its count');
+  assert.equal(d.stockAt(unit, 'LOC-21'), 1, 'and the place holds its count');
 });
 
 check('stock found where none was recorded is a count, not a transfer', () => {
@@ -208,7 +210,7 @@ check('what a move or a count refuses, it refuses without writing', () => {
   assert.equal(d.adjustStock('consumable', 'SG-LFT-001', 'LOC-999', 5), null, 'no such place to count');
   assert.equal(d.adjustStock('consumable', 'NOPE-001', at, 5), null, 'an unknown row');
   assert.equal(d.adjustStock('serialized', 'FL-402', at, 3), null, 'a unit is not counted, it is a row');
-  assert.equal(d.adjustStock('kit', 'KT-001', at, 2), null, 'nor is a kit (an owned count)');
+  assert.equal(d.adjustStock('labor', 'EMP-001', at, 2), null, 'nor is a person');
   const moved = d.getItem('part', 'PRT-004'); // 60 @ LOC-03 since the first check
   assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-03', 60), null, 'moving it where it already is');
   assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-999', 60), null, 'no such destination');
@@ -217,7 +219,8 @@ check('what a move or a count refuses, it refuses without writing', () => {
   assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-01', 0), null, 'a zero move');
   assert.equal(d.moveStock('part', 'PRT-004', 'LOC-03', 'LOC-01', 61), null, 'more than the place holds');
   assert.equal(d.moveStock('part', 'PRT-004', 'LOC-18', 'LOC-01', 1), null, 'from a place holding none of it');
-  assert.equal(d.moveStock('kit', 'KT-002', 'LOC-03', 'LOC-01', 2), null, 'half a unit-held row is not a thing');
+  // A kit used to be refused here ("half a unit-held row"); since B4 it is
+  // level-tracked, so a partial move of one is legal — see check15.
   assert.equal(d.moveStock('labor', 'EMP-001', 'LOC-03', 'LOC-01', 1), null, 'a person is not stock');
   assert.equal(d.moveStock('serialized', 'BL-119', 'LOC-03', 'LOC-01', 1), null, 'a unit that is out is not on a shelf');
   assert.equal(d.stockAt(gloves, at), onHand);

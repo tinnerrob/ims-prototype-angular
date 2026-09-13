@@ -12,9 +12,9 @@ interface AdminMenu {
  * Administration — the admin shell page.
  *
  * The submenu moves between the administration sections; each entry is a child
- * route (so `/admin/locations`, `/admin/categories` and `/admin/modules` are
- * real, linkable URLs) rendered into the pane below the menu. Pages that manage
- * two related vocabularies (Locations, Categories) hold their own tab strip.
+ * route (so `/admin/locations` and `/admin/modules` are real, linkable URLs)
+ * rendered into the pane below the menu. Pages that manage two related
+ * vocabularies (Locations, Categories) hold their own tab strip.
  */
 @Component({
   selector: 'ims-admin',
@@ -26,7 +26,7 @@ interface AdminMenu {
 export class AdminComponent {
   readonly menus: AdminMenu[] = [
     { id: 'locations', label: 'Locations', icon: 'bi-buildings' },
-    { id: 'categories', label: 'Categories', icon: 'bi-tags' },
+    { id: 'verticals', label: 'Business type & Categories', icon: 'bi-diagram-3' },
     { id: 'modules', label: 'Feature Modules', icon: 'bi-toggles' },
   ];
 }

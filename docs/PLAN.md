@@ -9,7 +9,9 @@ front end able to produce, display and (where it matters) reason about the fact
 the backend will have to store.
 
 This file is the plan. `HANDOFF.md` is the current state. When they disagree,
-`HANDOFF.md` is right.
+`HANDOFF.md` is right. `PLAN-B.md` is the next phase (forms-as-data, places for
+every counted asset, the receiving desk) and takes over from here once its B1
+starts.
 
 ## Working agreement
 
@@ -138,7 +140,8 @@ is silently refused rather than logged, because stock moves through movements.
 **A7 — vertical metadata.** A vertical used to re-shape the catalog through
 conditionals inside the page: a `VERTICAL_TABS` map, a `COLUMNS` map and a handful
 of label strings in `assets.component.ts`, plus a second copy of those labels on
-the Categories page. It is now a registry — `core/vertical-metadata.ts`, one entry
+the Categories page (both long since retired). It is now a registry —
+`core/vertical-metadata.ts`, one entry
 per `VerticalKey`, read through `DataService.verticalMeta()` — carrying the tab set
 *in its own order*, each tab's label / icon / "add" wording, its grid columns and
 what a new record of that type starts as. Two limits keep it a registry rather
@@ -146,10 +149,12 @@ than a second app: a column may only name a field the model already has (the pag
 *selects* and *orders* facts, never invents them — a harness check fails the build
 if it tries), and nothing in it decides what is *allowed* (the module licence is
 `Tenant.disabledModules`; a tab list is what a catalog *is*). The store reads the
-tenant's vertical on every call, so Admin → Feature Modules re-shapes the Assets
-tab strip, its columns, its wording and its opening tab with no reload and no
-component-level map in step — and that panel now *shows* the consequence, tab by
-tab, instead of just flipping a switch.
+tenant's vertical on every call, so changing the workspace's **business type**
+(Admin → Business type & Categories) re-shapes the Assets tab strip, its columns,
+its wording and its opening tab with no reload and no component-level map in step.
+A7 put a preview panel on Admin → Feature Modules to show that consequence tab by
+tab; C4 retired it along with the switch, because the business type is set in one
+place now (`tenants.vertical_id`) and Feature Modules keeps only the licence flags.
 
 **A8 — data model.** The front end has been the spec all along; this increment
 writes the spec down as tables/columns/FKs/types, so the API is built against a
@@ -312,10 +317,15 @@ carried unremarked since its first commit.
    printed shelf label that is not a hierarchy node, say so: A3's commit is the
    thing to revert, and the alternative is `bin` becoming the label *within* a
    location (a composite key the hierarchy alone can't express).
-4. **Phases B–E are not recorded in this repo.** They were discussed as "beyond
+4. **Phases C–E are not recorded in this repo.** They were discussed as "beyond
    the foundation" (the API seam, persistence/offline, auth, tenant admin), but
    no scope was written down, and this doc will not invent one. State the phase
    titles and they get written up before any work starts.
+   **Phase B now is**, in `docs/PLAN-B.md` — "the workspace defines its own forms,
+   every counted asset has places, and receiving becomes a desk" (B1–B8, with its
+   own acceptance criteria, decisions D1–D5 and verification additions). It keeps
+   the same working agreement as this file; where it describes a behaviour, this
+   doc is the one that is right until `PLAN-B.md` lands.
 
 ## Verification recipe
 

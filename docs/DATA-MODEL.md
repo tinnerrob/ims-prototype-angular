@@ -23,10 +23,9 @@ propose the field first.
   camelCase of the same name (`by_user_id` ↔ `byUserId`). check9 applies exactly
   that mapping, so a column that is *not* the camelCase of a field has to declare
   itself in its table's heading: this document has one rename
-  (`stock_levels.item_id` for `StockLevel.refId`) and two declared structural
-  columns — a child table's parent key (`order_lines.order_id`), which the API
-  needs and the nested type cannot carry, and a key the store keeps as a map
-  (`categories.type`).
+  (`stock_levels.item_id` for `StockLevel.refId`) and one declared structural
+  column — a child table's parent key (`order_lines.order_id`), which the API
+  needs and the nested type cannot carry.
 - **One row per thing, one table per thing.** Where the front end keeps a map or
   an array on a row, this doc names the table it will become (`items` is keyed by
   type in the store, one table here; `Tenant.disabledModules` becomes
@@ -62,7 +61,7 @@ tenants(
   name              text          NOT NULL,
   slug              text          NOT NULL,
   plan              tenant_plan   NOT NULL,
-  vertical          vertical_key  NOT NULL,
+  vertical_id       text          NULL REFERENCES verticals(id), -- Phase C: the business type this workspace is
   disabled_modules  module_key[]  NOT NULL DEFAULT '{}',
   created_at        timestamptz   NOT NULL
 )
@@ -71,12 +70,14 @@ tenants(
 **Keys/rules.** `slug` is the workspace's URL-safe handle — unique across the
 platform (`UNIQUE (slug)`), unlike every other key in this document, which is
 unique within a tenant. `plan` is commercial (`starter` / `professional` /
-`enterprise`); `vertical` is what the *catalog looks like* — the vertical
-metadata registry in `core/vertical-metadata.ts` is keyed by it, and it is read
-from this row on every call (so switching it re-shapes the Assets page with no
-reload). `disabled_modules` is the licence: absent = enabled, which is why the
-column is the *disabled* list rather than the enabled one (a new module shipped
-later is on for everyone unless a tenant says otherwise).
+`enterprise`). `vertical_id` is the **only** record of what industry the workspace
+is: the catalog's tabs, labels, columns and statuses all read through that row
+(`activeVertical()`), and the compiled registry's key (`vertical_key`, which the
+grid columns and statuses still come from until C6) is **derived** from its `slug`
+— there is no `tenants.vertical` column to keep in step, and so no second screen
+that can set the industry. `disabled_modules` is the licence: absent = enabled,
+which is why the column is the *disabled* list rather than the enabled one (a new
+module shipped later is on for everyone unless a tenant says otherwise).
 
 ### `tenant_modules` — licence flags (from `Tenant.disabledModules`)
 
@@ -131,11 +132,11 @@ honest notes before them:
 
 - **They are audited like anything else (A9).** These were the last rows written
   without stamps — `auditedRows()` covered `locations` and nothing else in this
-  section — so who added a category, who retired a location type or who changed a
-  tax rate was simply not recorded. A settings row is a person's write, so it
+  section — so who added a location type, who renamed a tax code or who changed an
+  overhead was simply not recorded. A settings row is a person's write, so it
   carries the same `tenant_id` + audit columns as every other table, and a
-  *rename* (a category, a location type, a tax code) keeps the row's history: the
-  natural key moves, the row does not.
+  *rename* (a location type, a tax code) keeps the row's history: the natural key
+  moves, the row does not.
 - **A settings row is unique per tenant**, so their keys are composite with
   `tenant_id` rather than a surrogate id (which is why `pricing` and `yard` show
   `tenant_id` as their own primary key).
@@ -161,10 +162,17 @@ the app (`isLocationAncestor`), so the API must too: a trigger or a recursive
 `WITH` check, because a cycle is unqueryable rather than merely wrong.
 
 Removal is refused while anything points at the row — `locationRemovalBlockers()`
-is the shape of the rule: stock *stored* here, or any `movements.location_id`
-mentioning it (history is append-only, so a place the ledger names stays; close a
-yard by deactivating it instead). On removal the app re-parents the node's
-children to its own parent, which is the one action that keeps every FK valid.
+is the shape of the rule: an **item placed** here (`items.location_id`, which
+includes a person's home base — the FK points at the row, so the row stays), or any
+`movements.location_id` mentioning it (history is append-only, so a place the
+ledger names stays; close a yard by deactivating it instead). On removal the app
+re-parents the node's children to its own parent, which is the one action that
+keeps every FK valid.
+
+"Placed here" is a **row** count, not a quantity: a person based at a node counts as
+an item there (`itemsAtLocation`, the removal guard) but adds no units
+(`locationStockQty` skips labour, because a person is not stock and holds no stock
+quantity).
 
 `type` names a row in `location_types` by value, not by id: renaming a type
 rewrites the column on every location that uses it (`renameLocationType`), and a
@@ -184,26 +192,6 @@ location_types(
 
 The list a workspace may choose from (Site, Yard, Zone, Warehouse, Dock, Rack,
 Bin). Inactive types stay in Admin and drop out of the pickers.
-
-### `categories` — `CategoryOption` (`type` as the key)
-
-```sql
-categories(
-  type    catalog_type  NOT NULL,
-  name    text          NOT NULL,
-  active  boolean       NOT NULL,
-  PRIMARY KEY (tenant_id, type, name)
-)
-```
-
-**Keys/rules.** Categories are per catalog type — the store keeps them as
-`Record<CatalogType, CategoryOption[]>`, so `type` is the map's key and the
-table's first key column. Renaming is a cascading write: every `items.category`
-with the old name is rewritten, in that type only (`renameCategory`), which is
-why `items.category` is a `text` name rather than an FK — a schema may prefer an
-FK into this table, and if it does, it must carry the rename with a trigger so
-the two cannot disagree. A category is never deleted while items use it. Inactive
-categories stay listed and drop out of the editor's picker.
 
 ### `tax_schedules` — `TaxSchedule`
 
@@ -283,6 +271,156 @@ The operating yard, used as the geofence centre for telemetry breaches. One row
 per tenant because there is one home yard; a second site is a `locations` row
 with its own address, not a second yard.
 
+### `form_schemas` — `FormSchema`
+
+```sql
+form_schemas(
+  id           text          PRIMARY KEY,
+  name         text          NOT NULL,
+  scope        form_scope    NOT NULL,
+  type         catalog_type  NULL,
+  seeded_from  vertical_key  NULL,
+  active       boolean       NOT NULL,
+  version      integer       NOT NULL,
+  fields       jsonb         NOT NULL
+)
+```
+
+A tenant's definition of the extra fields a record type captures — the form
+builder's schema half (`docs/PLAN-B.md`, B2). `fields` is a `jsonb` array of
+`FormField` objects (a `key`, a `label`, a `FormFieldKind`, and the optional
+`options` / `unit` / `min` / `max` / `required` / `showIf`), read whole by one
+editor and therefore kept as a small structured value; a designer who wants the
+fields as rows widens it to (`schema_id`, `field_key`, `kind`, …) with the same
+meaning.
+
+**Keys/rules.** `scope` says what the schema is for (`item`, `inspection`,
+`receipt-line`, `stock-level`) and `type` narrows an item schema to one catalog
+type (`NULL` / `'*'` = any). `seeded_from` records the vertical a default was
+copied from — provenance, never a runtime gate. A row is **tenant data**, so it
+carries the audit columns and is written like any other configuration row.
+
+The **values** a schema captures are not here: they live in the record's own
+`attributes` jsonb (`items.attributes`), validated against the schema in force.
+The rule that keeps this from becoming a schemaless database: **a fact that is
+filtered, sorted, joined, summed or read by a guard is a real column, never an
+`attributes` key.** `FormsService.coerce()` drops a key no schema declares, and a
+key that becomes a predicate is promoted to a column (see `docs/PLAN-B.md`, §1
+and D1).
+
+### `receiving_settings` — `ReceivingSettings` (one row per tenant)
+
+```sql
+receiving_settings(
+  tenant_id                     uuid           NOT NULL REFERENCES tenants(id) PRIMARY KEY,
+  over_receipt_tolerance_pct    numeric(6,2)   NOT NULL,
+  require_po_reference          boolean        NOT NULL,
+  quarantine_location_id        text           NULL REFERENCES locations(id),
+  default_put_away_location_id  text           NULL REFERENCES locations(id),
+  require_inspection            boolean        NOT NULL
+)
+```
+
+The receiving desk's rules (B6) — tenant configuration like `pricing`: how far over
+an ordered line a receipt may go (`over_receipt_tolerance_pct`, `0` = exact),
+whether a purchase order must name a supplier reference before it can be received,
+where a `damaged` landing is put away (`quarantine_location_id`; absent means the
+receipt's own place), the receiving editor's opening put-away
+(`default_put_away_location_id`), and whether a landed serialized unit needs an
+`Open` inspection before put-away (`require_inspection`, enforced with B7's
+templates). What the desk *produces* is a column on the receipt and its lines,
+never here.
+
+### `verticals` — `Vertical`
+
+```sql
+verticals(
+  id         text    PRIMARY KEY,
+  name       text    NOT NULL,
+  slug       text    NOT NULL,
+  active     boolean NOT NULL,
+  is_default boolean NOT NULL
+)
+```
+
+A tenant-authored **industry grouping** (Phase C). A vertical *groups categories*
+and fixes their order — the "tabs" the Assets page shows are its categories. Seeded
+from the compiled registry (`core/vertical-metadata.ts`, five entries) so a new
+workspace works out of the box, then owned: the registry is **not read at runtime**
+once C3 lands. `slug` is the URL-safe handle the tenant's choice maps through.
+
+**Rules.** The table is a *catalog of business types* a workspace can be; a tenant
+**is one of them** (`tenants.vertical_id` — a warehouse, a lumber yard, a hospital, a
+fleet), and switching is a change of `vertical_id`, not a second vertical. So a
+vertical **cannot be removed while it is the last one** (`verticalRemovalBlockers`
+says `the only business type left` — a workspace has to be *something*) nor while an
+item still names one of its categories. Removing the type the tenant is **on** *is*
+allowed: the store clears `vertical_id` with the row, so the workspace lands on
+`is_default` rather than pointing at a type that is gone. `is_default` marks that
+fallback.
+
+### `asset_categories` — `Category`
+
+```sql
+asset_categories(
+  id          text             PRIMARY KEY,
+  vertical_id text             NOT NULL REFERENCES verticals(id),
+  name        text             NOT NULL,
+  icon        text             NOT NULL,
+  behaviour   asset_behaviour  NOT NULL,
+  type        catalog_type     NOT NULL,
+  active      boolean          NOT NULL,
+  sort        integer          NOT NULL,
+  fields      jsonb            NOT NULL
+)
+```
+
+A tenant-authored **category**: a vertical's tab, what it holds and how it is
+stocked. `name` *is* the tab's label; `sort` is its position in the strip.
+`behaviour` is the **user-facing** choice — `serialized` (one unique unit per row),
+`quantity` (many of the same asset) or `labor` (a person) — and `type` is the
+**spine** type behind it. Both are stored on purpose: the seven `CatalogType`s carry
+nuances a two-way choice cannot (a bulk row's owned/available split, a kit's levels,
+a part's reorder status), so a seeded category keeps its exact `type` and a new one
+takes the behaviour's default (`typeForBehaviour`). A create supplies a
+`CategoryDraft` — everything but `type` — so the two can never disagree. `fields` is
+the category's own field set (a `jsonb` array of `FormField`); the fields **every**
+category shares live in `stock_schema`, and `FormsService.fieldsFor()` unions the
+two — one field engine, not two.
+
+The table keeps the `asset_categories` name (a `Category` is a *catalog* row, not a
+settings one). `items.category` still carries the category's **name**: a
+denormalised display string, rewritten whenever the row is renamed
+(`updateCategory`), so a report or a CSV never has to join to print one.
+
+**A key identifies a field within its list.** Two categories may both declare
+`rate` — they are different lists — but one list may not declare it twice:
+`attributes` has room for one value per key, so a schema with two definitions of one
+key contradicts itself. `duplicateFieldKeys()` is that rule as one function (the
+authoring editor marks the row and holds the save), and every field-list write goes
+through `uniqueFields()` — first definition wins — so no path can leave a list that
+names one key twice. A category field that repeats a *stock* key is not a duplicate:
+it is an **override** (the more specific wins), which is why the merged schema
+`fieldsFor()` builds still holds exactly one entry per key.
+
+### `stock_schema` — `StockSchema` (one row per tenant)
+
+```sql
+stock_schema(
+  tenant_id uuid  NOT NULL REFERENCES tenants(id) PRIMARY KEY,
+  fields    jsonb NOT NULL
+)
+```
+
+The fields **every asset carries, whatever its category** (Phase C) — the "stock
+set". One row per tenant, like `pricing`; an asset's editable fields are
+`stock_schema.fields ∪ category.fields`. The load-bearing columns the ledger and
+the pricing engine read (the quantities, `location_id`, `status`, the prices) stay
+**columns** — the stock set is the tenant-editable common fields, by the Phase B
+rule "a fact the business asks questions of is a column". The key rule holds
+*within* the list here too (`duplicateFieldKeys` / `uniqueFields`, see
+`asset_categories`): a key names one field, in this list as in a category's.
+
 
 ## The catalog
 
@@ -331,6 +469,9 @@ items(
   hourly_cost      numeric(14,2) NULL,
   hourly_billable  numeric(14,2) NULL,
   location_id      text          NULL REFERENCES locations(id), -- derived for counted stock: the busiest place
+  attributes       jsonb         NULL,
+  hold             boolean       NULL,
+  category_id      text          NULL REFERENCES asset_categories(id), -- Phase C: the catalog join
   active           boolean       NULL
 )
 ```
@@ -342,14 +483,15 @@ items(
   attachment). The prefix is an aid, not a constraint: a `CHECK` on it would
   freeze a list the vertical registry is allowed to grow.
 - `qty` is **the count of the thing**, and its meaning is per type: `1` for a
-  serialized unit or an employee, the owned count for a kit or an attachment, and
-  for counted stock **the sum of `stock_levels`** (derived — see below). Nothing
-  writes it by hand for a counted row; `DataService.updateItem()` strips it from
-  a patch, and the API must ignore or reject it too.
-- `location_id` is where the row *is*: the whole placement for a unit, kit or
-  attachment; and for counted stock the **home** place (the level holding the
-  most), written by the same call that sums the levels. Null means labour (no
-  place) or not yet placed — never a made-up default.
+  serialized unit or an employee, and for a **level-tracked row** (counted stock,
+  and since B4 a kit or attachment) **the sum of `stock_levels`** (derived — see
+  below). Nothing writes it by hand for such a row; `DataService.updateItem()`
+  strips it from a patch, and the API must ignore or reject it too.
+- `location_id` is where the row *is*: the whole placement for a serialized unit;
+  and for a level-tracked row (counted stock, a kit, an attachment) the **home**
+  place (the level holding the most), written by the same call that sums the
+  levels. Null means not yet placed — never a made-up default. A **person**
+  (`labor`) carries one too, as their home base.
 - `active` and `notes` are optional in the model (fixtures and older rows omit
   them), so the columns are nullable here; the API can tighten either to
   `NOT NULL` with a default once the data is migrated. Everywhere the model marks
@@ -369,8 +511,8 @@ feature reads only the ones it needs.
 | `consumable` | stock that is used up | `qty_on_hand`, `reorder_point`, `cost_price`, `retail_price`, `location_id` |
 | `part` | stock / spare parts | `qty_on_hand`, `reorder_point`, `cost_price`, `retail_price`, `location_id` |
 | `labor` | a person | `role`, `certs`, `hourly_cost`, `hourly_billable` |
-| `kit` | an owned set, in one place | `qty`, `cost_price`, `retail_price`, `location_id` |
-| `attachment` | an owned attachment, in one place | `qty`, `cost_price`, `retail_price`, `location_id` |
+| `kit` | an owned set, held in levels (B4) | `qty` (the sum), `cost_price`, `retail_price`, `location_id` (the home) |
+| `attachment` | an owned attachment, held in levels (B4) | `qty` (the sum), `cost_price`, `retail_price`, `location_id` (the home) |
 
 **Statuses offered per type** (`ITEM_STATUSES`; check9 compares this table with
 the model):
@@ -401,15 +543,19 @@ stock_levels(
   location_id  text          NOT NULL REFERENCES locations(id),
   type         catalog_type  NOT NULL,
   qty          numeric(14,3) NOT NULL CHECK (qty > 0),
+  attributes   jsonb         NULL,
   PRIMARY KEY (item_id, location_id)
 )
 ```
 
-**This is the truth for counted stock** (`bulk`, `consumable`, `part`) — one row
-per (item, place) pair, holding the quantity there. `items.qty_on_hand` (and a
-bulk row's `qty_available` / `total_owned`) is this table's **sum**; the row's
-`location_id` is the place holding the most. Both are recomputed by the write
-that moves a level (`syncStockTotals()`), so a shelf and a total cannot drift.
+**This is the truth for every level-tracked row** — counted stock (`bulk`,
+`consumable`, `part`) and, since B4, **kits and attachments** (anything with a
+quantity above one that can sit in more than one place) — one row per (item,
+place) pair, holding the quantity there. `items.qty_on_hand` (and a bulk row's
+`qty_available` / `total_owned`; a kit's or attachment's `qty`) is this table's
+**sum**, and the row's `location_id` is the place holding the most. Both are
+recomputed by the write that moves a level (`syncStockTotals()`), so a shelf and a
+total cannot drift.
 
 Two rules make it the truth rather than a second copy:
 
@@ -424,12 +570,87 @@ Two rules make it the truth rather than a second copy:
    reason, and check9 asserts that this document marks the same five columns
    derived.
 
-Only counted stock lives here. A serialized unit, a kit or an attachment is a
-*thing* in one place, so `items.location_id` is its placement and it needs no
-rows; labour has no place at all.
+Only **level-tracked** rows live here. A serialized unit is a *thing* in one
+place, so `items.location_id` is its placement and it needs no rows; a person's
+place is that same single FK (a home base), because a person is not a quantity.
+(B4 moved kits and attachments onto this table: a row with more than
+one on hand spreads across places like any quantity, while a single-unit row
+simply has one level.)
 
 **Indexes.** `(location_id)` — "what is in this bin / this aisle's subtree?"
 walks places, not items.
+
+`attributes` holds the per-place facts a stock-level `FormSchema` captures (B5) — a
+`lot`, an `expiry`, a `hold` — the same `jsonb`-payload idea as `items.attributes`.
+A level that carries attributes may only be moved **whole** (half a lot is not a
+fact the model can state; `moveStock()` refuses a partial move of an attributed
+level), and a key that becomes a query is promoted to a column.
+
+### `count_sessions` — `CountSession`
+
+```sql
+count_sessions(
+  id          text                 PRIMARY KEY,
+  location_id text                 NOT NULL REFERENCES locations(id),
+  subtree     boolean              NOT NULL,
+  status      count_session_status NOT NULL,
+  opened_at   timestamptz          NOT NULL,
+  posted_at   timestamptz          NULL
+)
+```
+
+A **cycle count as a document** (B5): one place's levels frozen for review, then
+posted as one `adjust` movement per difference — the batch the A6/A8 notes called
+*not modelled yet*. `subtree` counts a node's whole subtree (a zone) or just the
+node (a bin). A posted sheet is not removable and cannot be posted twice; a draft
+one can be discarded. Nothing here moves stock — `postCountSession()` calls the
+same `adjustStock()` a one-row count does, so a sheet is exactly the sum of its
+rows' movements.
+
+### `count_lines` — `CountLine` (`session_id` is the parent key)
+
+```sql
+count_lines(
+  id          text          PRIMARY KEY,
+  session_id  text          NOT NULL REFERENCES count_sessions(id) ON DELETE CASCADE,
+  item_type   catalog_type  NOT NULL,
+  item_id     text          NOT NULL REFERENCES items(id),
+  location_id text          NOT NULL REFERENCES locations(id),
+  expected    numeric(14,3) NOT NULL,
+  counted     numeric(14,3) NULL
+)
+```
+
+One row per level the sheet froze. `expected` is what the shelf held when the sheet
+opened, `counted` what the counter found (it defaults to `expected`, so a post
+writes nothing for a row nobody touched).
+
+### `documents` — `Document`
+
+```sql
+documents(
+  id       text           PRIMARY KEY,
+  scope    document_scope NOT NULL,
+  ref_id   text           NOT NULL,
+  kind     document_kind  NOT NULL,
+  url      text           NULL,
+  mime     text           NULL,
+  size     integer        NULL,
+  caption  text           NULL
+)
+```
+
+Evidence attached to a record (B8) — a photo, a packing slip, a certificate, a
+signature. `scope` + `ref_id` is the record it belongs to (`items.id`,
+`inspections.id`, `receipts.id`). The port has **no file store**, so `url` is where
+the file will live and a row without one is a *placeholder* the UI still shows: the
+scoping, the rows and the counts are real, and swapping in the API's blob store
+changes only what `url` holds. A record's photo count is **derived** from these
+rows (`photoCount()`), never a stored column — which is why `inspections` no longer
+carries a `photos` integer. `ref_id` is deliberately **not** a single FK: it points
+into whichever table `scope` names, the one polymorphic reference this schema has;
+a designer who dislikes it splits the table into `item_documents` /
+`inspection_documents` / `receipt_documents`, one FK each, same meaning.
 
 ### `movements` — `Movement`
 
@@ -700,7 +921,8 @@ purchase_order_lines(
   description  text          NOT NULL,
   qty          numeric(14,3) NOT NULL CHECK (qty > 0),
   unit_cost    numeric(14,2) NOT NULL,
-  rate_daily   numeric(14,2) NULL
+  rate_daily   numeric(14,2) NULL,
+  short_closed boolean       NULL
 )
 ```
 
@@ -726,8 +948,9 @@ receipts(
 
 **Keys/rules.** The document that makes stock exist. `supplier_id` is copied from
 the order as the receipt's own fact (paperwork is what it is, even if a PO is
-later corrected), and `location_id` is where the stock was put away — every
-landed line is placed there, and one movement per landed row records it. Nothing
+later corrected). `location_id` is the receipt's **header** put-away — the default
+a landing falls back to; each landed quantity's *actual* place is on its own line
+(`receipt_lines.location_id`), so one PO line can be split across bins. Nothing
 in the app edits or deletes a receipt.
 
 ### `receipt_lines` — `ReceiptLine` (`receipt_id` is the parent key)
@@ -740,15 +963,23 @@ receipt_lines(
   type        catalog_type  NOT NULL,
   ref_id      text          NOT NULL REFERENCES items(id),
   qty         numeric(14,3) NOT NULL CHECK (qty > 0),
-  unit_cost   numeric(14,2) NOT NULL
+  unit_cost   numeric(14,2) NOT NULL,
+  location_id text          NOT NULL REFERENCES locations(id),
+  condition   receiving_condition NULL,
+  damaged_qty numeric(14,3) NULL,
+  reason_code text          NULL,
+  attributes  jsonb         NULL
 )
 ```
 
 **Keys/rules.** `ref_id` is always a real row — the restocked SKU *or* the unit
 this line created — so a receipt reads back into `itemsAtLocation()` and the
-buying side joins the item ↔ location spine without a special case. A line may be
-received in instalments: two receipts against the same `po_line_id` are summed,
-and the second cannot exceed the outstanding quantity (`poLineOutstanding()`).
+buying side joins the item ↔ location spine without a special case. `location_id`
+is where **this landing** went: one `receipt_line` per place a quantity landed, so
+a single PO line split across two bins is two lines and two `receive` movements
+(B6 — see `docs/PLAN-B.md`). A line may also be received in instalments: two
+receipts against the same `po_line_id` are summed, and the second cannot exceed
+the outstanding quantity (`poLineOutstanding()`).
 `unit_cost` is the cost at the moment of receipt: a counted row's `cost_price`
 becomes a moving average of what is held at the new price
 (`movingCost(onHand, cost, qty, unit_cost)`), so a purchase never rewrites the
@@ -767,28 +998,40 @@ screens, not the tables — a licence changing does not delete history).
 
 ```sql
 inspections(
-  id         text                  PRIMARY KEY,
-  item_id    text                  NOT NULL REFERENCES items(id),
-  order_id   text                  NULL REFERENCES orders(order_id),
-  direction  inspection_direction  NOT NULL,
-  date       date                  NOT NULL,
-  meter_out  numeric(12,1)         NULL,
-  meter_in   numeric(12,1)         NULL,
-  fuel_out   numeric(14,3)         NULL,
-  fuel_in    numeric(14,3)         NULL,
-  checks     jsonb                 NOT NULL,
-  photos     integer               NULL,
-  status     text                  NOT NULL,
-  notes      text                  NULL
+  id             text                  PRIMARY KEY,
+  item_id        text                  NOT NULL REFERENCES items(id),
+  order_id       text                  NULL REFERENCES orders(order_id),
+  direction      inspection_direction  NOT NULL,
+  date           date                  NOT NULL,
+  meter_out      numeric(12,1)         NULL,
+  meter_in       numeric(12,1)         NULL,
+  fuel_out       numeric(14,3)         NULL,
+  fuel_in        numeric(14,3)         NULL,
+  template_id    text                  NOT NULL REFERENCES form_schemas(id),
+  results        jsonb                 NOT NULL,
+  status         text                  NOT NULL,
+  receipt_id     text                  NULL REFERENCES receipts(id),
+  movement_id    text                  NULL REFERENCES movements(id),
+  work_order_id  text                  NULL REFERENCES work_orders(id),
+  signed_by      text                  NULL REFERENCES users(id),
+  signature_at   timestamptz           NULL,
+  notes          text                  NULL
 )
 ```
 
-A yard in/out condition check on a serialized unit. `checks` is the five named
-booleans (`InspectionCheckKey`) as a small fixed map — `jsonb` because it is read
-whole by one form; a stricter schema widens it to
-(`inspection_id`, `check_key`, `passed`). `status` is `Open` / `Closed` (an
-inline union in the model, not a named enum). One open inspection per unit would
-be a natural partial unique index; the app does not enforce it today.
+A yard in/out condition check on a serialized unit, **template-driven since B7**:
+the checklist is the fields of the `inspection`-scope `FormSchema` it names
+(`template_id`), and `results` is one `InspectionResult` per field `key` — the value
+captured, an `InspectionOutcome` (`pass` / `fail` / `na`) and, for a failure, an
+`InspectionSeverity` and a note. `jsonb` because the template is tenant data and
+one editor reads the map whole; a schema that prefers rows widens it to
+(`inspection_id`, `field_key`, `value`, `outcome`, `severity`). The meter and fuel
+readings stay **columns** — they are what the overage maths reads. `status` is
+`Open` / `Closed` (an inline union in the model, not a named enum). `receipt_id` /
+`movement_id` tie the check to the delivery it inspected, `work_order_id` is the job
+a failure raised (`raiseWorkOrderForInspection()`), and `signed_by` / `signature_at`
+are the sign-off. One open inspection per unit would be a natural partial unique
+index; the app does not enforce it today.
 
 ### `work_orders` — `WorkOrder`
 
@@ -962,7 +1205,7 @@ two copies drift. Each has a single reader in the store:
 
 | derived value | from | reader |
 |---|---|---|
-| `items.qty_on_hand`, `qty_available`, `total_owned`, `qty`, and a counted row's `location_id` | `stock_levels` (the sum, and the busiest place) | `syncStockTotals()`; `stockTotal()`, `stockAt()`, `placements()` |
+| `items.qty_on_hand`, `qty_available`, `total_owned`, `qty`, and a level-tracked row's `location_id` | `stock_levels` (the sum, and the busiest place) | `syncStockTotals()`; `stockTotal()`, `stockAt()`, `placements()` |
 | a PO line's received quantity and outstanding balance | `receipt_lines` summed by `po_line_id` | `poLineReceived()`, `poLineOutstanding()`, `receivableLines()` |
 | a PO's progress (`none`/`partial`/`received`) and display status | the receipts against it, and its own lifecycle status | `poProgress()`, `poStatusLabel()` |
 | whether a unit is out, where to, since when | the latest `movements` row for that unit | `isOut()`, `outInfo()`, `custodyItems()` |
@@ -1011,14 +1254,17 @@ end will not be the only writer.
 | a location type in use cannot be deleted | `removeLocationType()` returns false | `ON DELETE RESTRICT` |
 | a party with rows naming it cannot be deleted | `partyRemovalBlockers()` (orders, POs, receipts, sub-rentals, rate cards) | `ON DELETE RESTRICT` |
 | an item's negotiated prices go with it | a card line for a removed item never matches | `ON DELETE CASCADE` on `price_card_lines` |
-| a category in use cannot be deleted | `removeCategory()` refuses | `ON DELETE RESTRICT` |
+| a category in use cannot be deleted | `removeAssetCategory()` refuses | `ON DELETE RESTRICT` |
+| a business type with rows cannot be deleted | `verticalRemovalBlockers()` reports `N item(s)` | `ON DELETE RESTRICT` on `items.category_id` |
+| the last business type cannot be deleted | `verticalRemovalBlockers()` reports `the only business type left` | service validation (a workspace keeps ≥ 1) |
+| the type the workspace is on *can* be deleted — it just moves | `removeVertical()` clears `tenants.vertical_id` | service validation (never a dangling FK) |
 | a deleted item takes its shelves with it | `removeItem()` drops its levels | `ON DELETE CASCADE` on `stock_levels` |
 | a movement is appended, never rewritten | no edit path exists | no `UPDATE`/`DELETE` grant |
 | a location hierarchy has no cycles | `isLocationAncestor()` guard | trigger or recursive check |
 
 The store's own schema bump is the last rule worth copying: the persisted
 snapshot carries `_v`, and a version the client does not know is discarded and
-reseeded rather than half-read (`DataService.VERSION`, currently `11`). A server
+reseeded rather than half-read (`DataService.VERSION`, currently `14`). A server
 does that job with migrations, and the client's banner — "your saved data was
 replaced" — is the honest version of a silent upgrade.
 
@@ -1039,7 +1285,7 @@ item_status AS ENUM ('Available', 'On Rent', 'In Use', 'In Shop', 'Staged', 'Act
 -- `OrderStatus`
 order_status AS ENUM ('draft', 'active', 'closed')
 -- `MovementKind`
-movement_kind AS ENUM ('issue', 'return', 'receive', 'transfer', 'adjust')
+movement_kind AS ENUM ('issue', 'return', 'receive', 'transfer', 'adjust', 'return-to-vendor')
 -- `PurchaseOrderStatus`
 purchase_order_status AS ENUM ('draft', 'ordered', 'cancelled')
 -- `PurchaseProgress`
@@ -1048,8 +1294,16 @@ purchase_progress AS ENUM ('none', 'partial', 'received')
 risk_premium AS ENUM ('standard', 'coastal', 'hazmat')
 -- `InspectionDirection`
 inspection_direction AS ENUM ('Check-Out', 'Check-In')
--- `InspectionCheckKey`
-inspection_check_key AS ENUM ('tires', 'fluids', 'guards', 'lights', 'engine')
+-- `InspectionOutcome`
+inspection_outcome AS ENUM ('pass', 'fail', 'na')
+-- `InspectionSeverity`
+inspection_severity AS ENUM ('minor', 'major', 'critical')
+-- `DocumentScope`
+document_scope AS ENUM ('item', 'inspection', 'receipt')
+-- `DocumentKind`
+document_kind AS ENUM ('photo', 'signature', 'packing-slip', 'certificate', 'coa')
+-- `AssetBehaviour`
+asset_behaviour AS ENUM ('serialized', 'quantity', 'labor')
 -- `ModuleKey`
 module_key AS ENUM ('scheduling', 'dispatch', 'telemetry', 'labor', 'service', 'rentals', 'billing')
 -- `RoleKey`
@@ -1066,6 +1320,14 @@ timesheet_target AS ENUM ('order', 'workorder', 'shop', 'overhead', 'idle', 'lun
 dispatch_status AS ENUM ('Staged', 'En Route', 'Delivered', 'Pending Return')
 -- `InvoiceStatus`
 invoice_status AS ENUM ('pending', 'invoiced', 'paid')
+-- `ReceivingCondition`
+receiving_condition AS ENUM ('good', 'damaged')
+-- `CountSessionStatus`
+count_session_status AS ENUM ('draft', 'posted')
+-- `FormFieldKind`
+form_field_kind AS ENUM ('text', 'textarea', 'number', 'integer', 'boolean', 'date', 'select', 'multiselect', 'measurement')
+-- `FormScope`
+form_scope AS ENUM ('item', 'inspection', 'receipt-line', 'stock-level')
 ```
 
 Three types below have **no named union** in the model — the values are written
@@ -1115,13 +1377,20 @@ be one the store audits.
 | `users` | `User` | `users` | `/api/users` |
 | `locations` | `Location` | `locations` | `/api/locations` |
 | `location_types` | `LocationType` | `locationTypes` | `/api/settings/location-types` |
-| `categories` | `CategoryOption` | `categories:<type>` | `/api/settings/categories` |
 | `tax_schedules` | `TaxSchedule` | `taxSchedules` | `/api/settings/tax-schedules` |
 | `overheads` | `Overhead` | `overheads` | `/api/settings/overheads` |
 | `pricing` | `PricingSettings` | `pricing` | `/api/settings/pricing` |
 | `yard` | `Yard` | `yard` | `/api/settings/yard` |
+| `form_schemas` | `FormSchema` | `formSchemas` | `/api/form-schemas` |
+| `verticals` | `Vertical` | `verticals` | `/api/verticals` |
+| `asset_categories` | `Category` | `assetCategories` | `/api/asset-categories` |
+| `stock_schema` | `StockSchema` | `stockSchema` | `/api/settings/stock-schema` |
+| `receiving_settings` | `ReceivingSettings` | `receiving` | `/api/settings/receiving` |
 | `items` | `Item` | `items` | `/api/items` |
 | `stock_levels` | `StockLevel` | `stockLevels` | `/api/stock-levels` |
+| `count_sessions` | `CountSession` | `countSessions` | `/api/count-sessions` |
+| `count_lines` | `CountLine` | `countSessions[].lines` | `/api/count-sessions/:id/lines` |
+| `documents` | `Document` | `documents` | `/api/documents` |
 | `movements` | `Movement` | `movements` | `/api/movements` (append-only) |
 | `parties` | `Party` | `parties` | `/api/parties` |
 | `price_cards` | `PriceCard` | `priceCards` | `/api/price-cards` |
@@ -1176,13 +1445,11 @@ each is an increment waiting for its turn:
   scheduler clamps a drop against `capacity()` and overlapping bookings, which is
   a *rule*, not a ledger — a real reservation table (`item_id`, `location_id`,
   window, qty, order) is the next thing this spine needs.
-- **Levels for kits and attachments.** They hold one place and a `qty`; a kit
-  assembled from parts would need `stock_levels` (or a bill of materials) to say
-  what it is made of. A6 drew that line on purpose (see `docs/PLAN.md`, open
-  decision #1).
-- **A cycle-count / bulk-count session.** Counting happens one place at a time
-  through a row's Count action; there is no document that groups a whole
-  warehouse count into one reviewable batch.
+- **A bill of materials for a kit.** Since B4 a kit's *quantity* is level-tracked
+  like stock, so a kit can sit in more than one place — but what it is *made of*
+  (a kit assembled from parts, drawing those parts down) is still not modelled. A6
+  drew the earlier line on purpose (see `docs/PLAN.md`, open decision #1); B4 moved
+  the quantity half.
 - **Ledger-backed consumption.** `work_order_parts` records what a job used but
   writes no movement, so a work order does not decrement the shelf (see
   `work_orders` above).
@@ -1198,9 +1465,8 @@ each is an increment waiting for its turn:
 - **Soft delete.** Rows are removed (`removeItem`, `removeLocation`), and the
   guard is contents/history rather than a deleted flag. A financial system
   usually wants `deleted_at` on the catalog side; this model does not have one.
-- **Per-vertical category seeds, and per-vertical view gating or titles.** A7
-  settled that the registry carries tabs, labels, columns and new-record
-  defaults; it deliberately does not decide which categories a vertical seeds, or
+- **Per-vertical view gating or titles.** A7 settled that the registry carries
+  tabs, labels, columns and new-record defaults; it deliberately does not decide
   which pages a vertical hides.
 - **Multi-tenant membership.** `users.tenant_id` is a single FK: a person belongs
   to one workspace. Contractors who work across two workspaces need a membership

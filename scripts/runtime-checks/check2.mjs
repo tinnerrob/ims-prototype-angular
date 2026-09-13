@@ -11,6 +11,14 @@ globalThis.localStorage = {
 const { DataService } = await import('./data.service.js');
 const { can } = await import('./models.js');
 
+/**
+ * A category **name** of the workspace's business type for a catalog type (Phase
+ * C): categories are the tenant's rows now, so a fixture asks for one instead of
+ * naming a string that no longer exists anywhere.
+ */
+const catName = (d, type) =>
+  d.categoriesForVertical(d.activeVertical().id).find((c) => c.type === type)?.name ?? '';
+
 let n = 0;
 const check = (label, fn) => {
   n++;
@@ -60,7 +68,7 @@ check('the ledger names a user, and its author is that user', () => {
 });
 
 check('a new record is attributed to the acting user', () => {
-  const item = d.createItem('part', { name: 'Test Widget', category: d.categoriesFor('part')[0], status: 'In Stock', qty: 4, rateDaily: 0 });
+  const item = d.createItem('part', { name: 'Test Widget', category: catName(d, 'part'), status: 'In Stock', qty: 4, rateDaily: 0 });
   assert.equal(item.createdBy, 'USR-003');
   assert.equal(item.updatedBy, 'USR-003');
   assert.equal(item.tenantId, 'TNT-NORTHLINE');
@@ -96,7 +104,7 @@ check('a nested edit attributes the parent row', () => {
 check('an untouched row is not re-stamped', () => {
   const order = d.getOrder(d.listOrders()[1].orderId);
   const stamp = order.updatedAt;
-  d.createItem('part', { name: 'Another', category: d.categoriesFor('part')[0], status: 'In Stock', qty: 1, rateDaily: 0 });
+  d.createItem('part', { name: 'Another', category: catName(d, 'part'), status: 'In Stock', qty: 1, rateDaily: 0 });
   assert.equal(d.getOrder(order.orderId).updatedAt, stamp, 'writes do not smear across rows');
 });
 

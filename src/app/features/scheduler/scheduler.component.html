@@ -467,9 +467,10 @@
             </div>
             <div class="col-md-6 field-group">
               <label class="form-label">Category</label>
-              <select class="form-select" [(ngModel)]="resForm.category">
-                @for (c of data.categoriesFor(poolType); track c) {
-                  <option [value]="c">{{ c }}</option>
+              <select class="form-select" [(ngModel)]="resForm.categoryId">
+                <option value="">— none —</option>
+                @for (c of categoryOptions(); track c.id) {
+                  <option [value]="c.id">{{ c.name }}</option>
                 }
               </select>
             </div>

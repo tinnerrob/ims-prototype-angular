@@ -10,6 +10,14 @@ globalThis.localStorage = {
 
 const { DataService } = await import('./data.service.js');
 
+/**
+ * A category **name** of the workspace's business type for a catalog type (Phase
+ * C): categories are the tenant's rows now, so a fixture asks for one instead of
+ * naming a string that no longer exists anywhere.
+ */
+const catName = (d, type) =>
+  d.categoriesForVertical(d.activeVertical().id).find((c) => c.type === type)?.name ?? '';
+
 let n = 0;
 const check = (label, fn) => {
   n++;
@@ -35,12 +43,15 @@ const check = (label, fn) => {
  *   `syncStockTotals`): a receipt landing it, a move taking part of a place away,
  *   a count correcting one place, a new row's opening balance.
  *
- * A unit (serialized, kit, attachment) is the other half of the rule — one thing,
- * one place — so its FK *is* its placement and a move is all-or-nothing.
+ * A **serialized** unit is the other half of the rule — one thing, one place — so
+ * its FK *is* its placement and a move is all-or-nothing. Since B4 a kit and an
+ * attachment are level-tracked too (a quantity above one can sit in more than one
+ * place), so they hold levels exactly as counted stock does.
  */
 
 const COUNTED = ['bulk', 'consumable', 'part'];
-const isCounted = (t) => COUNTED.includes(t);
+const LEVEL_TRACKED = [...COUNTED, 'kit', 'attachment'];
+const isLevelTracked = (t) => LEVEL_TRACKED.includes(t);
 
 mem.clear();
 const d = new DataService();
@@ -55,17 +66,22 @@ check('the fixture places every counted quantity, and only while it holds stock'
     assert.equal(l.id, `${l.refId}@${l.locationId}`, 'the composite key is written out');
     assert.ok(d.getLocation(l.locationId), `${l.refId} sits at a real place`);
     assert.ok(d.getItem(l.type, l.refId), 'and its item exists');
-    assert.equal(isCounted(l.type), true, 'only counted stock is held in levels');
+    assert.equal(isLevelTracked(l.type), true, 'only level-tracked stock is held in levels');
   }
-  // Every counted row's total is its shelves, summed — the invariant the whole
-  // increment turns on, checked row by row across the fixture.
-  for (const type of COUNTED) {
+  // Every level-tracked row's total is its shelves, summed — the invariant the
+  // whole increment turns on, checked row by row across the fixture.
+  for (const type of LEVEL_TRACKED) {
     for (const row of d.listItems(type)) {
-      assert.equal(row.qtyOnHand ?? row.qty, sumLevels(type, row.id), `${row.id}: qtyOnHand is its levels' sum`);
+      assert.equal(row.qtyOnHand ?? row.qty, sumLevels(type, row.id), `${row.id}: its total is its levels' sum`);
     }
   }
-  // No unit is in the table: a machine is a thing, not a quantity.
-  assert.equal(levels.some((l) => !isCounted(l.type)), false, 'no units or kits among the levels');
+  // No serialized unit and no person is in the table: a machine is a thing, not a
+  // quantity, and labour has no place at all.
+  assert.equal(
+    levels.some((l) => l.type === 'serialized' || l.type === 'labor'),
+    false,
+    'no machines and no people among the levels',
+  );
 });
 
 check('the fixture keeps one part in two bins, and its total is both bins', () => {
@@ -83,11 +99,33 @@ check('the fixture keeps one part in two bins, and its total is both bins', () =
   assert.equal(d.stockAt(part, 'LOC-17'), 0, 'a place with none of it reads zero, not missing');
 });
 
-check('placements() answers for a unit row too, and for labour not at all', () => {
-  const unit = d.getItem('kit', 'KT-001'); // a kit: one place, one count
-  assert.deepEqual(d.placements(unit), [{ locationId: unit.locationId, qty: unit.qty }], 'its FK *is* its placement');
+check('placements() answers for a unit row, for a kit, and for a person', () => {
+  const unit = d.listItems('serialized').find((i) => !!i.locationId);
+  assert.ok(unit, 'a seeded machine is placed');
+  assert.deepEqual(d.placements(unit), [{ locationId: unit.locationId, qty: unit.qty }], 'a serialized unit: its FK *is* its placement');
   assert.equal(d.stockAt(unit, unit.locationId), unit.qty);
-  assert.deepEqual(d.placements(d.getItem('labor', 'EMP-001')), [], 'a person is not stock in a place');
+
+  // A person has no *shelves* (labour is not level-tracked), but their one place —
+  // a home base — reads back the same way a machine's does, and is editable.
+  const person = d.getItem('labor', 'EMP-001');
+  assert.deepEqual(
+    d.placements(person),
+    [{ locationId: person.locationId, qty: 1 }],
+    'a person is based somewhere: their FK *is* their placement',
+  );
+  const base = d.listLocations().find((l) => l.id !== person.locationId);
+  d.updateItem('labor', person.id, { locationId: base.id });
+  assert.deepEqual(
+    d.placements(d.getItem('labor', 'EMP-001')),
+    [{ locationId: base.id, qty: person.qty }],
+    're-based: still one row, the new place',
+  );
+  d.updateItem('labor', person.id, { locationId: undefined });
+  assert.deepEqual(d.placements(d.getItem('labor', 'EMP-001')), [], 'unplaced: no placement at all');
+  // Since B4 a kit is level-tracked: its placements are its shelves, and its total
+  // is their sum — not its FK.
+  const kit = d.getItem('kit', 'KT-001');
+  assert.equal(d.placements(kit).reduce((s, p) => s + p.qty, 0), kit.qty, 'a kit reads from its levels');
 });
 
 check('a move takes a quantity out of one place and leaves the rest', () => {
@@ -158,8 +196,10 @@ check('the place readers join the shelves, not the row', () => {
     true,
     'a subtree holds at least what its node does',
   );
-  assert.equal(d.locationStockQty('LOC-04'), 0, 'an empty zone holds nothing');
-  assert.equal(d.itemsAtLocation('LOC-04').length, 0);
+  assert.equal(d.locationStockQty('LOC-04'), 0, 'a zone with no stock holds no units');
+  // ...but it is not empty of *rows*: a driver is based there now (Phase C). A
+  // person is placed, not stocked, which is why the quantity above is 0.
+  assert.deepEqual(d.itemsAtLocation('LOC-04').map((i) => i.id), ['EMP-003'], 'the driver based in Yard B');
 });
 
 check('a place holding only counted stock cannot be removed until it is emptied', () => {
@@ -182,7 +222,7 @@ check('emptying a place by counting it leaves history that still blocks it', () 
   const bin = d.createLocation({ name: 'Test Bin Z', type: 'Bin', parentId: 'LOC-05', address: '', phone: '', tz: 'America/New_York' });
   const rec = d.createItem('part', {
     name: 'Test Shim Pack',
-    category: d.categoriesFor('part')[0],
+    category: catName(d, 'part'),
     status: 'In Stock',
     qty: 6,
     qtyOnHand: 6,
@@ -208,17 +248,22 @@ check('a counted row ignores an edit, a unit row obeys one', () => {
   d.updateItem('part', 'PRT-002', { reorderPoint: 7 });
   assert.equal(part.reorderPoint, 7);
   assert.notEqual(part.updatedAt, stamp, 'a real edit is stamped');
-  // A unit row's place is its own FK, so the editor still moves it there.
+  // A serialized unit's place is its own FK, so the editor still moves it there.
+  const unit = d.listItems('serialized').find((i) => i.locationId && i.locationId !== 'LOC-12');
+  d.updateItem('serialized', unit.id, { locationId: 'LOC-12' });
+  assert.equal(d.getItem('serialized', unit.id).locationId, 'LOC-12');
+  // A kit is level-tracked now (B4): its place is a level, so the patch is stripped.
   const kit = d.getItem('kit', 'KT-001');
+  const kitPlace = kit.locationId;
   d.updateItem('kit', 'KT-001', { locationId: 'LOC-12' });
-  assert.equal(kit.locationId, 'LOC-12');
+  assert.equal(d.getItem('kit', 'KT-001').locationId, kitPlace, 'a kit place is not patchable');
 });
 
 check('a new counted row opens with a balance at its opening place', () => {
   const ledger = d.listMovements().length;
   const rec = d.createItem('part', {
     name: 'Test Bearing Set',
-    category: d.categoriesFor('part')[0],
+    category: catName(d, 'part'),
     status: 'In Stock',
     qty: 40,
     qtyOnHand: 40,
@@ -236,7 +281,7 @@ check('a new counted row opens with a balance at its opening place', () => {
   // With no place, or a zero count, the row simply holds nothing yet.
   const bare = d.createItem('part', {
     name: 'Test Unplaced Part',
-    category: d.categoriesFor('part')[0],
+    category: catName(d, 'part'),
     status: 'In Stock',
     qty: 0,
     qtyOnHand: 0,

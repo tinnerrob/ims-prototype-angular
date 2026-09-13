@@ -43,6 +43,18 @@ const check = (label, fn) => {
 mem.clear();
 const d = new DataService();
 
+/**
+ * Point the workspace at a business type by the registry key it seeds — the effect
+ * the old `DataService.setVertical()` had, now spelled the way the app does it:
+ * a workspace *is* one business type (`tenants.vertical_id`), and the compiled
+ * registry's key is derived from that row's slug.
+ */
+const useVertical = (key) => {
+  const row = d.listVerticals().find((v) => v.slug === key.toLowerCase());
+  assert.ok(row, `${key} is a seeded business type`);
+  d.setActiveVertical(row.id);
+};
+
 check('every vertical has an entry, and every entry is a real one', () => {
   for (const key of VERTICAL_KEYS) {
     const meta = VERTICAL_METADATA[key];
@@ -84,19 +96,48 @@ check('every tab names a real catalog type, once, with the fields a tab needs', 
   }
 });
 
-check('a column names a field the model actually has', () => {
-  // The registry may *choose* and *order* facts, never invent them: every column is
-  // checked against a real row of that type (plus `spread`, which the page computes
-  // from two fields the model does have).
-  const virtual = ['spread'];
+check('every tab names a real form schema for its type (B3)', () => {
+  // The vertical carries the *fields*, not only the columns: the tab says which
+  // `FormSchema` its editor loads, and the store must have it, scoped to items and
+  // shaped for that tab's catalog type.
   for (const [key, meta] of Object.entries(VERTICAL_METADATA)) {
     for (const tab of meta.tabs) {
-      const row = d.listItems(tab.key)[0];
-      assert.ok(row, `${key}/${tab.key}: there is a seeded row to check against`);
+      assert.ok(tab.formSchema, `${key}/${tab.key}: names the schema its editor loads`);
+      const schema = d.getFormSchema(tab.formSchema);
+      assert.ok(schema, `${key}/${tab.key}: "${tab.formSchema}" is a schema the store has`);
+      assert.equal(schema.scope, 'item', `${key}/${tab.key}: an item schema`);
+      assert.equal(schema.type, tab.key, `${key}/${tab.key}: shaped for that tab's type`);
+    }
+  }
+  // And the verticals genuinely differ in *fields*, not just in tabs: a clinic's
+  // supply schema is not the warehouse's.
+  assert.equal(
+    VERTICAL_METADATA.Healthcare.tabs.find((t) => t.key === 'consumable').formSchema,
+    'FS-item-consumable-clinic',
+    'Healthcare names the clinic supply schema',
+  );
+  assert.equal(
+    VERTICAL_METADATA.Warehouse.tabs.find((t) => t.key === 'consumable').formSchema,
+    'FS-item-consumable',
+    'a warehouse names the generic one',
+  );
+});
+
+check('a column names a field the model actually has', () => {
+  // The registry may *choose* and *order* facts, never invent them: every column is
+  // checked against the model's own rows (plus `spread`, which the page computes
+  // from two fields the model does have). *Any* row carries the field, not one
+  // sample row of that type — an optional field the fixture happens to leave unset
+  // (a person's `locationId`) is still a field of `Item`.
+  const virtual = ['spread'];
+  const rows = d.allItems();
+  for (const [key, meta] of Object.entries(VERTICAL_METADATA)) {
+    for (const tab of meta.tabs) {
+      assert.ok(d.listItems(tab.key)[0], `${key}/${tab.key}: there is a seeded row to check against`);
       for (const [field, header] of tab.columns) {
         assert.ok(header, `${key}/${tab.key}/${field}: has a header`);
         assert.equal(
-          virtual.includes(field) || field in row,
+          virtual.includes(field) || rows.some((r) => field in r),
           true,
           `${key}/${tab.key}: "${field}" is a field the model has`,
         );
@@ -111,7 +152,7 @@ check("the store reads the *tenant's* vertical, and follows it live", () => {
   assert.equal(d.verticalMeta().defaultTab, 'serialized');
   assert.equal(d.listItems('serialized').length > 0, true, 'and it has serialized stock');
 
-  d.setVertical('Healthcare');
+  useVertical('Healthcare');
   assert.equal(d.vertical, 'Healthcare', 'the tenant carries the switch');
   assert.equal(d.verticalMeta().key, 'Healthcare', 'and the registry follows, with no reload and no cache');
 });
@@ -139,7 +180,7 @@ check('flipping the vertical changes the tabs, their order and their labels', ()
     'while the yard calls the same tab by its own name',
   );
   // A warehouse is the third shape: no fleet, and its stock tabs lead with the place.
-  d.setVertical('Warehouse');
+  useVertical('Warehouse');
   const wh = d.verticalMeta();
   assert.deepEqual(wh.tabs.map((t) => t.key), ['consumable', 'part', 'bulk', 'labor']);
   assert.equal(wh.noun, 'Stock Lines');
@@ -148,14 +189,14 @@ check('flipping the vertical changes the tabs, their order and their labels', ()
 });
 
 check('the columns follow the vertical, not the type alone', () => {
-  d.setVertical('HeavyEquipment');
+  useVertical('HeavyEquipment');
   const heavyPart = d.verticalMeta().tabs.find((t) => t.key === 'part');
   assert.deepEqual(
     heavyPart.columns.map((c) => c[0]),
     ['id', 'name', 'category', 'locationId', 'qtyOnHand', 'reorderPoint', 'costPrice', 'status'],
     'a yard reads a part: where it is, then how many, then what it cost',
   );
-  d.setVertical('Healthcare');
+  useVertical('Healthcare');
   const clinicPart = d.verticalMeta().tabs.find((t) => t.key === 'part');
   assert.deepEqual(
     clinicPart.columns.map((c) => c[0]),
@@ -173,16 +214,16 @@ check('the columns follow the vertical, not the type alone', () => {
 });
 
 check("a new record starts as the vertical's default, not a constant", () => {
-  d.setVertical('HeavyEquipment');
+  useVertical('HeavyEquipment');
   const machine = d.verticalMeta().tabs.find((t) => t.key === 'serialized');
   assert.deepEqual(machine.defaults, { status: 'Available', qty: 1 }, 'a machine: available, one of it');
-  d.setVertical('Healthcare');
+  useVertical('Healthcare');
   const supply = d.verticalMeta().tabs.find((t) => t.key === 'consumable');
   assert.deepEqual(supply.defaults, { status: 'In Stock', qty: 0 }, 'a supply: in stock with an empty shelf');
 });
 
 check('the terminology is data too: a lumberyard is not a rental yard', () => {
-  d.setVertical('Lumberyard');
+  useVertical('Lumberyard');
   const meta = d.verticalMeta();
   assert.equal(meta.noun, 'Stock Lines');
   assert.deepEqual(meta.tabs.map((t) => t.key), ['bulk', 'consumable', 'part', 'labor']);
@@ -191,7 +232,7 @@ check('the terminology is data too: a lumberyard is not a rental yard', () => {
   assert.equal(bulk.columns.some((c) => c[0] === 'rateDaily'), false, 'a yard does not rent it out by the day');
   assert.equal(bulk.columns.some((c) => c[0] === 'totalOwned'), true, 'it counts what it owns');
   // And back again: the registry is a lookup, not a mutation.
-  d.setVertical('HeavyEquipment');
+  useVertical('HeavyEquipment');
   assert.deepEqual(d.verticalMeta(), VERTICAL_METADATA.HeavyEquipment, 'the default catalog is unchanged');
   assert.equal(VERTICAL_METADATA.Lumberyard.tabs.length, 4, 'and the yard it left is too');
 });

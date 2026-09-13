@@ -58,6 +58,13 @@ interface LineForm {
   rateDaily: number;
 }
 
+/** One place a received line's quantity lands, in the receiving editor (B6). */
+interface LandingForm {
+  /** '' = the receipt's default put-away (see `receiveLocationId`). */
+  locationId: string;
+  qty: number;
+}
+
 const BLANK_SUPPLIER = {
   name: '',
   contact: '',
@@ -154,10 +161,14 @@ export class PurchasingComponent {
   /** Receiving editor (posts against one PO). */
   receiveOpen = false;
   receivePoId = '';
+  /** The receipt's header (default) put-away; a landing may name its own place. */
   receiveLocationId = '';
   receiveNote = '';
-  /** Quantity to receive *now*, per PO line id. */
-  receiveQty: Record<string, number> = {};
+  /**
+   * What each outstanding line lands, place by place (B6). One entry per landing;
+   * a line with two entries is split across two locations on one receipt.
+   */
+  receiveLandings: Record<string, LandingForm[]> = {};
 
   /** Read-only record viewer (opened by clicking a row). */
   viewer: ViewModel | null = null;
@@ -529,11 +540,14 @@ export class PurchasingComponent {
   openReceive(po: PurchaseOrder): void {
     this.receivePoId = po.id;
     // Default the destination from the first line's own place (restock a SKU
-    // where it lives) and every quantity to "all of it" — the usual delivery.
+    // where it lives) and every line to a single landing of "all of it" — the
+    // usual delivery. "Add place" splits a line across more than one location.
     const first = po.lines[0];
     this.receiveLocationId = (first?.refId ? this.data.getItem(first.type, first.refId)?.locationId : '') ?? '';
-    this.receiveQty = {};
-    for (const { line, outstanding } of this.receivable(po)) this.receiveQty[line.id] = outstanding;
+    this.receiveLandings = {};
+    for (const { line, outstanding } of this.receivable(po)) {
+      this.receiveLandings[line.id] = [{ locationId: '', qty: outstanding }];
+    }
     this.receiveNote = '';
     this.receiveOpen = true;
   }
@@ -542,14 +556,37 @@ export class PurchasingComponent {
     return this.receivePoId ? this.data.getPurchaseOrder(this.receivePoId) : undefined;
   }
 
+  /** One line's landings (never mutates — `addLanding` / `removeLanding` do). */
+  landingsOf(lineId: string): LandingForm[] {
+    return this.receiveLandings[lineId] ?? [];
+  }
+
+  /** Split a line across another place. */
+  addLanding(lineId: string): void {
+    (this.receiveLandings[lineId] ??= []).push({ locationId: '', qty: 0 });
+  }
+
+  /** Drop a landing (never the last one — a line always lands somewhere). */
+  removeLanding(lineId: string, index: number): void {
+    const rows = this.receiveLandings[lineId];
+    if (rows && rows.length > 1) rows.splice(index, 1);
+  }
+
+  /** How much of a line this posting lands, across all its places. */
+  lineTotal(lineId: string): number {
+    return this.landingsOf(lineId).reduce((sum, l) => sum + Math.floor(Number(l.qty) || 0), 0);
+  }
+
+  /** True when a line's landings ask for more than is outstanding. */
+  lineOver(lineId: string, outstanding: number): boolean {
+    return this.lineTotal(lineId) > outstanding;
+  }
+
   /** Value of what this posting is about to receive. */
   receiveValue(): number {
     const po = this.receivePo();
     if (!po) return 0;
-    return this.receivable(po).reduce(
-      (sum, { line }) => sum + (Number(this.receiveQty[line.id]) || 0) * line.unitCost,
-      0,
-    );
+    return this.receivable(po).reduce((sum, { line }) => sum + this.lineTotal(line.id) * line.unitCost, 0);
   }
 
   /** How many rows this posting lands (units are rows; quantity stock is a top-up). */
@@ -557,36 +594,43 @@ export class PurchasingComponent {
     const po = this.receivePo();
     if (!po) return 0;
     return this.receivable(po).reduce((sum, { line }) => {
-      const qty = Number(this.receiveQty[line.id]) || 0;
-      if (qty <= 0) return sum;
-      return sum + (this.isUnit(line.type) ? qty : 1);
+      const total = this.lineTotal(line.id);
+      if (total <= 0) return sum;
+      return sum + (this.isUnit(line.type) ? total : 1);
     }, 0);
   }
 
-  /** Something positive, and never more than is outstanding. */
+  /** Something positive, no negative landing, and no line over its outstanding. */
   receiveReady(): boolean {
     const po = this.receivePo();
     if (!po || !this.receiveLocationId) return false;
-    const sane = this.receivable(po).every(({ line, outstanding }) => {
-      const qty = Number(this.receiveQty[line.id]) || 0;
-      return qty >= 0 && qty <= outstanding;
-    });
-    return sane && this.receiveRows() > 0;
+    let any = false;
+    for (const { line, outstanding } of this.receivable(po)) {
+      for (const l of this.landingsOf(line.id)) if ((Number(l.qty) || 0) < 0) return false;
+      if (this.lineOver(line.id, outstanding)) return false;
+      if (this.lineTotal(line.id) > 0) any = true;
+    }
+    return any;
   }
 
   /** Post the receipt — the one call that changes stock. */
   confirmReceive(): void {
     const po = this.receivePo();
     if (!po || !this.receiveReady()) return;
-    const qty: Record<string, number> = {};
-    for (const { line } of this.receivable(po)) {
-      const n = Math.floor(Number(this.receiveQty[line.id]) || 0);
-      if (n > 0) qty[line.id] = n;
-    }
+    // One entry per line, each carrying the places it split across. A blank place
+    // means "the receipt's default"; an empty landing is dropped.
+    const lines = this.receivable(po)
+      .map(({ line }) => ({
+        poLineId: line.id,
+        landings: this.landingsOf(line.id)
+          .map((l) => ({ locationId: l.locationId || undefined, qty: Math.floor(Number(l.qty) || 0) }))
+          .filter((l) => l.qty > 0),
+      }))
+      .filter((l) => l.landings.length > 0);
     const rec = this.data.receiveAgainst({
       poId: po.id,
       locationId: this.receiveLocationId,
-      qty,
+      lines,
       note: this.receiveNote.trim(),
     });
     if (rec) {
@@ -599,7 +643,7 @@ export class PurchasingComponent {
     this.receiveOpen = false;
     this.receivePoId = '';
     this.receiveLocationId = '';
-    this.receiveQty = {};
+    this.receiveLandings = {};
     this.receiveNote = '';
   }
 

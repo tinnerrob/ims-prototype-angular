@@ -1,0 +1,78 @@
+<div class="table-wrap">
+  <table class="table field-editor">
+    <thead>
+      <tr>
+        <th class="fe-idx"></th>
+        <th>Key</th>
+        <th>Label</th>
+        <th>Kind</th>
+        <th class="text-center">Req</th>
+        <th>Unit / choices</th>
+        <th>Group</th>
+        <th class="text-end"></th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (f of fields; track $index) {
+        <tr>
+          <td class="fe-idx text-muted2">{{ $index + 1 }}</td>
+          <td>
+            <input
+              class="form-control form-control-sm"
+              [class.fe-bad]="!!keyError(f)"
+              [(ngModel)]="f.key"
+              placeholder="lotNumber"
+            />
+            @if (keyError(f); as msg) {
+              <div class="fe-bad-msg">{{ msg }}</div>
+            }
+          </td>
+          <td><input class="form-control form-control-sm" [(ngModel)]="f.label" placeholder="Lot Number" /></td>
+          <td>
+            <select class="form-select form-select-sm" [(ngModel)]="f.kind">
+              @for (k of kinds; track k) {
+                <option [ngValue]="k">{{ k }}</option>
+              }
+            </select>
+          </td>
+          <td class="text-center">
+            <input class="form-check-input" type="checkbox" [(ngModel)]="f.required" />
+          </td>
+          <td>
+            @if (hasOptions(f)) {
+              <input
+                class="form-control form-control-sm"
+                [ngModel]="optionsText(f)"
+                (ngModelChange)="setOptions(f, $event)"
+                placeholder="Good, Worn, Damaged"
+              />
+            } @else if (hasUnit(f)) {
+              <input class="form-control form-control-sm" [(ngModel)]="f.unit" placeholder="kg / hrs / °C" />
+            } @else {
+              <span class="text-muted2">—</span>
+            }
+          </td>
+          <td><input class="form-control form-control-sm" [(ngModel)]="f.group" placeholder="optional" /></td>
+          <td class="text-end text-nowrap">
+            <button type="button" class="btn btn-ims-outline btn-sm2" title="Move up" (click)="move($index, -1)">
+              <i class="bi bi-arrow-up"></i>
+            </button>
+            <button type="button" class="btn btn-ims-outline btn-sm2" title="Move down" (click)="move($index, 1)">
+              <i class="bi bi-arrow-down"></i>
+            </button>
+            <button type="button" class="btn btn-ims-outline btn-sm2" title="Remove" (click)="remove($index)">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="8" class="text-center text-muted2 py-3">No fields yet.</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+<button type="button" class="btn btn-ims-quiet btn-sm2 mt-2" (click)="add()">
+  <i class="bi bi-plus-lg"></i> Add field
+</button>

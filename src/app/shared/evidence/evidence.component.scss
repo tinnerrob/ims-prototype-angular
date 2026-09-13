@@ -1,0 +1,5 @@
+/* `<ims-evidence>` (B8) — the shared evidence panel. The table styling is shared
+   (`styles.scss`); only the attach row's kind select needs a width. */
+.evidence-kind {
+  max-width: 9rem;
+}

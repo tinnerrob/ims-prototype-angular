@@ -42,11 +42,21 @@ check('one seeded user per role', () => {
   assert.deepEqual(roles, ['admin', 'field', 'manager', 'owner', 'viewer', 'warehouse']);
 });
 
-check('vertical is tenant data', () => {
-  assert.equal(data.vertical, 'HeavyEquipment');
-  data.setVertical('Warehouse');
-  assert.equal(data.vertical, 'Warehouse');
-  assert.equal(data.activeTenant.vertical, 'Warehouse');
+check('the industry follows the business type — one source of truth', () => {
+  // The workspace's business type owns the industry (Phase C): the compiled
+  // registry's key is *derived* from the row it is on, so there is no second
+  // setting to drift out of step — which is what let Admin → Feature Modules'
+  // "Industry / Vertical" switch go.
+  assert.equal(data.vertical, 'HeavyEquipment', 'the fixture workspace is a heavy-equipment yard');
+  assert.equal(data.activeTenant.verticalId, data.activeVertical().id, 'the tenant names its type');
+
+  const warehouse = data.listVerticals().find((v) => v.slug === 'warehouse');
+  data.setActiveVertical(warehouse.id);
+  assert.equal(data.vertical, 'Warehouse', 'the registry key follows the business type');
+  assert.equal(data.verticalMeta().key, 'Warehouse');
+
+  data.setActiveVertical(data.listVerticals().find((v) => v.isDefault).id);
+  assert.equal(data.vertical, 'HeavyEquipment', 'and back again');
 });
 
 check('module flags default ON and are stored on the tenant', () => {

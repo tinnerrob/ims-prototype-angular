@@ -55,18 +55,107 @@ export const CATALOG_TYPES: CatalogTypeDef[] = [
 
 export const CATALOG_TYPE_KEYS: CatalogType[] = CATALOG_TYPES.map((t) => t.key);
 
-/**
- * Category option row (prototype `IMS.settings.categories[type][]`).
+/* ------------------- the tenant's catalog (Phase C) ------------------- */
+/*
+ * The catalog's *shape* — which tabs a workspace shows, what each is called, what
+ * it holds and what fields it carries — is the tenant's own data here, not a
+ * compiled registry. The registry (`core/vertical-metadata.ts`) survives only as
+ * the seed a new workspace starts from. See `docs/PLAN-C.md`.
  *
- * Configuration is a tenant's data like the catalog is (A9): the Categories page
- * is what a workspace edits in Admin, so a row here is written by a person and
- * carries the same stamps as any other row — "who added this category" is a
- * question the screen may ask.
+ * A **category** is the tenant's row (`asset_categories`): it is the only place a
+ * category is defined. The prototype's per-type name list (`IMS.settings.
+ * categories`, `CategoryOption`) is gone — its screen, store and model went with
+ * it, and `items.category` is now the name *derived* from this row.
  */
-export interface CategoryOption extends AuditFields {
+
+/** How an asset category holds stock — the one fact the spine keys off. */
+export type AssetBehaviour = 'serialized' | 'quantity' | 'labor';
+
+export const ASSET_BEHAVIOURS: AssetBehaviour[] = ['serialized', 'quantity', 'labor'];
+
+export const ASSET_BEHAVIOUR_LABEL: Record<AssetBehaviour, string> = {
+  serialized: 'Serialized — one unique unit each',
+  quantity: 'Quantity — many of the same asset',
+  labor: 'Person — not stock, based in a place',
+};
+
+/** The behaviour a spine type falls under (Phase C) — the *user-facing* summary. */
+export function behaviourOfType(type: CatalogType): AssetBehaviour {
+  if (type === 'serialized') return 'serialized';
+  if (type === 'labor') return 'labor';
+  return 'quantity';
+}
+
+/**
+ * The spine type a behaviour means for a *new* category. The seven `CatalogType`s
+ * carry nuances a two-way choice cannot (a bulk row's owned/available split, a
+ * kit's levels, a part's reorder status), so the pair is stored: `behaviour` is
+ * what the user picks, `type` is what the spine reads, and a seeded category keeps
+ * its exact type. A brand-new `quantity` category starts as generic counted stock.
+ */
+export function typeForBehaviour(behaviour: AssetBehaviour): CatalogType {
+  if (behaviour === 'serialized') return 'serialized';
+  if (behaviour === 'labor') return 'labor';
+  return 'consumable';
+}
+
+/**
+ * A tenant-authored industry grouping (Phase C). A vertical **groups categories**
+ * and fixes their order — the "tabs" the Assets page shows are its categories, and
+ * a category's own name is the tab's label.
+ */
+export interface Vertical extends AuditFields {
+  id: string;
   name: string;
-  /** Inactive categories stay in the list but drop out of item pickers. */
+  /** URL-safe handle (also how the tenant's choice maps to a row). */
+  slug: string;
   active: boolean;
+  /** The vertical a workspace lands on. */
+  isDefault: boolean;
+}
+
+/**
+ * A tenant-authored asset category (Phase C): a vertical's tab, what it holds and
+ * how it is stocked. Its `fields` are the category's own; the fields **every**
+ * category shares live in the tenant's `StockSchema` (`FormsService.fieldsFor`
+ * unions the two). `behaviour` is the only thing the stock spine reads.
+ */
+export interface Category extends AuditFields {
+  id: string;
+  /** FK -> `verticals.id`. */
+  verticalId: string;
+  /** The tab's label — the category's own name. */
+  name: string;
+  /** Bootstrap Icons class for the tab strip. */
+  icon: string;
+  behaviour: AssetBehaviour;
+  /**
+   * The spine type behind the behaviour. A seeded category keeps its exact type
+   * (bulk, part, kit…), and a new one gets the behaviour's default — because the
+   * seven types carry nuances a two-way choice cannot (a bulk row's owned/available
+   * split, a part's reorder status). `behaviour` is the user-facing summary.
+   */
+  type: CatalogType;
+  active: boolean;
+  /** Position in its vertical's tab strip. */
+  sort: number;
+  fields: FormField[];
+}
+
+/**
+ * What a tenant supplies when creating a category (Phase C). `type` is **not** in
+ * it: the store derives it from `behaviour` (`typeForBehaviour`), so the two can
+ * never disagree.
+ */
+export type CategoryDraft = Omit<Category, 'id' | 'verticalId' | 'sort' | 'type'>;
+
+/**
+ * The fields every asset carries, whatever its category (Phase C) — the **stock
+ * set**. One row per tenant, like `pricing`; an asset's fields are this unioned
+ * with its category's.
+ */
+export interface StockSchema extends AuditFields {
+  fields: FormField[];
 }
 
 export interface Party extends AuditFields {
@@ -279,8 +368,9 @@ export interface Item extends AuditFields {
    *
    * This replaces the prototype's free-text `bin` string: a shelf label *is* a
    * location row here (`LocationType` already includes `Bin`), and keeping both
-   * would be two models of one fact. Absent = not stock (labor) or not yet
-   * placed — never a made-up default.
+   * would be two models of one fact. Absent = not yet placed — never a made-up
+   * default. A **person** carries one too (their home base); what marks them out
+   * is that their place is not a shelf of stock (see `placements`).
    *
    * For **counted stock** (`isCountedStock`) this is the row's *home* place, not
    * its whole placement: the quantities live in `stock_levels`, one row per
@@ -290,6 +380,31 @@ export interface Item extends AuditFields {
    * default destination read; a *move* is what actually re-places stock.
    */
   locationId?: string;
+
+  /**
+   * The industry-specific facts a `FormSchema` captured (B2) — a lot number, an
+   * expiry, a calibration date. A `jsonb` payload validated against the schema in
+   * force for this row's `type` (`FormsService`); the schema is the contract, this
+   * is the payload. A key that becomes a *searched / sorted / joined* fact is
+   * promoted to a real column rather than filtered out of the blob (see
+   * `docs/PLAN-B.md`, §1 and D1). Absent = none captured.
+   */
+  attributes?: Record<string, unknown>;
+
+  /**
+   * The unit is on **hold** (B8): held back from the pool — for QC, a customer
+   * dispute, an open service job. A held unit is not *out* (custody is the
+   * ledger's), it is simply not offered: `availableItems()` filters it, so the
+   * scheduler and Hand-Off agree. Absent = not held.
+   */
+  hold?: boolean;
+
+  /**
+   * The tenant category this row belongs to (Phase C) — the FK the screens join
+   * on. `type`/`category` are the pre-Phase-C shape and retire in C5; until then
+   * the store keeps them in step with this.
+   */
+  categoryId?: string;
 
   active?: boolean;
 }
@@ -313,7 +428,7 @@ export const ITEM_STATUSES: Record<CatalogType, ItemStatus[]> = {
   attachment: ['Available', 'On Rent'],
 };
 
-export type MovementKind = 'issue' | 'return' | 'receive' | 'transfer' | 'adjust';
+export type MovementKind = 'issue' | 'return' | 'receive' | 'transfer' | 'adjust' | 'return-to-vendor';
 
 /** Immutable chain-of-custody record (core). Issue = out to an order/party;
  *  return = back to a location. Never mutate a written movement.
@@ -359,6 +474,7 @@ export const MOVEMENT_KIND_LABEL: Record<MovementKind, string> = {
   receive: 'Receive',
   transfer: 'Transfer',
   adjust: 'Adjust',
+  'return-to-vendor': 'Return to Vendor',
 };
 
 /* ------------------------------ purchasing ------------------------------ */
@@ -415,6 +531,12 @@ export interface PurchaseOrderLine {
   unitCost: number;
   /** Billable daily rate to bill a *new* unit at (serialized lines only). */
   rateDaily?: number;
+  /**
+   * The line is closed short: the outstanding quantity is not coming (B6). A
+   * chosen fact, not derived — and the PO reads `received` without inventing
+   * stock, because `poLineOutstanding()` treats a short-closed line as complete.
+   */
+  shortClosed?: boolean;
 }
 
 export interface PurchaseOrder extends AuditFields {
@@ -442,6 +564,20 @@ export interface ReceiptLine {
   refId: string;
   qty: number;
   unitCost: number;
+  /**
+   * FK -> `settings.locations` — the place *this* landing went to. One receipt
+   * line per place a quantity landed (a line may split across bins, B6), so a
+   * receipt reads back place by place rather than only to its header destination.
+   */
+  locationId: string;
+  /** How it arrived (B6): a `damaged` landing goes to the quarantine place. */
+  condition?: ReceivingCondition;
+  /** The quantity that arrived damaged (equal to `qty` for a damaged landing). */
+  damagedQty?: number;
+  /** A supplier's reason code for the damage / discrepancy. */
+  reasonCode?: string;
+  /** The receipt-line schema payload (lot / expiry) — B2. */
+  attributes?: Record<string, unknown>;
 }
 
 /** A posted goods receipt: the document that makes `qtyOnHand` mean something. */
@@ -451,7 +587,12 @@ export interface Receipt extends AuditFields {
   poId: string;
   /** FK -> `parties.id` (copied from the order, as the document's own fact). */
   supplierId: string;
-  /** FK -> `settings.locations` — where the stock was put away. */
+  /**
+   * FK -> `settings.locations` — the receipt's header (default) put-away. Each
+   * landed quantity's *actual* place is on its own line (`ReceiptLine.locationId`),
+   * and a landing that names none uses this. A receipt that does not split has
+   * this place and every line's place identical.
+   */
   locationId: string;
   at: string; // ISO timestamp
   note?: string;
@@ -491,9 +632,12 @@ export function isUnitStock(type: CatalogType): boolean {
  *    them — and the row's *home* place (`Item.locationId`, the place holding the
  *    most) — every time a level row moves (see `DataService.syncStockTotals`).
  *
- * Only counted stock (see `isCountedStock`) is held in levels. A unit is a
- * thing rather than a quantity: a machine, a kit or a labor row sits in exactly
- * one place, so its `Item.locationId` *is* its placement and needs no table.
+ * Only **level-tracked** stock (see `isLevelTracked`) is held in levels — counted
+ * stock, and since B4 kits and attachments. A serialized unit is a
+ * thing rather than a quantity: a machine sits in exactly one place, so its
+ * `Item.locationId` *is* its placement and it needs no table. A person's is the
+ * same shape — one home base, not a shelf — because a person is not a quantity
+ * either.
  */
 export interface StockLevel extends AuditFields {
   /** Composite key, written out: `<item id>@<location id>` (e.g. `PRT-001@LOC-14`). */
@@ -504,6 +648,85 @@ export interface StockLevel extends AuditFields {
   /** FK -> `settings.locations` (the place holding it). */
   locationId: string;
   qty: number;
+  /**
+   * The per-place facts a stock-level `FormSchema` captures (B5) — a `lot`, an
+   * `expiry`, a `hold`. A `jsonb` payload like `Item.attributes`; the schema is the
+   * contract. A level that carries attributes can only be moved **whole** (half a
+   * lot is not a fact the model can state), and a key that becomes a predicate is
+   * promoted to a column (see `docs/PLAN-B.md`, §1).
+   */
+  attributes?: Record<string, unknown>;
+}
+
+/** Whether a count session is still being worked or has been posted (B5). */
+export type CountSessionStatus = 'draft' | 'posted';
+
+export const COUNT_SESSION_STATUSES: CountSessionStatus[] = ['draft', 'posted'];
+
+/** One row of a count sheet: what the place should hold, and what was found (B5). */
+export interface CountLine {
+  /** `<item id>@<location id>` — the level it counts (unique within a session). */
+  id: string;
+  itemType: CatalogType;
+  itemId: string;
+  locationId: string;
+  /** What the level held when the sheet was opened. */
+  expected: number;
+  /** What the counter entered (defaults to `expected`). */
+  counted?: number;
+}
+
+/**
+ * A cycle-count sheet (B5): one place's levels frozen for review, then posted as
+ * one `adjust` movement per difference. The document the A6/A8 notes called "not
+ * modelled yet" — a count that is a *batch* rather than one row at a time.
+ */
+export interface CountSession extends AuditFields {
+  id: string;
+  /** FK -> `settings.locations` — the place counted. */
+  locationId: string;
+  /** Count the node's whole subtree (a zone) or just the node (a bin). */
+  subtree: boolean;
+  status: CountSessionStatus;
+  openedAt: string; // ISO timestamp
+  postedAt?: string;
+  lines: CountLine[];
+}
+
+/* ------------------------ documents / evidence (B8) ------------------- */
+
+/** What a document is attached to. */
+export type DocumentScope = 'item' | 'inspection' | 'receipt';
+
+export const DOCUMENT_SCOPES: DocumentScope[] = ['item', 'inspection', 'receipt'];
+
+/** What kind of evidence a document is. */
+export type DocumentKind = 'photo' | 'signature' | 'packing-slip' | 'certificate' | 'coa';
+
+export const DOCUMENT_KINDS: DocumentKind[] = ['photo', 'signature', 'packing-slip', 'certificate', 'coa'];
+
+/**
+ * A piece of evidence attached to a record (B8): a photo, a packing slip, a
+ * certificate, a signature.
+ *
+ * The port has **no file store** — `url` is where the file will live (an object
+ * URL or a path) and a document with no `url` is a *placeholder* row the UI still
+ * shows. That is the deliberate local stand-in for the API's blob store: the rows,
+ * the scoping and the counts are real, so swapping in real storage changes only
+ * what `url` holds. A record's photo *count* is **derived** from these rows, never
+ * a stored column (`DataService.photoCount()`).
+ */
+export interface Document extends AuditFields {
+  id: string;
+  scope: DocumentScope;
+  /** The record it belongs to (`items.id` / `inspections.id` / `receipts.id`). */
+  refId: string;
+  kind: DocumentKind;
+  /** Where the file lives (a URL / path); absent = a placeholder row. */
+  url?: string;
+  mime?: string;
+  size?: number;
+  caption?: string;
 }
 
 /**
@@ -515,6 +738,17 @@ export interface StockLevel extends AuditFields {
  */
 export function isCountedStock(type: CatalogType): boolean {
   return type === 'bulk' || type === 'consumable' || type === 'part';
+}
+
+/**
+ * Types whose quantity lives in `stock_levels` (A6, extended by B4): counted
+ * stock, plus **kits and attachments** — anything with a quantity above one that
+ * can sit in more than one place. A serialized unit is one thing in one place, and
+ * a person is not a quantity at all (their one place is a home base), so neither
+ * is level-tracked.
+ */
+export function isLevelTracked(type: CatalogType): boolean {
+  return isCountedStock(type) || type === 'kit' || type === 'attachment';
 }
 
 /** Labor is a person, not stock — nothing can be purchased into it. */
@@ -607,23 +841,58 @@ export interface Yard extends AuditFields {
   lng: number;
 }
 
+/** How a landed quantity arrived (a damaged one goes to the quarantine place). */
+export type ReceivingCondition = 'good' | 'damaged';
+
+export const RECEIVING_CONDITIONS: ReceivingCondition[] = ['good', 'damaged'];
+
+/**
+ * The receiving desk's rules, as tenant configuration (B6, see `docs/PLAN-B.md`).
+ * One row per tenant, audited like `pricing` (`DataService.receivingSettings()`).
+ */
+export interface ReceivingSettings extends AuditFields {
+  /** How far over an ordered line a receipt may go, as a percent (0 = exact). */
+  overReceiptTolerancePct: number;
+  /** Refuse a receipt against a purchase order that names no supplier reference. */
+  requirePoReference: boolean;
+  /** Where a `damaged` landing is put away; absent = the receipt's own place. */
+  quarantineLocationId?: string | null;
+  /** The receiving editor's opening put-away; absent = the first line's own place. */
+  defaultPutAwayLocationId?: string | null;
+  /** A landed serialized unit must carry an `Open` inspection before put-away (B7). */
+  requireInspection: boolean;
+}
+
 
 export type InspectionDirection = 'Check-Out' | 'Check-In';
 
-/** Condition checks captured on the yard inspection form. */
-export type InspectionCheckKey = 'tires' | 'fluids' | 'guards' | 'lights' | 'engine';
+/** How one item on an inspection's checklist came out (B7). */
+export type InspectionOutcome = 'pass' | 'fail' | 'na';
 
-export const INSPECTION_CHECKS: InspectionCheckKey[] = ['tires', 'fluids', 'guards', 'lights', 'engine'];
+export const INSPECTION_OUTCOMES: InspectionOutcome[] = ['pass', 'fail', 'na'];
 
-export const INSPECTION_CHECK_LABEL: Record<InspectionCheckKey, string> = {
-  tires: 'Tires / Tracks',
-  fluids: 'Fluids',
-  guards: 'Safety Guards',
-  lights: 'Lights',
-  engine: 'Engine',
-};
+/** How serious a failure is — what the desk offers next (a hold, a work order). */
+export type InspectionSeverity = 'minor' | 'major' | 'critical';
 
-/** Yard in/out inspection (prototype `IMS.inspections`). */
+export const INSPECTION_SEVERITIES: InspectionSeverity[] = ['minor', 'major', 'critical'];
+
+/**
+ * One checklist result (B7). The checklist itself is a **template** — the fields
+ * of an `inspection`-scope `FormSchema` — so `results` is keyed by the template's
+ * field `key` and each entry carries the value captured plus how it came out.
+ * `jsonb` because the template is tenant data and the map is read whole by one
+ * editor (the same argument as `items.attributes`).
+ */
+export interface InspectionResult {
+  /** The value the template's field captured (a choice, a measurement, a flag). */
+  value?: unknown;
+  outcome: InspectionOutcome;
+  /** Set when the outcome is a failure. */
+  severity?: InspectionSeverity;
+  note?: string;
+}
+
+/** Yard in/out inspection (prototype `IMS.inspections`), now template-driven (B7). */
 export interface Inspection extends AuditFields {
   id: string;
   itemId: string; // serialized asset id
@@ -634,9 +903,19 @@ export interface Inspection extends AuditFields {
   meterIn?: number | null;
   fuelOut?: number | null;
   fuelIn?: number | null;
-  checks: Record<InspectionCheckKey, boolean>;
-  photos?: number;
+  /** The `inspection`-scope `FormSchema` the checklist came from (B7). */
+  templateId: string;
+  /** One entry per template field: the value captured and how it came out. */
+  results: Record<string, InspectionResult>;
   status: 'Open' | 'Closed';
+  /** The receipt this check-in inspected, when it came off a delivery (B6/B7). */
+  receiptId?: string | null;
+  /** The movement this inspection was logged against, when there is one. */
+  movementId?: string | null;
+  /** The work order a failure raised (B7). */
+  workOrderId?: string | null;
+  signedBy?: string;
+  signatureAt?: string;
   notes?: string;
 }
 
@@ -814,8 +1093,17 @@ export interface Tenant {
   name: string;
   slug: string;
   plan: TenantPlan;
-  /** Active industry vertical (drives catalog tabs + per-vertical field sets). */
-  vertical: VerticalKey;
+  /**
+   * The business type the workspace **is** (Phase C) — the `verticals` row whose
+   * categories are its catalog (`activeVertical()`).
+   *
+   * This is the only place the workspace's industry is recorded. The compiled
+   * registry's key (`VerticalKey`, used for the grid columns and statuses until C6)
+   * is **derived** from this row's slug (`DataService.vertical`), so there is no
+   * second setting to keep in step — and no "Industry / Vertical" switch on
+   * Admin → Feature Modules, which is what `Tenant.vertical` used to be.
+   */
+  verticalId?: string;
   /** Licence flags: a module absent from this list is enabled (default on). */
   disabledModules: ModuleKey[];
   createdAt: string;
@@ -1000,6 +1288,128 @@ export interface InvoiceTotals {
   fuel: number;
   tax: number;
   total: number;
+}
+
+/* --------------------- form schemas (B2, see PLAN-B) ------------------ */
+
+/**
+ * The kind a `FormField` is — what `<ims-dynamic-form>` renders and what the API
+ * validates. `measurement` is a number that carries a `unit` (a tread depth, a
+ * pressure); `multiselect` is an array drawn from `options`.
+ */
+export type FormFieldKind =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'integer'
+  | 'boolean'
+  | 'date'
+  | 'select'
+  | 'multiselect'
+  | 'measurement';
+
+export const FORM_FIELD_KINDS: FormFieldKind[] = [
+  'text',
+  'textarea',
+  'number',
+  'integer',
+  'boolean',
+  'date',
+  'select',
+  'multiselect',
+  'measurement',
+];
+
+/** What a form schema can be attached to. */
+export type FormScope = 'item' | 'inspection' | 'receipt-line' | 'stock-level';
+
+export const FORM_SCOPES: FormScope[] = ['item', 'inspection', 'receipt-line', 'stock-level'];
+
+/**
+ * One field a schema declares. The `key` is resolved against a record's
+ * `attributes` jsonb — the schema is the contract, the jsonb is the payload.
+ * `showIf` is display-only (it never becomes a query, by the same rule that keeps
+ * predicates on columns).
+ */
+export interface FormField {
+  key: string;
+  label: string;
+  kind: FormFieldKind;
+  /** The editor's section heading (fields are grouped by it). */
+  group?: string;
+  /** Helper text rendered beneath the input. */
+  help?: string;
+  required?: boolean;
+  /** The choices `select` / `multiselect` offer. */
+  options?: string[];
+  /** The suffix a number / measurement carries ("hrs", "mm", "°C"). */
+  unit?: string;
+  min?: number;
+  max?: number;
+  maxLength?: number;
+  pattern?: string;
+  defaultValue?: string | number | boolean;
+  /** Render only while `attributes[key]` equals `equals`. */
+  showIf?: { key: string; equals: string | number | boolean };
+}
+
+/**
+ * The keys a field list states **more than once** (Phase C) — empty when each key
+ * names one field.
+ *
+ * A key identifies a field **within its own list**: two categories may both
+ * declare `rate`, but one list may not declare it twice, because a record's
+ * `attributes` has room for one value per key and a schema with two definitions of
+ * one key is a contract that contradicts itself. A *blank* key is not a duplicate
+ * (that is "not yet named"; the editor asks for a name separately) — two fields
+ * waiting for a key are two unnamed fields, not one field twice.
+ */
+export function duplicateFieldKeys(fields: FormField[] | undefined): string[] {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const f of fields ?? []) {
+    const key = (f.key ?? '').trim();
+    if (!key) continue;
+    if (seen.has(key)) dupes.add(key);
+    seen.add(key);
+  }
+  return [...dupes];
+}
+
+/** The same list with repeated keys dropped — the **first** definition wins. */
+export function uniqueFields(fields: FormField[] | undefined): FormField[] {
+  const seen = new Set<string>();
+  return (fields ?? []).filter((f) => {
+    const key = (f.key ?? '').trim();
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * A tenant-owned definition of the extra fields a record type captures.
+ *
+ * A vertical's *default* templates are seeded (`DataService.seedFormSchemas()`),
+ * but a schema row is tenant data: it is audited like `categories` and
+ * `location_types`, and a workspace may clone and edit its own. The values a
+ * schema captures live in the record's `attributes` jsonb. **A column before a
+ * key**: a fact that is filtered, sorted, joined or read by a guard is promoted
+ * to a real column, never left to a `jsonb` predicate (see `docs/PLAN-B.md` D1).
+ */
+export interface FormSchema extends AuditFields {
+  id: string;
+  name: string;
+  scope: FormScope;
+  /** The catalog type it shapes (an item schema); `'*'`/absent = any type. */
+  type?: CatalogType | '*';
+  /** The vertical it was seeded from — provenance, not a runtime gate. */
+  seededFrom?: VerticalKey;
+  active: boolean;
+  /** Bumped when a field is added or changed, so an old record can name its schema. */
+  version: number;
+  fields: FormField[];
 }
 
 /* --------------------------- badge helpers ---------------------------- */
