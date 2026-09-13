@@ -170,6 +170,10 @@ export class SchedulerComponent implements OnDestroy {
   private readonly onMovePointer = (ev: PointerEvent) => this.onMoveMove(ev);
   private readonly endMovePointer = () => this.onMoveUp();
 
+  /** The same for a resize drag: `detachResize()` takes both off by name (P4c). */
+  private readonly onResizePointer = (ev: PointerEvent) => this.onResizeMove(ev);
+  private readonly endResizePointer = () => this.detachResize();
+
   /** "New Order" modal (prototype `orderModal` → `openOrderModal`). */
   orderOpen = false;
   orderForm = this.emptyOrder();
@@ -1333,10 +1337,8 @@ export class SchedulerComponent implements OnDestroy {
     const track = (e.target as Element).closest('.tl-row-track') as HTMLElement | null;
     if (!track) return;
     this.resizing = { orderId: bar.orderId, liId: bar.liId, edge, track };
-    const move = (ev: PointerEvent) => this.onResizeMove(ev);
-    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); this.resizing = null; };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    window.addEventListener('pointermove', this.onResizePointer);
+    window.addEventListener('pointerup', this.endResizePointer);
   }
 
   private onResizeMove(ev: PointerEvent): void {
@@ -1392,7 +1394,17 @@ export class SchedulerComponent implements OnDestroy {
     this.cdr.detectChanges();
   }
 
-  detachResize(): void { this.resizing = null; }
+  /**
+   * Remove a live resize drag's window listeners and clear its state — both the
+   * normal end (`endResizePointer`) and the interrupted one (`ngOnDestroy`), so a page
+   * left mid-resize cannot keep a `pointermove`/`pointerup` on `window`. Idempotent;
+   * the whole-block drag has the same shape in `detachMove()`.
+   */
+  detachResize(): void {
+    window.removeEventListener('pointermove', this.onResizePointer);
+    window.removeEventListener('pointerup', this.endResizePointer);
+    this.resizing = null;
+  }
 
   /* ------------------------- move a whole block -------------------------- */
 
