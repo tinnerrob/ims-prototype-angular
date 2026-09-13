@@ -685,6 +685,24 @@ point at each other.
 **Recommendation:** (b) if a dev dependency is acceptable — it buys visual verification for the CSS and
 OnPush questions too; (c) if not. Both recorded, neither started: adding a browser dependency is a
 project decision, not a refactor step.
+**Option (b), done — the user chose it:** `playwright` + `@playwright/test` are dev dependencies and
+`npm run e2e` (`scripts/e2e-smoke.mjs`, with `scripts/serve-dist.mjs` serving the build and falling back
+to `index.html` for deep links, no other dependency) drives the **built** app in headless Chromium:
+
+- **every route renders**: `/`, `/assets`, `/inspections`, `/purchasing`, `/scheduler`,
+  `/admin/verticals` — each asserted by its own title text with a clean console. Because all six are
+  lazy `loadComponent` pages, this is also the first *empirical* check of P7's chunk boundaries: a broken
+  one shows up here as a blank page or a chunk error instead of a silent regression.
+- **the P8 pilot, through the real UI**: it opens the category editor from the categories card (the modal
+  title is asserted, so a wrong modal fails loudly), adds a field, types a key and label, moves the row,
+  removes it, and checks that the **Save button** flips — which is the *parent* re-rendering from a child
+  event, the thing a wrong `OnPush` breaks. So the pilot is now verified, not argued.
+- **screenshots** of each page land in `dist/e2e/` — the baseline P5b would diff against.
+**Two failures on the way, both the test's own (recorded because they are the usual traps):** the grid's
+empty state renders a placeholder `<tr>`, so counting rows cannot detect an add (count key inputs
+instead); and Angular updates the DOM a *microtask after* the click Playwright dispatches, so a bare
+`count()` reads the old DOM — every DOM assertion now settles through a retry helper. The app was right
+both times; that is exactly the kind of thing this check exists to make visible.
 **Verified:** `check:store` **209 ok / 0 FAIL**; README, HANDOFF, PLAN.md, PLAN-B.md, this log's recipe
 and its baseline row all updated to the new count. The log's per-phase entries keep the numbers they
 were written with, because those record what the gates read *then*.
@@ -766,7 +784,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 6/2 | 2026-09-12 | **P6/2** — Seeds → `core/seed/` | 24 pure data factories into 5 modules + the 8 shared fixture facts + `pad3` → `format.ts`; the 6 store-coupled seeders stay; generated mechanically and policed by a snapshot diff | `LOW/MED` | **done** — store **5,179 → 4,333** lines, `core/seed/` 915; **whole seeded store byte-identical** (92,351 B, `cmp` clean); check:store 210/0; also fixed a latent `check-store.sh` import-rewrite bug that broke on nested paths |
 | 7 | 2026-09-12 | **P7** — Routing & bundle shape | 13 feature pages + 3 admin children → `loadComponent`; dashboard and admin shell stay eager; README/HANDOFF budget + route docs updated | `HIGH` | **done** — initial **830 → 478 kB** (−42%), `main` 740 → 114 kB, build warning gone, 0 pre-flight blockers (no harness reads routes, no cross-feature imports); gates green at **202 ok / 0 FAIL** |
 | 8 | 2026-09-12 | **P8** — Change-detection study + pilot | Measured which templates read the store inline (18 do, up to 20 refs; 4 widgets do not); documented the mutable-singleton mechanism; applied the identified pilot — `OnPush` on `field-editor` only | `HIGH` | **done** — no sweep (a stale view is invisible to every gate here); the one pilot is in with a two-minute confirmation checklist recorded; gates green at **210 ok / 0 FAIL** |
-| 9 | 2026-09-12 | **P9** — Component/template test gap | Added `check25.mjs` (7 checks) over the previously untested pure helpers; registered it; updated the count everywhere | `HIGH` | **done** — `check:store` **209 ok / 0 FAIL in 25 harnesses**; two contract facts pinned by the new checks; template/visual verification still blocked (no browser) with three options recorded |
+| 9 | 2026-09-12 | **P9** — Rendering checks | `check25.mjs` (8 checks) over the untested pure helpers; then the browser option: Playwright dev-dep, `scripts/serve-dist.mjs` + `scripts/e2e-smoke.mjs` (`npm run e2e`) driving the built app | `HIGH` | **done** — `check:store` **210 ok / 0 FAIL**; e2e green (6 lazy routes render with a clean console + the field-editor grid exercised through the UI, screenshots to `dist/e2e/`); the P8 pilot is now empirically verified |
 
 ### Findings ledger (evidence for the phases above)
 
@@ -796,7 +814,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 15 dead declarations in `styles.scss` | Each with its killer line, incl. the three `--sidebar-*` tokens and `.sidebar`'s translucent glass `background` | **P5c ✔** — 12 deleted (map-verified identical), 3 kept: grouped rules where the property is live for sibling selectors |
 | Unread custom properties | 13 declared but never read in `src/`; 2 (`--teal-soft`, `--pink-soft`) stale leftovers with a false comment, 11 scale/palette steps | **P5b ✔** — 2 deleted + comment removed; 11 kept on purpose and listed |
 | Stylesheet changes without a browser | No way to prove a `styles.scss` edit neutral | **P5b ✔** — `scripts/css-equivalence.js` (`npm run css:equiv`) diffs the winning value per selector between two builds |
-| No unit tests | 0 `*.spec.ts` | **P9 ✔** (partly) — `check25` covers the pure helpers (209 checks in 25 harnesses); templates/visuals still need a browser: options (a) Karma+browser, (b) Playwright smoke flows, (c) more pure-function harnesses |
+| No unit tests | 0 `*.spec.ts` | **P9 ✔** — `check25` covers the pure helpers (210 checks in 25 harnesses) and `npm run e2e` renders the built app headless (6 lazy routes, clean console, the field-editor grid, screenshots) |
 | No `OnPush` | 0 of 27 components | **P8 ✔** — 18 templates read the mutable store inline, so no sweep; the one pilot (`field-editor`) is applied and needs a two-minute browser confirmation; the real fix is signals in the store |
 | Eager routes | 0 `loadComponent`; initial bundle ~830 kB vs 500 kB warn budget | **P7 ✔** — every feature page is its own chunk: 478 kB, warning gone |
 | Store & component size | `data.service.ts` was 5,185 lines / 353 methods / 1,595 external call sites; `scheduler.component.ts` 1,591 lines / 105 methods | **P6 ✔** measured → **P6a/P6/2 ✔ done**: `format` → `core/format.ts` and the fixture → `core/seed/`; the store is now **4,333** lines with 915 in `core/seed/`. Component extraction still filed for P9. |

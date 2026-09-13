@@ -11,6 +11,8 @@
     "lint:styles": "node scripts/audit-styles.js",
     "lint:dead": "node scripts/audit-exports.js",
     "css:equiv": "node scripts/css-equivalence.js",
+    "serve:dist": "node scripts/serve-dist.mjs",
+    "e2e": "node scripts/e2e-smoke.mjs",
     "check:store": "bash scripts/check-store.sh"
   },
   "private": true,
@@ -30,6 +32,7 @@
     "@angular-devkit/build-angular": "^19.2.10",
     "@angular/cli": "^19.2.10",
     "@angular/compiler-cli": "^19.2.0",
+    "@playwright/test": "^1.63.0",
     "@types/jasmine": "~5.1.0",
     "jasmine-core": "~5.6.0",
     "karma": "~6.4.0",
@@ -37,6 +40,7 @@
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
+    "playwright": "^1.63.0",
     "typescript": "~5.7.2"
   }
 }

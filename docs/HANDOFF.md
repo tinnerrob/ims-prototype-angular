@@ -40,6 +40,11 @@ A **stylesheet change is proved neutral** rather than eyeballed: `npm run css:eq
 takes two built CSS files and prints every selector whose winning value for a property
 changed (workflow in `angular-refactor-log.md` → P5b).
 
+**Rendering is checked too** (P9): `npm run build && npm run e2e` drives the built app in
+headless Chromium — every route, a clean console, the category editor's field grid, and
+screenshots into `dist/e2e/`. `playwright` is a dev dependency; the browsers come from
+`npx playwright install chromium`.
+
 Build budgets (`angular.json`): the initial bundle warns at 500 kB and now sits at **~478 kB**
 (the route split made every feature page its own chunk), so that warning is again a real signal
 rather than the expected noise it was at ~830 kB; the `anyComponentStyle` warn threshold is **6 kB**

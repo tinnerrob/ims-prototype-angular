@@ -27,6 +27,7 @@ npm run lint:ctor     # class-field initializer order
 npm run lint:styles   # unused / re-set stylesheet rules
 npm run lint:dead     # imported & exported names nothing references
 npm run css:equiv     # prove a styles.scss change neutral (two built CSS files)
+npm run e2e           # render the built app headless: routes, console errors, screenshots
 ```
 
 ## Structure
