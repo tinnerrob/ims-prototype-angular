@@ -447,4 +447,3 @@ export function conflicts(data: ScheduleReader, orders: Order[], st: ViewState):
       a.orderId.localeCompare(b.orderId),
   );
 }
-

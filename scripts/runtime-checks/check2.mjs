@@ -123,4 +123,4 @@ check('a deleted row stops being tracked', () => {
   assert.equal(d.getItem('part', item.id), undefined);
 });
 
-console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\nall ${n} checks passed`);
+console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck2: ${n} checks`);

@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 
 import { DataService } from '../../core/data.service';
-import { Item, statusClass } from '../../core/models';
+import { Item, statusBadge, statusClass } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { GEO_BOUNDS, TrackedPosition, TelemetryService } from '../../core/telemetry.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
@@ -92,9 +92,8 @@ export class TelemetryComponent {
       : `${this.rows().length} of ${total} serialized units`;
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  /** Status chips render the one shared rule (`statusBadge`). */
+  readonly badge = statusBadge;
 
   /** Battery bar colour band (prototype `battCls`). */
   batteryColor(item: Item): string {

@@ -219,5 +219,3 @@ check('typeRank() keeps the canonical order, and ranks anything unknown last', (
 });
 
 console.log(`\ncheck26: ${n} checks`);
-
-

@@ -320,4 +320,3 @@ check('a stock report reads the table directly', () => {
 });
 
 console.log(`\ncheck7: ${n} checks`);
-

@@ -182,4 +182,4 @@ check('both blockers come from the one guard the grid and the button share', () 
   assert.equal(d.getItem('serialized', 'BL-119').locationId, 'LOC-03', 'stock stays put');
 });
 
-console.log(`\n${n} checks, ${process.exitCode ? 'FAILURES' : 'all green'}`);
+console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck4: ${n} checks`);

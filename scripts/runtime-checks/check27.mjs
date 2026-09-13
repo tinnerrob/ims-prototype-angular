@@ -214,5 +214,3 @@ check("day-view drags snap to a quarter hour, inside the order's own window", ()
 });
 
 console.log(`\ncheck27: ${n} checks`);
-
-

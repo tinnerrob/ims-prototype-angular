@@ -328,4 +328,4 @@ check('a supplier created in-session is a party row with the supplier role', () 
   assert.equal(d.supplierParties().some((p) => p.id === rec.id), false, 'and it can go again');
 });
 
-console.log(`\n${n} checks, ${process.exitCode ? 'FAILURES' : 'all green'}`);
+console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck5: ${n} checks`);

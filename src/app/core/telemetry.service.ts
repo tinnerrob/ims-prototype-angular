@@ -178,4 +178,3 @@ export class TelemetryService {
     return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
   }
 }
-

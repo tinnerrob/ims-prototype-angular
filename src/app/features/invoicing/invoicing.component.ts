@@ -191,7 +191,9 @@ export class InvoicingComponent {
     a.href = url;
     a.download = 'invoice-details.csv';
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoke on the next tick: releasing the URL in the same task as the click can
+    // cancel the download (Safari), and the blob is tiny anyway.
+    setTimeout(() => URL.revokeObjectURL(url));
   }
 
   /* ------------------------------- printing ----------------------------- */

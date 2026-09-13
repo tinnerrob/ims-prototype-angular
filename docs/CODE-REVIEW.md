@@ -445,5 +445,3 @@ npm run e2e          # expect "all checks passed", empty dist/e2e/console-errors
    *code* names left (their UI labels already say "Supplier"). Renaming them means a
    `models.ts` + seed + `check6.mjs` + `DATA-MODEL.md` sweep and a **persistence schema
    bump** (the stored snapshot reseeds on a version change). **Awaiting a go-ahead.**
-
-

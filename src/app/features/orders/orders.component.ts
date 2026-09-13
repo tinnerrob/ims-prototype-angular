@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { Order, ORDER_STATUS_LABEL, OrderLine, Party, statusClass } from '../../core/models';
+import { Order, ORDER_STATUS_LABEL, OrderLine, Party, statusBadge } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { PrintMenuComponent } from '../../shared/print/print-menu.component';
 import { PrintMode, PrintService } from '../../shared/print/print.service';
@@ -117,9 +117,8 @@ export class OrdersComponent {
     return this.orderMatches().filter((o) => o.status === this.filter);
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  /** Status chips render the one shared rule (`statusBadge`). */
+  readonly badge = statusBadge;
 
   /* ------------------------------ customers ----------------------------- */
 

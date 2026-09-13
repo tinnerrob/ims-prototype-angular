@@ -37,4 +37,3 @@ export class ModulesService {
     this.data.setTenantModule(key, on);
   }
 }
-

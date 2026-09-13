@@ -293,4 +293,3 @@ export function verticalMetaFor(key: string | null | undefined): VerticalMetadat
 export function tabMetaFor(meta: VerticalMetadata, type: CatalogType): VerticalTabMeta | undefined {
   return meta.tabs.find((t) => t.key === type);
 }
-

@@ -2,7 +2,7 @@ import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 
 import { DataService } from '../../core/data.service';
-import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusClass } from '../../core/models';
+import { Dispatch, DISPATCH_STATUSES, DispatchStatus, statusBadge, statusClass } from '../../core/models';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
 import { ModalDismissDirective } from '../../shared/modal-dismiss/modal-dismiss.directive';
 import { PrintMenuComponent } from '../../shared/print/print-menu.component';
@@ -122,9 +122,8 @@ export class LogisticsComponent {
     return `${o.siteLat.toFixed(4)}, ${o.siteLng.toFixed(4)}`;
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  /** Status chips render the one shared rule (`statusBadge`). */
+  readonly badge = statusBadge;
 
   driverValue(d: Dispatch): string {
     return this.draft[d.id]?.driverId ?? d.driverId ?? '';

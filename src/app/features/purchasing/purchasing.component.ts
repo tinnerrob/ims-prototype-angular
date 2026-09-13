@@ -24,7 +24,7 @@ import {
   PurchaseOrderStatus,
   Receipt,
   isUnitStock,
-  statusClass,
+  statusBadge,
 } from '../../core/models';
 import { PageSearchService } from '../../core/page-search.service';
 import { PrintMenuComponent } from '../../shared/print/print-menu.component';
@@ -220,9 +220,8 @@ export class PurchasingComponent {
   }
 
   /** Shared badge class for a status string (PO rows derive their own). */
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  /** Status chips render the one shared rule (`statusBadge`). */
+  readonly badge = statusBadge;
 
   /* --------------------------- list period filter ------------------------ */
 
@@ -921,4 +920,3 @@ export class PurchasingComponent {
     ]);
   }
 }
-

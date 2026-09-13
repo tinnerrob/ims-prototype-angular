@@ -351,4 +351,3 @@ check('the statuses offered per type match ITEM_STATUSES', () => {
 });
 
 console.log(`\ncheck9: ${n} checks`);
-

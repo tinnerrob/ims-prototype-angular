@@ -399,7 +399,7 @@ hand-roll `localStorage` and assert on the store's own output:
   levels with it, the shelves surviving a reload, and the table read directly as
   a report.
 
-- `check8.mjs` — **A7, 9 checks:** every vertical has an entry (each with a label,
+- `check8.mjs` — **A7, 10 checks:** every vertical has an entry (each with a label,
   a noun, tabs and a default tab it actually carries) and an unknown key falling
   back to the default catalog; every tab naming a real `CatalogType` once, with a
   label, an icon, an "add" wording, columns and a default status/count the type's

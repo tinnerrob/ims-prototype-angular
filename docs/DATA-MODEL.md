@@ -1492,4 +1492,3 @@ each is an increment waiting for its turn:
 - **Multi-tenant membership.** `users.tenant_id` is a single FK: a person belongs
   to one workspace. Contractors who work across two workspaces need a membership
   table, and the session is where that shows up first.
-

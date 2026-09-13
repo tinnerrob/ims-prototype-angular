@@ -923,4 +923,3 @@ export class TimesheetComponent implements OnDestroy {
     return Math.round(n * 100) / 100;
   }
 }
-

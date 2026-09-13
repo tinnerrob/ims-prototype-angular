@@ -8,6 +8,9 @@ changes.** The `DataService` seam stays untouched.
 Document → Execute → Verify, the smallest diff that resolves each finding, gate suite
 green at the end.
 
+> **Second pass:** a whole-repo follow-up — every component, the scripts, the
+> verification tooling and the docs — is in `docs/CLEANUP-REVIEW-2.md`.
+
 ---
 
 ## 0. How this was audited
@@ -147,5 +150,3 @@ the labels are worded from, and that aligning an already-aligned cursor is idemp
 | `DataService` / `styles.scss` size | structural, high-blast-radius; a cleanup pass is the wrong vehicle |
 | `tip-format.ts`'s `String(m).padStart(2, '0')` | a two-digit minutes field inside the am/pm formatter — not the same primitive as `pad2`, and reaching into `core/` from the tip formatter for it would be coupling for its own sake |
 | Template-bound filters/lookups | see the perf notes in §1 — at the current collection sizes a memo layer would add state to save microseconds |
-
-

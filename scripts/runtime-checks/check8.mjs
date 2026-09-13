@@ -246,4 +246,3 @@ check('the verticals are distinct, and more than one shape exists', () => {
 });
 
 console.log(`\ncheck8: ${n} checks`);
-

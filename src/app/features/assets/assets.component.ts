@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { DataService } from '../../core/data.service';
 import { FormError, FormsService } from '../../core/forms.service';
 import { PageSearchService } from '../../core/page-search.service';
-import { CatalogType, Category, FormSchema, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusClass } from '../../core/models';
+import { CatalogType, Category, FormSchema, ITEM_STATUSES, Item, MOVEMENT_KIND_LABEL, isCountedStock, needsReorder, statusBadge, statusClass } from '../../core/models';
 import { ColumnMeta, VerticalTabMeta } from '../../core/vertical-metadata';
 import { DynamicFormComponent } from '../../shared/dynamic-form/dynamic-form.component';
 import { snapshotForm, formChanged } from '../../shared/confirm/unsaved-changes';
@@ -341,8 +341,9 @@ export class AssetsComponent {
     return key === 'status';
   }
 
+  /** Status chips render the one shared rule (`statusBadge`). */
   badge(item: Item): string {
-    return 'badge-status st-' + statusClass(item.status);
+    return statusBadge(item.status);
   }
 
   /** Low-stock highlight for consumables / parts (prototype reorder warning). */
@@ -764,4 +765,3 @@ export class AssetsComponent {
     ]);
   }
 }
-

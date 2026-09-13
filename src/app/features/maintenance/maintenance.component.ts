@@ -15,6 +15,7 @@ import {
 import { PageSearchService } from '../../core/page-search.service';
 import {
   SERVICE_TYPES,
+  statusBadge,
   statusClass,
   WorkOrder,
   WORK_ORDER_STATUSES,
@@ -195,9 +196,8 @@ export class MaintenanceComponent {
     return `${p.refId} ×${p.qty}`;
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  /** Status chips render the one shared rule (`statusBadge`). */
+  readonly badge = statusBadge;
 
   openForm(): void {
     this.form = this.emptyForm();

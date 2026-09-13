@@ -144,7 +144,8 @@ export class FormsService {
         }
         case 'multiselect': {
           const arr = Array.isArray(v) ? v.map(String) : [];
-          const bad = f.options ? arr.filter((x) => !f.options!.includes(x)) : [];
+          const options = f.options;
+          const bad = options ? arr.filter((x) => !options.includes(x)) : [];
           if (bad.length) errs.push({ key: f.key, message: `${f.label} has unknown choice(s): ${bad.join(', ')}` });
           break;
         }

@@ -46,4 +46,3 @@ export const DASHBOARD_WIDGETS: DashboardWidget[] = [
   { key: 'fleet-status', label: 'Fleet Status', desc: 'Serialized units by status.', icon: 'bi-pie-chart', span: 4 },
   { key: 'bulk-out', label: 'Assets (Bulk) Out', desc: 'Bulk resources and how much of each is out.', icon: 'bi-boxes', span: 12 },
 ];
-

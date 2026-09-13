@@ -751,4 +751,3 @@ Named so the gaps are decisions, not omissions — the same closing section
 
 **Status when written:** Phase A complete through A11.2 (`0240938`), 140 runtime
 checks green, no increment here started. Pick the phase up at B1.
-

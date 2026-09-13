@@ -1018,7 +1018,7 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | Harness runner import rewrite | `check-store.sh` only ever appended `.js` to `./x` specifiers (pattern `(\./[A-Za-z._-]+)`), so a nested core directory broke the whole suite | **P6/2 ✔** — pattern is now `(\.[^']+)` and the fix-up recurses over `find` |
 | The `format` section | 6 pure methods, 0 inbound cross-section calls, 187 call sites outside the store | **P6a ✔** — moved to `core/format.ts` behind six delegates; check25 (8 checks) drives the module and pins the delegate agreement |
 | Restructure (overrides into one layer) | Reordering rules *between* selectors can flip an equal-specificity winner for one element — invisible to a per-selector map | **⛔ needs a DOM** (browser or per-page screenshot diff); documented, not attempted |
-| Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | open — left for the next doc touch rather than broadening P1 |
+| Per-harness count drift | `docs/PLAN.md` documented `check8.mjs` as 9 checks; measured **10** `ok` lines (the only per-harness figure that disagrees today — all others match) | **✔ closed** — corrected to 10 in `docs/PLAN.md`, and `check.mjs`/`check2`–`check5` now print the same `checkN: N checks` summary as the rest, so the drift is machine-detectable. See `docs/CLEANUP-REVIEW-2.md` |
 | Harness subjects undocumented | `check14`–`check24` (Phase B/C, 61 checks) had no entry in the verification recipe at all | P1 ✔ (block appended with measured counts) |
 
 ### Approvals / decisions
@@ -1033,5 +1033,3 @@ acceptable output for a "dead declaration" change is that changed declaration an
 | 2026-09-12 | User approved continuing through **P5b, P6, P7, P8, P9** | chat |
 | 2026-09-13 | User asked for the two calendar printouts to be **grouped reports** — the timesheet by employee (then order), the schedule by order (then asset) — each carrying a total for its **primary** (Phase G) | chat |
 | 2026-09-13 | User asked for **two workspace-wide buttons** — load all the sample data, and remove *all* of it (the existing "Start clean" keeps partners/locations/settings, so it does not count) (Phase H) | chat |
-
-

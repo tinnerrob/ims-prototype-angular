@@ -1464,13 +1464,13 @@ export function statusClass(status: string): string {
   return STATUS_CLS[status] ?? 'available';
 }
 
-
-
-
-
-
-
-
-
-
-
+/**
+ * The status chip a table cell renders: the shared `badge-status st-*` pair.
+ *
+ * Eight components drew this chip from their own `badge()` method, with the same
+ * body and the same wording — one definition keeps them from drifting, and the
+ * `badge-status` prefix is what makes an `st-*` value look like a chip at all.
+ */
+export function statusBadge(status: string): string {
+  return 'badge-status st-' + statusClass(status);
+}

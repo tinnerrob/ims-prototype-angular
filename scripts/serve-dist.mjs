@@ -29,14 +29,21 @@ const TYPES = {
 
 export function serve(port = PORT) {
   const server = createServer((req, res) => {
-    const url = (req.url ?? '/').split('?')[0];
-    const safe = normalize(decodeURIComponent(url)).replace(/^(\.\.[/\\])+/, '');
-    let file = join(ROOT, safe);
-    if (safe.endsWith('/') || (existsSync(file) && statSync(file).isDirectory())) file = join(file, 'index.html');
-    if (!existsSync(file)) file = join(ROOT, 'index.html');
-    const body = readFileSync(file);
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
-    res.end(body);
+    try {
+      const url = (req.url ?? '/').split('?')[0];
+      const safe = normalize(decodeURIComponent(url)).replace(/^(\.\.[/\\])+/, '');
+      let file = join(ROOT, safe);
+      if (safe.endsWith('/') || (existsSync(file) && statSync(file).isDirectory())) file = join(file, 'index.html');
+      if (!existsSync(file)) file = join(ROOT, 'index.html');
+      const body = readFileSync(file);
+      res.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream' });
+      res.end(body);
+    } catch (err) {
+      // A malformed escape (`/%`) or a file that vanished mid-request must not take
+      // the server down — the smoke test would lose the only host it has.
+      res.writeHead(err instanceof URIError ? 400 : 500, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(err instanceof Error ? err.message : String(err));
+    }
   });
   return new Promise((resolve) => server.listen(port, () => resolve(server)));
 }

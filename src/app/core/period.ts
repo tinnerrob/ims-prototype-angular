@@ -182,4 +182,3 @@ export function dayOffset(a: string, b: string): number {
 export function addDays(iso: string, days: number): string {
   return new Date(Date.parse(iso + 'T00:00:00') + days * 86400000).toISOString().slice(0, 10);
 }
-

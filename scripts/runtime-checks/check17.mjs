@@ -242,4 +242,3 @@ check('return-to-vendor is a stock-out with a reason', () => {
 
 
 console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck17: ${n} checks`);
-

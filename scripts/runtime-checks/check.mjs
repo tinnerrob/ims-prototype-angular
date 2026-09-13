@@ -121,3 +121,5 @@ check('a schema bump reseeds and says so', () => {
   assert.equal(d3.reseeded, true, 'flagged, not silent');
   assert.equal(d3.listParties().length > 0, true, 'seed restored');
 });
+
+console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck: ${n} checks`);

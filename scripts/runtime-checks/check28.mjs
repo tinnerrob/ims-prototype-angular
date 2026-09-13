@@ -209,4 +209,3 @@ check('the per-type fields follow the pool tab', () => {
 });
 
 console.log(`\ncheck28: ${n} checks`);
-

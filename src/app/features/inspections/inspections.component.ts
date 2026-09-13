@@ -22,7 +22,7 @@ import {
   InspectionResult,
   INSPECTION_OUTCOMES,
   INSPECTION_SEVERITIES,
-  statusClass,
+  statusBadge,
 } from '../../core/models';
 import { FormsService } from '../../core/forms.service';
 import { EvidenceComponent } from '../../shared/evidence/evidence.component';
@@ -103,9 +103,7 @@ export class InspectionsComponent {
     return this.data.listInspections();
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  readonly badge = statusBadge;
 
   /* --------------------------- inspection log --------------------------- */
 

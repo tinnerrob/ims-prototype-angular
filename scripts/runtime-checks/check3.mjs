@@ -161,4 +161,4 @@ check('a level-tracked row ignores an edit that would move its stock', () => {
   assert.equal(d.getItem('kit', 'KT-003').qty, kitQty, 'and its qty is the levels sum');
 });
 
-console.log(`\n${n} checks, ${process.exitCode ? 'FAILURES' : 'all green'}`);
+console.log(process.exitCode ? '\nSOME CHECKS FAILED' : `\ncheck3: ${n} checks`);

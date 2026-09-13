@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { DashboardService } from '../../core/dashboard.service';
 import { DataService } from '../../core/data.service';
 import { ModulesService } from '../../core/modules.service';
-import { CatalogType, Order, statusClass } from '../../core/models';
+import { CatalogType, Order, statusBadge, statusClass } from '../../core/models';
 import { TelemetryService } from '../../core/telemetry.service';
 import { isInteractiveTarget, RecordViewComponent, ViewModel } from '../../shared/record-view/record-view.component';
 
@@ -86,9 +86,8 @@ export class DashboardComponent {
     return this.data.listItems('bulk');
   }
 
-  badge(status: string): string {
-    return 'badge-status st-' + statusClass(status);
-  }
+  /** Status chips render the one shared rule (`statusBadge`). */
+  readonly badge = statusBadge;
 
   /** Margin pill colour band (prototype: >=30 green, >=10 amber, else red). */
   marginBadge(margin: number): string {

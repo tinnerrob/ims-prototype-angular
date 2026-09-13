@@ -78,7 +78,8 @@ src/app/
 │   ├── modal-dismiss/   # ✕ / click-outside / dirty-guard for every modal
 │   ├── print/           # Printable documents (12 kinds) + the Print / Save-to-PDF menu — Phase B/F
 │   ├── record-view/     # Shared read-only record viewer (click a table row)
-│   └── tip/             # Tooltips
+│   ├── tip/             # Tooltips
+│   └── panel-position.ts # One placement rule for the anchored panels (tooltip + print menu)
 ├── app.component.*      # Shell: sidebar (inventory / movement / admin / module groups) + topbar + outlet
 ├── app.routes.ts        # Route map (feature routes + module-guarded ones)
 └── app.config.ts
