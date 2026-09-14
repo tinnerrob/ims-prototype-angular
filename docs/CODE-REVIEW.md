@@ -474,6 +474,30 @@ markup on Inspections makes the check fail with
 harnesses** · `lint:dead` 0/0 · `lint:ctor` OK · `css:equiv` as above · **e2e: all checks passed**,
 eleven of them the new per-route footer-alignment walk.
 
+### Phase K — the rail goes matte slate · `LOW` · status: **done (2026-09-13)**
+
+**The ask.** The sidebar should be a dark matte slate grey — `#1e293b`.
+
+**What changed.** `--sidebar-bg` `#1c2434` → **`#1e293b`** (slate-800), and the rail is now one
+flat fill: the two-stop `linear-gradient(--sidebar-bg → --sidebar-bg-2)` and the
+`1px 0 0 rgba(255,255,255,.035)` edge hairline are gone — that gloss *is* what "matte" removes.
+`--sidebar-bg-2` survives for the one place that still wants depth, the user-switcher popover
+(`.user-menu` is its only other consumer), retuned from `#151b28` to slate-900 `#0f172a` so both
+tones sit in one ramp. Three supporting nudges, each with a reason: `--sidebar-ink-dim`
+`#8695ad` → `#8b99b3` (the lighter fill costs a little text contrast — the dim tier was 5.12 and
+would have landed at ~4.65, so it keeps ~5.1), and the white-alpha overlays
+(`--sidebar-line` / `--sidebar-hover` / `--sidebar-icon-chip`) each up ~1 %, since white over a
+lighter slate reads weaker.
+
+**Verified:** build exit 0, **0 warnings** (502.86 kB) · `check:store` **294 ok / 0 FAIL in 33
+harnesses** · `lint:dead` 0/0 · `lint:ctor` OK · `lint:styles` unchanged (670 rules / 556
+selectors, no new layering) · **`lint:contrast` all 35 pairs ok** — the rail's own text is now
+`--sidebar-ink` **9.40**, `--sidebar-ink-strong` **14.63**, `--sidebar-ink-dim` **5.09** (all AA) ·
+**e2e: all checks passed**, and the shell-pixels check was rewritten rather than deleted: it used
+to assert the gradient and the old tokens, and now asserts a flat `rgb(30, 41, 59)` rail with
+`background-image: none` and `--sidebar-bg: #1e293b` — so a future edit that reintroduces a
+gradient fails the smoke test. Screenshots regenerated under `dist/e2e/`.
+
 ---
 
 ## 5. Verification recipe (every phase)

@@ -2119,24 +2119,26 @@ a { color: var(--brand); }
      4. Detail         — tabular numerals, consistent focus rings, scrollbars.
    ========================================================================= */
 
-/* ---- 1. Sidebar: solid dark blue-grey ---------------------------------- */
+/* ---- 1. Sidebar: dark matte slate ------------------------------------- */
 :root {
-  --sidebar-bg: #1c2434;                              /* solid, not rgba    */
-  --sidebar-bg-2: #151b28;                            /* deepens toward foot */
+  --sidebar-bg: #1e293b;                              /* slate-800: the rail */
+  --sidebar-bg-2: #0f172a;                            /* slate-900: popover depth */
   --sidebar-ink: #c6d0e0;
   --sidebar-ink-strong: #fff;
-  --sidebar-ink-dim: #8695ad;
-  --sidebar-line: rgba(255, 255, 255, .075);
-  --sidebar-hover: rgba(255, 255, 255, .055);
-  --sidebar-icon-chip: rgba(255, 255, 255, .06);
+  --sidebar-ink-dim: #8b99b3;                         /* +AA headroom on slate-800 */
+  --sidebar-line: rgba(255, 255, 255, .08);
+  --sidebar-hover: rgba(255, 255, 255, .06);
+  --sidebar-icon-chip: rgba(255, 255, 255, .07);
   --sidebar-edge: rgba(8, 12, 20, .55);
 }
 
 .sidebar {
-  /* Flat two-stop ramp instead of the translucent glass + indigo radial. */
-  background: linear-gradient(180deg, var(--sidebar-bg), var(--sidebar-bg-2));
+  /* One matte slate fill: no gradient, no sheen, no white hairline along the edge.
+     `--sidebar-bg-2` survives as the popover's depth tone (`.user-menu`), not as the
+     rail's foot. */
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--sidebar-edge);
-  box-shadow: 1px 0 0 rgba(255, 255, 255, .035), 12px 0 32px -24px var(--sidebar-edge);
+  box-shadow: 12px 0 32px -24px var(--sidebar-edge);
 }
 /* The prototype's glossy ::after sheen fights a solid panel — drop it. */
 .sidebar::after { display: none; }

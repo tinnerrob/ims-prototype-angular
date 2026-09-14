@@ -104,8 +104,8 @@ try {
      Text renders with NO CSS at all, so a stale hashed bundle or a 404'd sheet
      gives a page that reads fine and *looks* broken (a bare, unstyled sidebar).
      Nothing above would catch that, so this asserts the shell's pixels: the rail
-     is painted with its gradient at its pinned width, the shell is a flex box,
-     the topbar is frosted, and the design tokens resolve. ---- */
+     is painted matte slate at its pinned width, the shell is a flex box, the
+     topbar is frosted, and the design tokens resolve. ---- */
   await page.goto('http://localhost:' + PORT + '/', { waitUntil: 'load' });
   await page.waitForSelector('.sidebar', { timeout: 5000 });
   const chrome = await page.evaluate(() => {
@@ -116,7 +116,8 @@ try {
     const root = getComputedStyle(document.documentElement);
     return {
       stylesheets: [...document.styleSheets].length,
-      sidebarBg: cs('.sidebar')?.backgroundImage ?? '',
+      sidebarBgImage: cs('.sidebar')?.backgroundImage ?? '',
+      sidebarBgColor: cs('.sidebar')?.backgroundColor ?? '',
       sidebarWidth: cs('.sidebar')?.width ?? '',
       topbarFilter: cs('.topbar')?.backdropFilter ?? '',
       shellDisplay: cs('.app-shell')?.display ?? '',
@@ -129,13 +130,12 @@ try {
   });
   check(
     'the stylesheet is applied (the sidebar rail is painted, not a bare list)',
-    chrome.sidebarBg.includes('linear-gradient') && chrome.sidebarWidth === '248px' && chrome.shellDisplay === 'flex',
+    chrome.sidebarBgColor === 'rgb(30, 41, 59)' && chrome.sidebarWidth === '248px' && chrome.shellDisplay === 'flex',
     JSON.stringify(chrome),
   );
   check(
-    'the rail resolves to its dark slate ramp (not the light page tint showing through)',
-    chrome.sidebarBg.includes('rgb(28, 36, 52)') && chrome.sidebarBg.includes('rgb(21, 27, 40)') &&
-      chrome.sidebarBgVar === '#1c2434' && chrome.sidebarBg2Var === '#151b28',
+    'the rail is one matte slate fill (no gradient, not the light page tint showing through)',
+    chrome.sidebarBgImage === 'none' && chrome.sidebarBgVar === '#1e293b' && chrome.sidebarBg2Var === '#0f172a',
     JSON.stringify(chrome),
   );
   check(
