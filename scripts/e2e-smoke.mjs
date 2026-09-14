@@ -507,6 +507,85 @@ try {
     });
     check('every table footer lines up with its table: ' + route, misaligned.length === 0, misaligned.join(' | '));
   }
+  /* ---- Phase L: the flat row actions. What it proves: a row action is a bare
+     glyph (no border, no fill, a 6px box), it stays at 35% until its own row is
+     pointed at (or reached by keyboard), and the glyph then takes the action's
+     colour — add green, edit blue, remove red. Measured, because "it looks flat"
+     is not a test. ---- */
+  await page.goto('http://localhost:' + PORT + '/admin/locations', { waitUntil: 'load' });
+  await page.waitForSelector('.action-btn', { timeout: 5000 });
+  const actionStyle = await page.locator('.action-btn').first().evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return {
+      border: cs.borderTopWidth,
+      radius: cs.borderRadius,
+      padding: cs.padding,
+      background: cs.backgroundColor,
+      colour: cs.color,
+      // a flex *item* is blockified, so `inline-flex` computes to `flex` here
+      display: cs.display,
+    };
+  });
+  check(
+    'a row action is a bare glyph (no border, no fill, 6px box)',
+    actionStyle.border === '0px' &&
+      actionStyle.radius === '6px' &&
+      actionStyle.padding === '6px' &&
+      actionStyle.background === 'rgba(0, 0, 0, 0)' &&
+      actionStyle.display === 'flex' &&
+      actionStyle.colour === 'rgb(122, 138, 161)',
+    JSON.stringify(actionStyle),
+  );
+
+  const firstRow = page.locator('table tbody tr').first();
+  const firstAction = firstRow.locator('.action-btn').first();
+  const quiet = await firstAction.evaluate((el) => getComputedStyle(el).opacity);
+  await firstRow.hover();
+  // opacity is transitioned (`--t-fast`), so wait for it to arrive
+  const lit = await settle(async () => Number(await firstAction.evaluate((el) => getComputedStyle(el).opacity)) === 1);
+  check('row actions stay quiet until their row is pointed at', Number(quiet) < 0.5 && lit, `${quiet} -> ${lit}`);
+
+  const hoverColour = async (icon, expected) => {
+    const btn = page.locator(`.action-btn:has(${icon})`).first();
+    await btn.hover();
+    // the colour is transitioned (`--t-fast`): wait for the *final* tone, not the
+    // first frame — a predicate that only asks "has it left the resting tone?" reads
+    // a mid-transition colour.
+    await settle(async () => (await btn.evaluate((el) => getComputedStyle(el).color)) === expected);
+    return btn.evaluate((el) => getComputedStyle(el).color);
+  };
+  const addColour = await hoverColour('.bi-plus-lg', 'rgb(22, 163, 74)');
+  const editColour = await hoverColour('.bi-pencil', 'rgb(37, 99, 235)');
+  const removeColour = await hoverColour('.bi-x-lg', 'rgb(220, 38, 38)');
+  check('an add action turns green on hover', addColour === 'rgb(22, 163, 74)', addColour);
+  check('an edit action turns blue on hover', editColour === 'rgb(37, 99, 235)', editColour);
+  check('a remove action turns red on hover', removeColour === 'rgb(220, 38, 38)', removeColour);
+
+  const actionGap = await page.evaluate(() => {
+    const cell = [...document.querySelectorAll('.action-cell')].find((c) => c.querySelectorAll('.action-btn').length > 1);
+    return cell ? getComputedStyle(cell).gap : null;
+  });
+  check('two actions in one cell sit 12px apart', actionGap === '12px', String(actionGap));
+
+  // The print menu renders its own button and keeps `.btn` for the reset, so its
+  // cascade is the one place `.action-btn` has to out-specify another class.
+  // (Maintenance's work-order rows are on the page's default view; Orders' print
+  // action sits behind its second tab.)
+  await page.goto('http://localhost:' + PORT + '/maintenance', { waitUntil: 'load' });
+  await page.waitForSelector('.action-btn.print-menu-btn', { timeout: 5000 });
+  const printAction = await page.locator('.action-btn.print-menu-btn').first().evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return { border: cs.borderTopWidth, padding: cs.padding, radius: cs.borderRadius, background: cs.backgroundColor };
+  });
+  check(
+    'the print action in a row is flat too (it keeps .btn for the reset)',
+    printAction.border === '0px' &&
+      printAction.padding === '6px' &&
+      printAction.radius === '6px' &&
+      printAction.background === 'rgba(0, 0, 0, 0)',
+    JSON.stringify(printAction),
+  );
+
   check('no console errors through the table footer', consoleErrors.length === 0, consoleErrors.join(' | '));
 
   writeFileSync(SHOTS + '/console-errors.txt', consoleErrors.join('\n'));

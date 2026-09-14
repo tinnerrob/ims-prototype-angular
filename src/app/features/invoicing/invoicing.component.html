@@ -76,17 +76,17 @@
               <td class="mono text-muted2">{{ data.fmtDate(inv.cycleStart) }} → {{ data.fmtDate(inv.cycleEnd) }}</td>
               <td class="num strong">{{ data.money(totals(inv).total) }}</td>
               <td><span [class]="badge(inv.status)">{{ label[inv.status] }}</span></td>
-              <td class="text-end text-nowrap">
-                <button class="btn btn-ims-outline btn-sm2" type="button" title="Details" (click)="openDetail(inv)">
+              <td class="action-cell text-nowrap">
+                <button class="action-btn" type="button" title="Details" (click)="openDetail(inv)">
                   <i class="bi bi-eye"></i>
                 </button>
                 <ims-print-menu label="Print invoice" (action)="printInvoice(inv, $event)"></ims-print-menu>
                 @if (inv.status !== 'paid') {
-                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Mark paid" (click)="markPaid(inv)">
+                  <button class="action-btn" type="button" title="Mark paid" (click)="markPaid(inv)">
                     <i class="bi bi-check2"></i>
                   </button>
                 }
-                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(inv)">
+                <button class="action-btn" type="button" title="Remove" (click)="remove(inv)">
                   <i class="bi bi-x-lg"></i>
                 </button>
               </td>

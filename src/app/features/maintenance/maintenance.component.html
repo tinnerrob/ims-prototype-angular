@@ -75,7 +75,7 @@
               <td class="num">{{ data.money(cost(w).laborCost) }}</td>
               <td class="num strong">{{ data.money(cost(w).total) }}</td>
               <td class="mono text-muted2">{{ data.fmtDate(w.date) }}</td>
-              <td class="text-end text-nowrap">
+              <td class="action-cell text-nowrap">
                 <span class="d-inline-flex align-items-center gap-1">
                   <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
                     @for (s of statuses; track s) {
@@ -83,7 +83,7 @@
                     }
                   </select>
                   <ims-print-menu label="Print work order" (action)="printWorkOrder(w, $event)"></ims-print-menu>
-                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(w)">
+                  <button class="action-btn" type="button" title="Remove" (click)="remove(w)">
                     <i class="bi bi-x-lg"></i>
                   </button>
                 </span>

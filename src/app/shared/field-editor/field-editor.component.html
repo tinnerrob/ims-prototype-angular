@@ -53,14 +53,14 @@
             }
           </td>
           <td><input class="form-control form-control-sm" [(ngModel)]="f.group" placeholder="optional" /></td>
-          <td class="text-end text-nowrap">
-            <button type="button" class="btn btn-ims-outline btn-sm2" title="Move up" (click)="move($index, -1)">
+          <td class="action-cell text-nowrap">
+            <button type="button" class="action-btn" title="Move up" (click)="move($index, -1)">
               <i class="bi bi-arrow-up"></i>
             </button>
-            <button type="button" class="btn btn-ims-outline btn-sm2" title="Move down" (click)="move($index, 1)">
+            <button type="button" class="action-btn" title="Move down" (click)="move($index, 1)">
               <i class="bi bi-arrow-down"></i>
             </button>
-            <button type="button" class="btn btn-ims-outline btn-sm2" title="Remove" (click)="remove($index)">
+            <button type="button" class="action-btn" title="Remove" (click)="remove($index)">
               <i class="bi bi-x-lg"></i>
             </button>
           </td>

@@ -34,6 +34,7 @@
   --slate-300: #cbd5e1;
   --slate-200: #e2e8f0;
   --slate-100: #f1f5f9;
+  --slate-50: #f8fafc;                                /* row-action hover wash */
   --accent-soft: #dbeafe;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
@@ -2071,28 +2072,77 @@ a { color: var(--brand); }
 }
 
 /* ------------------------------------------------------------------
-   Table row actions — one shared icon-button pattern across every page
-   (Admin → Locations is the reference): `btn btn-ims-outline btn-sm2`
-   + a single Bootstrap icon (bi-plus-lg / bi-pencil / bi-x-lg / bi-eye),
-   with the label carried by a `title` tooltip instead of button text.
-   No extra rules are needed — the shared `btn-sm2` styling already sizes
-   the icon button; this block only carries the disabled state.
+   Table row actions — flat icon buttons (Phase L).
+
+   A row action is a bare glyph: `.action-btn` (transparent, no border,
+   6px padding, 6px radius) resting in `--faint`, with a slate wash and the
+   action's own colour on hover. `.action-cell` is the cell that holds them
+   — flex, 12px apart, right-aligned like the `text-end` it replaces (the
+   mock's own `flex-start` would have moved every action column to the
+   left edge of its column).
+
+   The *kind* is read from the icon the button already carries (`:has()`),
+   so a new action on a new page picks up the right colour without a
+   modifier class — the same "declare it once" shape as the status chip.
+
+   Resting colour is `--faint` (#7a8aa1, 3.51:1 on a card), not the mock's
+   `--slate-400` (#94a3b8, 2.56:1): that is below the 3:1 UI threshold this
+   repo audits, and it is exactly the value Phase D moved `--faint` off.
    ------------------------------------------------------------------ */
-/* a disabled row action (e.g. a location type still in use) must not read
-   as clickable */
-.btn:disabled {
-  cursor: not-allowed;
+.action-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
-/* Icon colour follows the action, so a row reads at a glance without labels:
-   remove = red (--danger), view = blue (--accent), edit = green (--success).
-   Keyed off the icon class inside the shared icon-button pattern, so every
-   page (and any new one) picks it up without extra markup. */
-.btn-ims-outline.btn-sm2 > .bi-x-lg,
-.btn-ims-outline.btn-sm2 > .bi-trash,
-.btn-ims-outline.btn-sm2 > .bi-trash3 { color: var(--danger); }
-.btn-ims-outline.btn-sm2 > .bi-eye { color: var(--accent); }
-.btn-ims-outline.btn-sm2 > .bi-pencil { color: var(--success); }
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--t-fast), background-color var(--t-fast), opacity var(--t-fast);
+}
+.action-btn:hover { background: var(--slate-50); color: var(--ink); }
+
+/* The glyph takes the action's colour on hover. Keyed off the icon class, so
+   every page — and every new action — picks it up without extra markup. */
+.action-btn:has(.bi-plus-lg):hover { color: var(--success); }
+.action-btn:has(.bi-pencil):hover { color: var(--accent); }
+.action-btn:has(.bi-x-lg):hover,
+.action-btn:has(.bi-trash):hover,
+.action-btn:has(.bi-trash3):hover { color: var(--danger); }
+.action-btn:has(.bi-eye):hover { color: var(--accent); }
+
+/* The print menu renders its own button, which keeps `.btn` for the reset.
+   Flatten it too: no lift, no shadow, so it is indistinguishable from the
+   bare glyphs beside it. */
+.btn.action-btn:hover { background: var(--slate-50); color: var(--ink); }
+.btn.action-btn:active,
+.btn.action-btn:hover { transform: none; box-shadow: none; }
+
+/* a disabled row action (e.g. a location type still in use) must not read
+   as clickable */
+.btn:disabled,
+.action-btn:disabled { cursor: not-allowed; }
+
+/* Quiet rows: actions sit at 35% until their row is pointed at (hover) or
+   reached by keyboard (focus-within). Where hover does not exist — touch —
+   35% would be an unreachable target, so they stay at full strength. */
+.table tbody tr .action-btn { opacity: .35; }
+.table tbody tr:hover .action-btn,
+.table tbody tr:focus-within .action-btn { opacity: 1; }
+@media (hover: none) {
+  .table tbody tr .action-btn { opacity: 1; }
+}
 
 /* ------------------------------------------------------------------
    Clickable table rows — a row that opens the read-only record viewer

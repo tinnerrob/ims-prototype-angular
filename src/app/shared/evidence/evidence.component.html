@@ -12,8 +12,8 @@
         <td>{{ d.caption || '—' }}</td>
         <td class="num text-muted2">{{ sizeLabel(d) }}</td>
         @if (!readOnly) {
-          <td class="text-end text-nowrap">
-            <button type="button" class="btn btn-ims-outline btn-sm2" title="Remove" (click)="remove(d)">
+          <td class="action-cell text-nowrap">
+            <button type="button" class="action-btn" title="Remove" (click)="remove(d)">
               <i class="bi bi-x-lg"></i>
             </button>
           </td>

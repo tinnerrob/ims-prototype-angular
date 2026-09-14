@@ -33,11 +33,11 @@
           }
         </span>
         <span class="r d-flex align-items-center gap-1">
-          <button class="btn btn-ims-outline btn-sm2" type="button" title="Move up"
+          <button class="action-btn" type="button" title="Move up"
                   [disabled]="!canMove(w.key, -1)" (click)="move(w.key, -1)">
             <i class="bi bi-arrow-up"></i>
           </button>
-          <button class="btn btn-ims-outline btn-sm2" type="button" title="Move down"
+          <button class="action-btn" type="button" title="Move down"
                   [disabled]="!canMove(w.key, 1)" (click)="move(w.key, 1)">
             <i class="bi bi-arrow-down"></i>
           </button>

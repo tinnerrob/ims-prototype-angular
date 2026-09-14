@@ -498,6 +498,69 @@ to assert the gradient and the old tokens, and now asserts a flat `rgb(30, 41, 5
 `background-image: none` and `--sidebar-bg: #1e293b` — so a future edit that reintroduces a
 gradient fails the smoke test. Screenshots regenerated under `dist/e2e/`.
 
+### Phase L — flat row actions · `LOW/MED` · status: **done (2026-09-13)**
+
+**The ask.** The table action buttons (+ / pencil / remove / view / …) should match a supplied
+mock: transparent, borderless glyphs in a 6px box, a muted slate resting tone, a faint wash and a
+per-action colour on hover, and quiet-until-hovered rows.
+
+**What the app had.** Every row action was `btn btn-ims-outline btn-sm2` — a white pill with a 1px
+border — and only the *glyph* carried colour (green pencil, red remove, blue eye).
+
+**What changed.** Two new classes, and the markup to use them:
+
+- **`.action-cell`** — the cell: flex, `gap: 12px`, right-aligned. **`.action-btn`** — the glyph:
+  transparent, no border, 6px padding, 6px radius, resting in `--faint`, with a `--slate-50` wash
+  and a `color` transition on the app's own `--t-fast`.
+- **45 icon buttons across 14 templates** now carry it — the 24 action cells, the nested
+  line-item removes (PO lines, rate-card lines), the receiving desk's per-place remove and the
+  dashboard-widget arrows. **Labelled** row buttons ("Check Out", "Check In", "Return",
+  "Receive") keep their filled `.btn-ims` look: they carry text, which a flat glyph does not
+  describe.
+- **The kind comes from the icon the button already carries** — `.action-btn:has(.bi-plus-lg):hover`
+  → `--success`, `bi-pencil` / `bi-eye` → `--accent`, `bi-x-lg` / `bi-trash*` → `--danger` — so a
+  new action on a new page picks up the right colour with no modifier class, the same rule the
+  status chip follows. The mock's `action-btn--add/edit/delete` modifiers were therefore **not**
+  added as classes: an unused class is dead CSS, and this repo's audits say so.
+- **The print menu joins them.** Its icon-only variant is bound to `.action-btn`
+  (`[class.action-btn]="!primary && !text"`) so the row's print action is indistinguishable from
+  the glyphs beside it; its labelled and footer variants keep the outline / filled button. It is
+  the one place the new class has to out-specify another (it keeps `.btn` for the reset), which is
+  why the cascade there is asserted in the e2e rather than assumed.
+- **Quiet rows:** `.table tbody tr .action-btn { opacity: .35 }`, revealed on `:hover` **and**
+  `:focus-within` (so keyboard users are not hunting for a 35%-opacity target), and left at full
+  strength under `@media (hover: none)` — on a touch device there is no row hover, so 35% would
+  have been permanently unreachable.
+- The old icon-colour block (`.btn-ims-outline.btn-sm2 > .bi-*`) is deleted alongside its last
+  consumer.
+
+**Two deliberate deviations from the mock, both flagged to the owner.**
+
+1. **Resting tone is `--faint` (#7a8aa1), not the mock's `--slate-400` (#94a3b8).** At 2.56:1 on a
+   white card that grey fails the 3:1 UI threshold this repo audits — it is *exactly* the value
+   Phase D moved `--faint` off. `--faint` is 3.51:1 and reads the same at a glance.
+2. **`justify-content: flex-end`, not the mock's `flex-start`.** Every action column in the app is
+   right-aligned (`<th class="text-end">`); the mock's own value would have moved all 24 columns to
+   the left edge of their column. A one-line change if the mock is what's wanted.
+
+Also: the wash uses a new `--slate-50` token rather than a bare hex (the ramp already ran
+900 → 100), and the transition uses `--t-fast` rather than a raw `0.2s`.
+
+**No table rhythm changed.** On a real table the row height is driven by the text cells (112px on
+Locations) while the action cell is 41px; the glyph box is 27px (6px padding + a 15px glyph)
+against the old 30px pill, so only in the rare table whose action cell is the tallest would a row
+shorten by 3px.
+
+**Verified:** build exit 0, **0 warnings** (503.71 kB) · `check:store` **294 ok / 0 FAIL in 33
+harnesses** · `lint:dead` 0/0 · `lint:ctor` OK · `lint:styles` **679 rules / 567 selectors**, the
+new classes reported neither as re-set nor as unmentioned · `lint:contrast` **35/35** · **e2e: all
+checks passed**, with **seven new ones**: the glyph is bare (border `0px`, radius `6px`, padding
+`6px`, transparent fill, `--faint`), it stays at `0.35` until its own row is hovered, add / edit /
+remove turn **green / blue / red** on hover, two actions in one cell sit **12px** apart, and the
+print action is flat too. Two of these failed first for reasons worth recording: a flex *item*'s
+`inline-flex` **computes to `flex`** (blockification), and a transitioned colour must be read after
+it **settles**, not on the frame it starts.
+
 ---
 
 ## 5. Verification recipe (every phase)

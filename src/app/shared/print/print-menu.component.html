@@ -1,7 +1,8 @@
 <button
   class="btn btn-sm2 print-menu-btn"
   [class.btn-ims]="primary"
-  [class.btn-ims-outline]="!primary"
+  [class.btn-ims-outline]="!primary && !!text"
+  [class.action-btn]="!primary && !text"
   type="button"
   [title]="label"
   [attr.aria-label]="label"

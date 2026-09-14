@@ -91,11 +91,11 @@
                       <span class="badge-status st-closed"><i class="bi bi-slash-circle"></i>Optional</span>
                     }
                   </td>
-                  <td class="text-end text-nowrap">
-                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openOverhead(o)">
+                  <td class="action-cell text-nowrap">
+                    <button class="action-btn" type="button" title="Edit" (click)="openOverhead(o)">
                       <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeOverhead(o)">
+                    <button class="action-btn" type="button" title="Remove" (click)="removeOverhead(o)">
                       <i class="bi bi-x-lg"></i>
                     </button>
                   </td>
@@ -133,11 +133,11 @@
                   <td>{{ t.county || '—' }}</td>
                   <td>{{ t.city || '—' }}</td>
                   <td class="num">{{ (t.rate * 100).toFixed(3) }}%</td>
-                  <td class="text-end text-nowrap">
-                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openTax(t)">
+                  <td class="action-cell text-nowrap">
+                    <button class="action-btn" type="button" title="Edit" (click)="openTax(t)">
                       <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeTax(t)">
+                    <button class="action-btn" type="button" title="Remove" (click)="removeTax(t)">
                       <i class="bi bi-x-lg"></i>
                     </button>
                   </td>
@@ -187,12 +187,12 @@
                   <td>
                     <span class="badge-status {{ cardStatusClass(c) }}">{{ cardStatusLabel(c) }}</span>
                   </td>
-                  <td class="text-end text-nowrap">
+                  <td class="action-cell text-nowrap">
                     <ims-print-menu label="Print rate card" (action)="printCard(c, $event)"></ims-print-menu>
-                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openCard(c)">
+                    <button class="action-btn" type="button" title="Edit" (click)="openCard(c)">
                       <i class="bi bi-pencil"></i>
                     </button>
-                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="removeCard(c)">
+                    <button class="action-btn" type="button" title="Remove" (click)="removeCard(c)">
                       <i class="bi bi-x-lg"></i>
                     </button>
                   </td>
@@ -412,8 +412,8 @@
                     <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.baseMonthly" /></td>
                     <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.unitPrice" /></td>
                     <td class="num"><input class="form-control form-control-sm text-end" type="number" min="0" step="0.01" [(ngModel)]="l.unitCost" /></td>
-                    <td class="text-end">
-                      <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove rate" (click)="removeCardLine($index)">
+                    <td class="action-cell text-nowrap">
+                      <button class="action-btn" type="button" title="Remove rate" (click)="removeCardLine($index)">
                         <i class="bi bi-x-lg"></i>
                       </button>
                     </td>

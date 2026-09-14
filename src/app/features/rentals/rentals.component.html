@@ -61,13 +61,13 @@
               <td class="num">{{ data.money(r.retailRate) }}</td>
               <td class="num">{{ r.qty }}</td>
               <td class="num strong">{{ data.money(data.rentalSpread(r)) }}</td>
-              <td class="text-end text-nowrap">
+              <td class="action-cell text-nowrap">
                 @if (data.rentalOut(r)) {
-                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Record the return to the supplier" (click)="returnRow(r)">
+                  <button class="action-btn" type="button" title="Record the return to the supplier" (click)="returnRow(r)">
                     <i class="bi bi-box-arrow-in-down"></i>
                   </button>
                 }
-                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(r)">
+                <button class="action-btn" type="button" title="Remove" (click)="remove(r)">
                   <i class="bi bi-x-lg"></i>
                 </button>
               </td>

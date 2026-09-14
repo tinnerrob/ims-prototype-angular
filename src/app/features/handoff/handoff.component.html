@@ -87,7 +87,7 @@
                 <td class="mono text-muted2 text-12">{{ data.fmtDate(r.start) }} → {{ data.fmtDate(r.end) }}</td>
                 <td class="text-12">{{ r.custodian }}</td>
                 <td><span [class]="boardBadge(r)">{{ boardBadgeLabel(r) }}</span></td>
-                <td class="text-end text-nowrap">
+                <td class="action-cell text-nowrap">
                   <button class="btn btn-ims btn-sm2" type="button" title="Record the hand-off to this order" (click)="checkOut(r)">
                     <i class="bi bi-box-arrow-up-right"></i> Check Out
                   </button>
@@ -123,7 +123,7 @@
                   <div class="text-muted2 text-105">out {{ data.fmtDT(r.outAt) }}</div>
                 </td>
                 <td><span [class]="boardBadge(r)">{{ boardBadgeLabel(r) }}</span></td>
-                <td class="text-end text-nowrap">
+                <td class="action-cell text-nowrap">
                   <button
                     class="btn btn-ims btn-sm2"
                     type="button"
@@ -160,7 +160,7 @@
                 <td class="text-12">{{ data.outInfo(item.id)?.party || '—' }}</td>
                 <td class="mono text-12">{{ outFor(item) }}</td>
                 <td class="mono text-muted2 text-12">{{ outSince(item) }}</td>
-                <td class="text-end text-nowrap">
+                <td class="action-cell text-nowrap">
                   <button
                     class="btn btn-ims btn-sm2"
                     type="button"

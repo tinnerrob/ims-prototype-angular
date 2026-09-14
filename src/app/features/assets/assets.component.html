@@ -65,11 +65,11 @@
                   }
                 </td>
               }
-              <td class="text-end text-nowrap">
+              <td class="action-cell text-nowrap">
                 @if (movable()) {
                   <!-- Placement and count are ledger-writing actions, not fields:
                        each logs a movement the row's own viewer reads back. -->
-                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                  <button class="action-btn" type="button"
                           [title]="item.type === 'serialized' && data.isOut(item.id)
                             ? 'Move — unavailable while the unit is out on rent'
                             : 'Move to another location (logs a transfer)'"
@@ -79,16 +79,16 @@
                   </button>
                 }
                 @if (countable()) {
-                  <button class="btn btn-ims-outline btn-sm2" type="button"
+                  <button class="action-btn" type="button"
                           title="Record a physical count (logs an adjustment)"
                           (click)="openCount(item)">
                     <i class="bi bi-clipboard2-check"></i>
                   </button>
                 }
-                <button class="btn btn-ims-outline btn-sm2" type="button" title="Edit" (click)="openForm(item)">
+                <button class="action-btn" type="button" title="Edit" (click)="openForm(item)">
                   <i class="bi bi-pencil"></i>
                 </button>
-                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(item)">
+                <button class="action-btn" type="button" title="Remove" (click)="remove(item)">
                   <i class="bi bi-x-lg"></i>
                 </button>
               </td>
