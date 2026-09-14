@@ -639,6 +639,46 @@ try {
   );
   await partySwitches.first().click();
   const flippedOff = await settle(async () => !(await partySwitches.first().isChecked()));
+  /* A deactivated partner must not stand its row taller than its neighbours. The
+     chip that used to ride beside the name was an `inline-flex` badge (padding,
+     border, `line-height: 1.3`), so the deck stepped out of rhythm — 48px against
+     51px — the moment one party was switched off. */
+  const partyHeights = await page.evaluate(() => [
+    ...new Set([...document.querySelectorAll('table tbody tr.row-open')].map((r) => Math.round(r.getBoundingClientRect().height))),
+  ]);
+  check(
+    'switching a party off does not change the row height',
+    partyHeights.length === 1,
+    'row heights: ' + partyHeights.join('/'),
+  );
+  /* Every row reads its own party, so the row whose switch is off must be the row
+     whose Status chip says Inactive — whichever row that turns out to be. The chip
+     can land one change-detection cycle *after* the flip when the workspace was
+     re-seeded (a persisted snapshot loads after the first render), so this waits
+     for the value: reading the first frame after a click is how Phase L's colour
+     checks lied too. */
+  await settle(async () => (await page.evaluate(() => {
+    const r = document.querySelector('table tbody tr.row-open');
+    return r?.children[5]?.querySelector('.badge-status')?.textContent.trim();
+  })) === 'Inactive');
+  const partyRowsState = await page.evaluate(() =>
+    [...document.querySelectorAll('table tbody tr.row-open')].map((r) => {
+      const chip = r.children[5]?.querySelector('.badge-status');
+      return {
+        name: (r.children[0]?.textContent ?? '').trim(),
+        cells: r.children.length,
+        on: r.querySelector('.form-check-input')?.checked,
+        status: chip?.textContent.trim(),
+        cls: chip?.className,
+      };
+    }),
+  );
+  const offRow = partyRowsState.find((r) => r.on === false);
+  check(
+    'the Status column names the state the switch is in',
+    !!offRow && offRow.status === 'Inactive' && (offRow.cls ?? '').includes('st-out'),
+    JSON.stringify(partyRowsState),
+  );
   await page.getByRole('button', { name: 'Inactive', exact: true }).click();
   const filtered = await settle(async () => (await page.locator('table tbody tr.row-open').count()) < partyRows);
   const partyState = await page.evaluate(() => ({

@@ -596,6 +596,18 @@ tab should filter by active / inactive / all.
   count and the rows on screen are one number.
 - The row's own click handler already ignores clicks landing on a `label` / `input` / form
   control (`isInteractiveTarget`), so the switch does not open the record viewer behind it.
+- **The state chip beside the name is gone.** `badge-status` is an `inline-flex` chip (padding, a
+  border, `line-height: 1.3`), so a deactivated partner stood its row **51px tall against its
+  neighbours' 48px** the moment one was switched off — measured, before and after the change. The
+  Status column carries the state instead. That column was also saying the wrong thing: its *text*
+  was hardcoded `"Active"` while only its colour followed `p.active`, so a switched-off partner
+  read "Active" in the inactive tone. It now prints the state it is colouring.
+- **A note on the switch and the DOM.** A native checkbox owns its own on/off state, so a
+  `[checked]` binding only rewrites the DOM when the bound value *changes* — here it always changes
+  with the click, so the switch cannot lie. The **chip** can land one change-detection cycle after
+  the flip when the workspace was re-seeded (the persisted snapshot is adopted after the first
+  render), so the e2e waits for the value instead of reading the first frame — the same lesson
+  Phase L recorded for transitioned colours.
 
 ### Phase O — a work order's parts move into its modal, shaped like an invoice · `MED` · status: **done (2026-09-13)**
 
@@ -650,9 +662,10 @@ and a `[disabled]` button was already safe, because a disabled box keeps its pla
 
 **Verified (M–P):** build exit 0, **0 warnings** (505.27 kB) · `check:store` **294 ok / 0 FAIL in
 33 harnesses** · `lint:dead` 0/0 · `lint:ctor` OK · `lint:styles` **679 rules / 568 selectors** ·
-`lint:contrast` **35/35** · **e2e: all checks passed (121)**, with **eight new ones**: the board's
+`lint:contrast` **35/35** · **e2e: all checks passed (123)**, with **ten new ones**: the board's
 Check In / Return are bare `bi-box-arrow-in-down` glyphs; a party's Active is a
-`role="switch"` checkbox that flips off, filters to the one deactivated partner, and flips back;
+`role="switch"` checkbox that flips off, filters to the one deactivated partner and flips back
+**without standing its row taller** (48px either way) while its Status chip names the state;
 the work-order grid has no Parts Used column; its modal's table is
 `Part / Labor · Kind · Qty · Rate · Amount` with three totals; **every action keeps its column
 across the rows of every table on 12 routes**; every row action measures **27×27**; a paid

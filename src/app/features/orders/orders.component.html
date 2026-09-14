@@ -40,17 +40,21 @@
             @for (p of parties(); track p.id) {
               <tr class="row-open" (click)="showView($event, p)" [imsTip]="tipCustomer(p)">
                 <td>
+                  <!-- No state chip beside the name: `badge-status` is an
+                       inline-flex chip, so it stood a deactivated row taller than
+                       its neighbours and the parties deck lost its rhythm. The
+                       Status column carries the state, and the row's switch (in
+                       the actions cell) shows it at a glance. -->
                   <span class="strong">{{ p.name }}</span>
-                  @if (p.active === false) {
-                    <span class="badge-status st-out"><i class="bi bi-circle-fill"></i>Inactive</span>
-                  }
                   <div class="text-muted2 text-xs">{{ p.email }}</div>
                 </td>
                 <td>{{ p.contact }}</td>
                 <td class="mono text-muted2">{{ p.phone }}</td>
                 <td class="num"><span class="badge-status st-active">{{ data.activeOrderCount(p.id) }} active</span></td>
                 <td class="num">{{ data.orderCount(p.id) }}</td>
-                <td><span [class]="badge(p.active === false ? 'Inactive' : 'Active')">Active</span></td>
+                <td>
+                  <span [class]="badge(p.active === false ? 'Inactive' : 'Active')">{{ p.active === false ? 'Inactive' : 'Active' }}</span>
+                </td>
                 <td class="action-cell text-nowrap">
                   <button class="action-btn" type="button" title="Edit" (click)="openCustomer(p)">
                     <i class="bi bi-pencil"></i>
