@@ -35,6 +35,8 @@ export class OrdersComponent {
 
   tab: 'parties' | 'orders' = 'parties';
   filter: 'active' | 'closed' = 'active';
+  /** Parties tab: all / only active / only deactivated (`Party.active === false`). */
+  partyFilter: 'all' | 'active' | 'inactive' = 'all';
 
   customerOpen = false;
   editingCustomerId: string | null = null;
@@ -72,12 +74,13 @@ export class OrdersComponent {
     }));
   }
 
-  /** Customers matching the page search (the sub-tab pill counts these). */
+  /** Customers matching the page search and the active/inactive filter, which the
+   *  sub-tab pill and the toolbar both count. */
   parties(): Party[] {
     // Only partners carrying the customer role: a supplier is a row in the same
     // table (see `Party.kinds`) but it isn't someone you rent equipment to, so it
     // belongs on the Purchasing page, not in this picker or grid.
-    return this.data.customerParties().filter((p) =>
+    const all = this.data.customerParties().filter((p) =>
       this.search.matches(
         p.id,
         p.name,
@@ -90,6 +93,10 @@ export class OrdersComponent {
         p.active === false ? 'Inactive' : 'Active',
       ),
     );
+    if (this.partyFilter === 'all') return all;
+    const wantActive = this.partyFilter === 'active';
+    // `active` is absent on every pre-A5 row, and absent means active.
+    return all.filter((p) => (p.active !== false) === wantActive);
   }
 
   /**

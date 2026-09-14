@@ -125,12 +125,12 @@
                 <td><span [class]="boardBadge(r)">{{ boardBadgeLabel(r) }}</span></td>
                 <td class="action-cell text-nowrap">
                   <button
-                    class="btn btn-ims btn-sm2"
+                    class="action-btn"
                     type="button"
-                    title="Record the return to the yard"
+                    title="Record the return to the yard (check in)"
                     (click)="openReturnForRow(r)"
                   >
-                    <i class="bi bi-box-arrow-in-down"></i> Check In
+                    <i class="bi bi-box-arrow-in-down"></i>
                   </button>
                 </td>
               </tr>
@@ -162,12 +162,12 @@
                 <td class="mono text-muted2 text-12">{{ outSince(item) }}</td>
                 <td class="action-cell text-nowrap">
                   <button
-                    class="btn btn-ims btn-sm2"
+                    class="action-btn"
                     type="button"
-                    title="Check this unit back in — you choose the place it returns to"
+                    title="Return this unit to the yard — you choose the place it goes"
                     (click)="openReturn(item.id)"
                   >
-                    <i class="bi bi-box-arrow-in-down"></i> Return
+                    <i class="bi bi-box-arrow-in-down"></i>
                   </button>
                 </td>
               </tr>

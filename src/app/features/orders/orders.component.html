@@ -20,6 +20,14 @@
   </div>
   <div class="card-body">
     @if (tab === 'parties') {
+      <div class="d-flex align-items-center justify-content-between flex-wrap mb-3 gap-2">
+        <span class="text-muted2">Showing <strong>{{ partyFilter }}</strong> parties (<strong>{{ parties().length }}</strong>)</span>
+        <div class="btn-group">
+          <button class="btn btn-sm2" [class.btn-ims]="partyFilter === 'all'" [class.btn-ims-outline]="partyFilter !== 'all'" type="button" (click)="partyFilter = 'all'">All</button>
+          <button class="btn btn-sm2" [class.btn-ims]="partyFilter === 'active'" [class.btn-ims-outline]="partyFilter !== 'active'" type="button" (click)="partyFilter = 'active'">Active</button>
+          <button class="btn btn-sm2" [class.btn-ims]="partyFilter === 'inactive'" [class.btn-ims-outline]="partyFilter !== 'inactive'" type="button" (click)="partyFilter = 'inactive'">Inactive</button>
+        </div>
+      </div>
       <div class="table-wrap">
         <table class="table" imsPaged="order-parties">
           <thead>
@@ -47,9 +55,17 @@
                   <button class="action-btn" type="button" title="Edit" (click)="openCustomer(p)">
                     <i class="bi bi-pencil"></i>
                   </button>
-                  <button class="action-btn" type="button" title="Toggle active" (click)="toggleActive(p)">
-                    <i class="bi bi-power"></i>
-                  </button>
+                  <!-- Active is a switch, not a toggle button: the row's state
+                       is visible at a glance instead of inferable from an icon.
+                       The click is ignored by the row handler (see
+                       `isInteractiveTarget`). -->
+                  <div class="form-check form-switch mb-0"
+                       [title]="p.active === false ? 'Inactive — switch on to reactivate' : 'Active — switch off to deactivate'">
+                    <input class="form-check-input" type="checkbox" role="switch"
+                           [checked]="p.active !== false"
+                           [attr.aria-label]="(p.active === false ? 'Inactive: ' : 'Active: ') + p.name"
+                           (change)="toggleActive(p)" />
+                  </div>
                   <button class="action-btn" type="button"
                           [disabled]="customerRemoveBlocked(p)"
                           [title]="customerRemoveTitle(p)"

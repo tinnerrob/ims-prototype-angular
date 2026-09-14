@@ -192,8 +192,29 @@ export class MaintenanceComponent {
     return a ? `${a.id} ${this.data.mkName(a)}` : w.itemId;
   }
 
-  partLabel(p: WorkOrderPart): string {
-    return `${p.refId} ×${p.qty}`;
+  /**
+   * The work order's priced lines: one per part/consumable at its catalog cost,
+   * then the shop-labor row. Both the printable document and the record viewer's
+   * invoice-style table render *this*, so the two cannot disagree — and the parts
+   * add up to the grid's Parts Cost column (`workOrderCost`).
+   */
+  workOrderLines(w: WorkOrder): { name: string; kind: string; qty: number; rate: number; amount: number }[] {
+    const c = this.cost(w);
+    const unitCost = (p: WorkOrderPart): number =>
+      this.data.getItem(p.kind === 'part' ? 'part' : 'consumable', p.refId)?.costPrice ?? 0;
+    return [
+      ...w.parts.map((p) => {
+        const rate = unitCost(p);
+        return {
+          name: this.data.itemLabel(p.kind === 'part' ? 'part' : 'consumable', p.refId),
+          kind: p.kind,
+          qty: p.qty,
+          rate,
+          amount: rate * p.qty,
+        };
+      }),
+      { name: 'Shop labor', kind: 'labor', qty: w.laborHours, rate: c.laborRate, amount: c.laborCost },
+    ];
   }
 
   /** Status chips render the one shared rule (`statusBadge`). */
@@ -273,21 +294,29 @@ export class MaintenanceComponent {
           ],
         },
         {
-          title: 'Parts & Labor',
-          fields: [
-            { label: 'Parts Used', value: w.parts.length ? w.parts.map((p) => this.partLabel(p)).join(', ') : '—' },
-            { label: 'Parts Cost', value: this.data.money(c.partsCost) },
-            { label: 'Labor Hours', value: String(w.laborHours) },
-            { label: 'Labor Rate / hr', value: this.data.money(c.laborRate) },
-            { label: 'Labor Cost', value: this.data.money(c.laborCost) },
-            { label: 'Total Cost', value: this.data.money(c.total) },
-          ],
-        },
-        {
           title: 'Notes',
           fields: [{ label: 'Notes', value: w.notes || '—' }],
         },
       ],
+      // The parts and labor read like an invoice: itemised, priced, totalled —
+      // the same lines the printable work order renders.
+      table: {
+        title: 'Parts & Labor',
+        columns: ['Part / Labor', 'Kind', 'Qty', 'Rate', 'Amount'],
+        align: ['left', 'left', 'right', 'right', 'right'],
+        rows: this.workOrderLines(w).map((l) => [
+          l.name,
+          l.kind,
+          this.data.int(l.qty),
+          this.data.money(l.rate),
+          this.data.money(l.amount),
+        ]),
+        totals: [
+          { label: 'Parts', value: this.data.money(c.partsCost) },
+          { label: 'Labor', value: this.data.money(c.laborCost) },
+          { label: 'Total Cost', value: this.data.money(c.total), strong: true },
+        ],
+      },
     };
   }
 
@@ -307,8 +336,6 @@ export class MaintenanceComponent {
   printWorkOrder(w: WorkOrder, mode: PrintMode = 'print'): void {
     const c = this.cost(w);
     const money = (n: number) => this.data.money(n);
-    const partCost = (p: WorkOrderPart): number =>
-      this.data.getItem(p.kind === 'part' ? 'part' : 'consumable', p.refId)?.costPrice ?? 0;
     this.printer.print({
       heading: 'Work Order',
       number: w.id,
@@ -321,16 +348,13 @@ export class MaintenanceComponent {
       ],
       columns: ['Part / Labor', 'Kind', 'Qty', 'Unit Cost', 'Amount'],
       align: ['left', 'left', 'right', 'right', 'right'],
-      rows: [
-        ...w.parts.map((p) => [
-          this.data.itemLabel(p.kind === 'part' ? 'part' : 'consumable', p.refId),
-          p.kind,
-          this.data.int(p.qty),
-          money(partCost(p)),
-          money(p.qty * partCost(p)),
-        ]),
-        ['Shop labor', 'labor', String(w.laborHours), `${money(c.laborRate)}/hr`, money(c.laborCost)],
-      ],
+      rows: this.workOrderLines(w).map((l) => [
+        l.name,
+        l.kind,
+        this.data.int(l.qty),
+        l.kind === 'labor' ? `${money(l.rate)}/hr` : money(l.rate),
+        money(l.amount),
+      ]),
       totals: [
         { label: 'Parts', value: money(c.partsCost) },
         { label: 'Labor', value: money(c.laborCost) },

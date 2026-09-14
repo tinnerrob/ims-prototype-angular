@@ -563,6 +563,113 @@ it **settles**, not on the frame it starts.
 
 ---
 
+### Phase M — Hand-Off's board buttons join the flat glyphs · `LOW` · status: **done (2026-09-13)**
+
+**The ask.** The **Check In** and **Return** buttons on Item Hand-Off should work like the row
+actions on Assets — the glyph the sub-rental register uses to record the return to a supplier.
+
+**What changed.** Both were labelled filled pills (`btn btn-ims btn-sm2`, reading "Check In" and
+"Return"). They are now the shared `.action-btn` glyph — `bi-box-arrow-in-down`, the same icon the
+sub-rental register's *record the return* action carries — with the meaning in the tooltip rather
+than in text. That corrects the note in Phase L above which listed them among the labelled
+buttons that keep the filled look: these were the two that did not need to.
+
+**Check Out stays labelled, deliberately.** The outbound board's action is that board's primary
+move, and it is the only one in its tab, so it reads better as a button that says what it does.
+It is the same one-line change if the glyph is wanted there too.
+
+### Phase N — a partner's Active is a switch, and the parties tab filters · `LOW` · status: **done (2026-09-13)**
+
+**The ask.** The power button on the party rows of Parties & Orders should be a slider, and the
+tab should filter by active / inactive / all.
+
+**What changed.**
+
+- The `bi-power` toggle button is a **`form-check form-switch`** — the app's existing switch
+  (Admin → Dashboard widgets uses the same markup) — bound `[checked]="p.active !== false"`,
+  because `Party.active` is *absent* on every pre-A5 row and absent means active. The switch
+  carries an `aria-label` naming the partner and the state, plus a title saying what flipping it
+  will do; the visible state is now readable at a glance instead of inferred from an icon.
+- **A filter strip above the table** — All / Active / Inactive, the same `.btn-group` shape and
+  "Showing …" line the orders tab below it already uses — and a `partyFilter` field on the
+  component. `parties()` applies it *after* the page search, so the sub-tab pill, the toolbar
+  count and the rows on screen are one number.
+- The row's own click handler already ignores clicks landing on a `label` / `input` / form
+  control (`isInteractiveTarget`), so the switch does not open the record viewer behind it.
+
+### Phase O — a work order's parts move into its modal, shaped like an invoice · `MED` · status: **done (2026-09-13)**
+
+**The ask.** Hide Parts Used on Field Service & Maintenance, and reformat the modal that opens
+when a row is clicked so it reads more like an invoice.
+
+**What changed.**
+
+- The grid **drops the Parts Used column** — a run of chips that was the widest and least
+  scannable cell in the table. Nothing is lost: the row still carries Parts Cost, Labor Cost and
+  Total Cost.
+- The **record viewer gained an itemised table** (`ViewTable` on `ViewModel`: title, columns,
+  per-column alignment, rows, totals) rendered the way the invoice modal renders its lines — a
+  heading, a `.table`, a divider, then the money lines. A work order now opens on
+  **Part / Labor · Kind · Qty · Rate · Amount** with **Parts / Labor / Total Cost** under it,
+  instead of six labelled lines.
+- **One source for both surfaces.** `workOrderLines()` prices each part/consumable at its catalog
+  cost and appends the shop-labor row; the *printable* work order now renders that same array, so
+  the sheet and the modal cannot drift apart. The old inline `partLabel()` helper is gone with its
+  last consumer.
+
+### Phase P — the action columns, and a darker row highlight · `LOW/MED` · status: **done (2026-09-13)**
+
+**The ask.** Every action icon should carry the same margin/padding and sit in its own column, so
+the buttons line up across rows; the stated example was Billing & Invoicing, where the row with no
+**Mark paid** action pushed Print and Details one column to the right. And the row highlight should
+be a little darker.
+
+**Why it happened.** `justify-content: flex-end` right-aligns *whatever the row rendered*, so an
+action that was **conditionally rendered** moved every button after it. Two cells did that:
+Invoicing ("Mark paid" only while unpaid) and the sub-rental register (the return action only while
+the unit is out). Assets' move / count actions vary by **tab**, not by row, so they never drifted —
+and a `[disabled]` button was already safe, because a disabled box keeps its place.
+
+**What changed.**
+
+- **Both conditional actions render always and disable instead** — `[disabled]` plus a title that
+  says why ("Already paid", "Already returned to the supplier"). Nothing re-flows, and the reader
+  can see the action exists and is spent, which is the same "show the action, explain the block"
+  shape the Locations and Parties remove buttons already use.
+- **Every action is the same 27×27 box** (the mock's `padding: 6px` with `width`/`height` 27px and
+  `box-sizing: border-box`). The print menu was the odd one out: its button carries a chevron as
+  well as its glyph, so it was ~9px wider than its neighbours. The chevron is now a 7px **corner
+  marker** (absolutely positioned), which keeps the "this opens a menu" hint *and* the box.
+- **A disabled glyph stays disabled-looking**: the hover colour rules are guarded with
+  `:not(:disabled)` and a disabled action rests in `--slate-300`, so an unavailable action cannot
+  light up green / blue / red as though it worked.
+- **Maintenance's status `<select>` lost its `gap-1` wrapper**, so that cell's own 12px gap and
+  27px boxes govern all three of its controls like every other table's action column.
+- **The row wash steps up**: `tr.row-open:hover` `rgba(37, 99, 235, .05)` → **`.09`**, and the
+  general `tr:hover` wash with it (`.05` → `.09`) so the two stay in step.
+
+**Verified (M–P):** build exit 0, **0 warnings** (505.27 kB) · `check:store` **294 ok / 0 FAIL in
+33 harnesses** · `lint:dead` 0/0 · `lint:ctor` OK · `lint:styles` **679 rules / 568 selectors** ·
+`lint:contrast` **35/35** · **e2e: all checks passed (121)**, with **eight new ones**: the board's
+Check In / Return are bare `bi-box-arrow-in-down` glyphs; a party's Active is a
+`role="switch"` checkbox that flips off, filters to the one deactivated partner, and flips back;
+the work-order grid has no Parts Used column; its modal's table is
+`Part / Labor · Kind · Qty · Rate · Amount` with three totals; **every action keeps its column
+across the rows of every table on 12 routes**; every row action measures **27×27**; a paid
+invoice's paid action is present-**and**-disabled; and a pointed-at row measures
+`rgba(37, 99, 235, 0.09)`.
+
+Two of the new checks failed first, and both times the fault was the test's — worth recording,
+because the same traps will catch the next person:
+
+1. The pager leaves paged-out rows **in the DOM with no layout box** (`left: 0`), so a column
+   comparison has to skip elements without client rects; comparing them reported "drift" that was
+   only the pager.
+2. `.btn-group button` + `hasText: 'Inactive'` did not reliably reach the Inactive filter button
+   sitting beside Active; `getByRole('button', { name: 'Inactive', exact: true })` does.
+
+---
+
 ## 5. Verification recipe (every phase)
 
 ```bash

@@ -50,7 +50,7 @@
         <thead>
           <tr>
             <th>WO #</th><th>Asset</th><th>Service Type</th><th class="num">Meter Reading</th>
-            <th>Status</th><th>Parts Used</th><th class="num">Labor Hrs</th>
+            <th>Status</th><th class="num">Labor Hrs</th>
             <th class="num">Parts Cost</th><th class="num">Labor Cost</th><th class="num">Total Cost</th>
             <th>Date</th><th class="text-end">Actions</th>
           </tr>
@@ -63,34 +63,27 @@
               <td>{{ w.type }}</td>
               <td class="num">{{ data.int(w.meterReading) }}</td>
               <td><span [class]="badge(w.status)"><i class="bi bi-circle-fill"></i>{{ w.status }}</span></td>
-              <td>
-                @for (p of w.parts; track p.refId) {
-                  <span class="badge-status st-inshop">{{ partLabel(p) }}</span>
-                } @empty {
-                  <span class="text-muted2">—</span>
-                }
-              </td>
               <td class="num">{{ w.laborHours }}</td>
               <td class="num">{{ data.money(cost(w).partsCost) }}</td>
               <td class="num">{{ data.money(cost(w).laborCost) }}</td>
               <td class="num strong">{{ data.money(cost(w).total) }}</td>
               <td class="mono text-muted2">{{ data.fmtDate(w.date) }}</td>
               <td class="action-cell text-nowrap">
-                <span class="d-inline-flex align-items-center gap-1">
-                  <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
-                    @for (s of statuses; track s) {
-                      <option [value]="s">{{ s }}</option>
-                    }
-                  </select>
-                  <ims-print-menu label="Print work order" (action)="printWorkOrder(w, $event)"></ims-print-menu>
-                  <button class="action-btn" type="button" title="Remove" (click)="remove(w)">
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                </span>
+                <!-- The status select sits in the actions cell too, so it takes the
+                     same 12px gap and the 27px boxes as every other row action. -->
+                <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
+                  @for (s of statuses; track s) {
+                    <option [value]="s">{{ s }}</option>
+                  }
+                </select>
+                <ims-print-menu label="Print work order" (action)="printWorkOrder(w, $event)"></ims-print-menu>
+                <button class="action-btn" type="button" title="Remove" (click)="remove(w)">
+                  <i class="bi bi-x-lg"></i>
+                </button>
               </td>
             </tr>
           } @empty {
-            <tr><td colspan="12" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
+            <tr><td colspan="11" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
           }
         </tbody>
       </table>

@@ -81,11 +81,15 @@
                   <i class="bi bi-eye"></i>
                 </button>
                 <ims-print-menu label="Print invoice" (action)="printInvoice(inv, $event)"></ims-print-menu>
-                @if (inv.status !== 'paid') {
-                  <button class="action-btn" type="button" title="Mark paid" (click)="markPaid(inv)">
-                    <i class="bi bi-check2"></i>
-                  </button>
-                }
+                <!-- Rendered even when it does not apply, so the columns keep
+                     their places across rows — a missing button used to shift
+                     Print and Details sideways. -->
+                <button class="action-btn" type="button"
+                        [disabled]="inv.status === 'paid'"
+                        [title]="inv.status === 'paid' ? 'Already paid' : 'Mark paid'"
+                        (click)="markPaid(inv)">
+                  <i class="bi bi-check2"></i>
+                </button>
                 <button class="action-btn" type="button" title="Remove" (click)="remove(inv)">
                   <i class="bi bi-x-lg"></i>
                 </button>

@@ -62,11 +62,14 @@
               <td class="num">{{ r.qty }}</td>
               <td class="num strong">{{ data.money(data.rentalSpread(r)) }}</td>
               <td class="action-cell text-nowrap">
-                @if (data.rentalOut(r)) {
-                  <button class="action-btn" type="button" title="Record the return to the supplier" (click)="returnRow(r)">
-                    <i class="bi bi-box-arrow-in-down"></i>
-                  </button>
-                }
+                <!-- Always rendered: a row already back keeps the column in
+                     place rather than pulling Remove to the left. -->
+                <button class="action-btn" type="button"
+                        [disabled]="!data.rentalOut(r)"
+                        [title]="data.rentalOut(r) ? 'Record the return to the supplier' : 'Already returned to the supplier'"
+                        (click)="returnRow(r)">
+                  <i class="bi bi-box-arrow-in-down"></i>
+                </button>
                 <button class="action-btn" type="button" title="Remove" (click)="remove(r)">
                   <i class="bi bi-x-lg"></i>
                 </button>

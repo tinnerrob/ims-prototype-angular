@@ -586,6 +586,160 @@ try {
     JSON.stringify(printAction),
   );
 
+  /* ---- Phase M–P: the board's glyphs, the party switch, the work-order modal
+     and the action columns. What it proves: (M) Item Hand-Off checks a unit in
+     and returns one from custody with the same flat glyph the rest of the grid
+     uses; (N) a party's Active is a switch and the parties tab filters; (O) a
+     work order's parts left the grid for its modal, which itemises and totals
+     them the way the invoice modal does; (P) an action never moves sideways
+     because a *sibling* action is unavailable, every action is the same 27px box
+     (the print menu's own included), and a pointed-at row is darker. ---- */
+
+  /* M: the board actions. Outbound keeps its labelled primary button, so only the
+     two the change covers are measured here. */
+  await page.goto('http://localhost:' + PORT + '/handoff', { waitUntil: 'load' });
+  await page.waitForSelector('.subtab', { timeout: 5000 });
+  const boardAction = async (tab) => {
+    await page.locator('.subtab', { hasText: tab }).first().click();
+    await page.waitForSelector('table tbody tr .action-btn', { timeout: 5000 });
+    return page.locator('table tbody tr .action-btn').first().evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        label: el.textContent.trim(),
+        border: cs.borderTopWidth,
+        background: cs.backgroundColor,
+        icon: (el.querySelector('i')?.className.match(/bi-[\w-]+/) ?? [''])[0],
+      };
+    });
+  };
+  const flatBoardGlyph = (a) =>
+    a.label === '' && a.border === '0px' && a.background === 'rgba(0, 0, 0, 0)' && a.icon === 'bi-box-arrow-in-down';
+  const boardCheckIn = await boardAction('Incoming');
+  check('Hand-Off checks a unit in with a flat glyph, not a filled button', flatBoardGlyph(boardCheckIn), JSON.stringify(boardCheckIn));
+  const boardReturn = await boardAction('In Custody');
+  check('Hand-Off returns a unit from custody with the same glyph', flatBoardGlyph(boardReturn), JSON.stringify(boardReturn));
+
+  /* N: a party's Active is a switch, and the tab filters on it. The fixture ships
+     every partner active, so the check flips one off and filters for it — which is
+     also the only way a reader sees the switch move. It flips it back: the rest of
+     the run shares this workspace. */
+  await page.goto('http://localhost:' + PORT + '/orders', { waitUntil: 'load' });
+  await page.waitForSelector('table tbody .form-check-input', { timeout: 5000 });
+  const partyRows = await page.locator('table tbody tr.row-open').count();
+  const partySwitches = page.locator('table tbody .form-check-input');
+  const switchBox = await partySwitches.first().evaluate((el) => ({
+    role: el.getAttribute('role'),
+    width: Math.round(el.getBoundingClientRect().width),
+    radius: getComputedStyle(el).borderRadius,
+  }));
+  check(
+    "a party's Active is a switch, on by default",
+    switchBox.role === 'switch' && (await partySwitches.count()) === partyRows && (await partySwitches.first().isChecked()),
+    JSON.stringify(switchBox) + ' rows: ' + partyRows,
+  );
+  await partySwitches.first().click();
+  const flippedOff = await settle(async () => !(await partySwitches.first().isChecked()));
+  await page.getByRole('button', { name: 'Inactive', exact: true }).click();
+  const filtered = await settle(async () => (await page.locator('table tbody tr.row-open').count()) < partyRows);
+  const partyState = await page.evaluate(() => ({
+    showing: (document.querySelector('.card-body .text-muted2')?.innerText ?? '').replace(/\s+/g, ' ').trim(),
+    groups: [...document.querySelectorAll('.btn-group')]
+      .map((g) => [...g.querySelectorAll('button')].map((b) => b.innerText.trim() + (b.classList.contains('btn-ims') ? '*' : '')).join(',')),
+    rows: document.querySelectorAll('table tbody tr.row-open').length,
+    on: [...document.querySelectorAll('table tbody .form-check-input')].filter((b) => b.checked).length,
+  }));
+  const inactiveOnly = { rows: partyState.rows, allOff: partyState.on === 0 };
+  check(
+    'the parties tab filters to inactive partners only',
+    filtered && flippedOff && /showing inactive/i.test(partyState.showing) && inactiveOnly.rows === 1 && inactiveOnly.allOff,
+    `rows ${partyRows} -> ${inactiveOnly.rows}, flipped: ${flippedOff}, all off: ${inactiveOnly.allOff} · ${JSON.stringify(partyState)}`,
+  );
+  await page.getByRole('button', { name: 'All', exact: true }).click();
+  await page.waitForTimeout(150);
+  const offSwitch = page.locator('table tbody .form-check-input:not(:checked)').first();
+  if (await offSwitch.count()) await offSwitch.click();
+  const restored = await settle(async () => (await page.locator('table tbody .form-check-input:not(:checked)').count()) === 0);
+  check('switching a party back on restores it', restored, 'still checked off: ' + (await page.locator('table tbody .form-check-input:not(:checked)').count()));
+
+  /* O: a work order's parts left the grid for its modal — which now reads like the
+     invoice modal: facts, an itemised priced table, then the totals. */
+  await page.goto('http://localhost:' + PORT + '/maintenance', { waitUntil: 'load' });
+  await page.waitForSelector('table tbody tr.row-open', { timeout: 5000 });
+  const woHeads = await page.locator('table thead th').allInnerTexts();
+  check('the work-order grid no longer carries a Parts Used column', !woHeads.some((h) => /parts used/i.test(h)), woHeads.join(' | '));
+  await page.locator('table tbody tr.row-open').first().click();
+  await page.waitForSelector('.modal.show .table tbody tr', { timeout: 5000 });
+  const woViewer = await page.evaluate(() => {
+    const m = document.querySelector('.modal.show');
+    const t = m.querySelector('.table');
+    return {
+      columns: [...t.querySelectorAll('thead th')].map((x) => x.innerText.trim().toLowerCase()).join('|'),
+      rowCells: [...t.querySelectorAll('tbody tr')].map((r) => r.children.length),
+      totals: [...m.querySelectorAll('.list-line')]
+        .map((l) => l.innerText.replace(/\s+/g, ' ').trim())
+        .filter((x) => /^(Parts|Labor|Total Cost) /.test(x)),
+    };
+  });
+  check(
+    'a work order opens with its parts and labor itemised like an invoice',
+    woViewer.columns === 'part / labor|kind|qty|rate|amount' &&
+      woViewer.rowCells.length >= 2 &&
+      woViewer.rowCells.every((n) => n === 5) &&
+      woViewer.totals.length === 3 &&
+      woViewer.totals[2].startsWith('Total Cost '),
+    JSON.stringify(woViewer),
+  );
+  await page.keyboard.press('Escape');
+
+  /* P: an action keeps its column on every row of its table. The bug this encodes
+     (2026-09-13, Invoicing): "Mark paid" was rendered only while the invoice was
+     unpaid, so on the paid rows every button after it slid one column to the right
+     — Print and Details moved out from under their own column. It renders disabled
+     now, and this walks every table in the app looking for drift. Rows the pager
+     has paged out keep their DOM but lose their box, so they are skipped: the
+     invariant a reader sees is about the rows on screen. ---- */
+  const ACTION_ICONS = ['bi-eye', 'bi-printer', 'bi-check2', 'bi-box-arrow-in-down', 'bi-box-arrow-up-right', 'bi-plus-lg', 'bi-arrows-move', 'bi-clipboard2-check', 'bi-arrow-up', 'bi-arrow-down', 'bi-pencil', 'bi-x-lg'];
+  const columnDrift = () => page.evaluate((icons) => {
+    const out = [];
+    for (const table of document.querySelectorAll('table.table')) {
+      const rows = [...table.querySelectorAll('tbody tr')];
+      for (const icon of icons) {
+        const xs = rows
+          .map((r) => r.querySelector('.action-btn:has(.' + icon + ')'))
+          .filter((el) => el && el.getClientRects().length)
+          .map((el) => Math.round(el.getBoundingClientRect().left));
+        if (xs.length > 1 && new Set(xs).size > 1) out.push(icon + ' at ' + xs.join('/'));
+      }
+    }
+    return out;
+  }, ACTION_ICONS);
+  const ACTION_ROUTES = ['/assets', '/orders', '/invoicing', '/purchasing', '/rentals', '/maintenance', '/inspections', '/pricing', '/admin/locations', '/admin/verticals', '/handoff', '/logistics'];
+  for (const route of ACTION_ROUTES) {
+    await page.goto('http://localhost:' + PORT + route, { waitUntil: 'load' });
+    await page.waitForSelector('table tbody', { timeout: 5000 }).catch(() => {});
+    const drift = await columnDrift();
+    check('every action keeps its column across rows: ' + route, drift.length === 0, drift.join(' | '));
+  }
+  await page.goto('http://localhost:' + PORT + '/invoicing', { waitUntil: 'load' });
+  await page.waitForSelector('table tbody tr .action-btn', { timeout: 5000 });
+  const actionBoxes = await page.evaluate(() => [
+    ...new Set([...document.querySelectorAll('table tbody tr .action-btn')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return Math.round(r.width) + 'x' + Math.round(r.height);
+    })),
+  ]);
+  check('every row action is the same 27px box, the print menu included', actionBoxes.join() === '27x27', actionBoxes.join(' | '));
+  const payStates = await page.evaluate(() => [...document.querySelectorAll('.action-btn:has(.bi-check2)')].map((b) => b.disabled));
+  check('a paid invoice keeps its action in place, disabled', payStates.includes(true) && payStates.includes(false), JSON.stringify(payStates));
+
+  /* P: the pointed-at row is darker than its band (the wash stepped up to .09). */
+  const hoverRow = page.locator('table tbody tr.row-open').first();
+  const bandTone = await hoverRow.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await hoverRow.hover();
+  const hoverArrived = await settle(async () => (await hoverRow.evaluate((el) => getComputedStyle(el).backgroundColor)) === 'rgba(37, 99, 235, 0.09)');
+  const hoverTone = await hoverRow.evaluate((el) => getComputedStyle(el).backgroundColor);
+  check('a pointed-at row is darker than its band', hoverArrived && hoverTone === 'rgba(37, 99, 235, 0.09)', `${bandTone} -> ${hoverTone}`);
+
   check('no console errors through the table footer', consoleErrors.length === 0, consoleErrors.join(' | '));
 
   writeFileSync(SHOTS + '/console-errors.txt', consoleErrors.join('\n'));
@@ -595,6 +749,6 @@ try {
 }
 
 console.log(failures === 0
-  ? '\ne2e smoke: all checks passed (' + ROUTES.length + ' routes + applied stylesheet + the field editor + 5 printable documents + the dashboard layout + the sample-data buttons over all ' + ALL_ROUTES.length + ' routes)'
+  ? '\ne2e smoke: all checks passed (' + ROUTES.length + ' routes + applied stylesheet + the field editor + 5 printable documents + the dashboard layout + the sample-data buttons + the unified row actions over all ' + ALL_ROUTES.length + ' routes)'
   : '\ne2e smoke: ' + failures + ' check(s) FAILED');
 process.exit(failures === 0 ? 0 : 1);

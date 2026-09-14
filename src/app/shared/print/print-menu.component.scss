@@ -16,6 +16,16 @@
   line-height: 1;
 }
 
+/* Flat variant (a row action): the button is the shared 27px box, so the
+   chevron becomes a corner marker instead of widening it — the actions then
+   line up in columns with the bare glyphs beside them. */
+.action-btn .print-menu-chev {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 7px;
+}
+
 .print-menu-btn:hover .print-menu-chev {
   opacity: 1;
 }

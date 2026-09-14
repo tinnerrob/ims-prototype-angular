@@ -18,6 +18,29 @@ export interface ViewSection {
   fields: ViewField[];
 }
 
+/**
+ * An itemised table a viewer can show under its facts — the **invoice shape**:
+ * a column legend, string cells (already formatted), and an optional totals
+ * block.
+ *
+ * It exists so a record that *is* a priced list — a work order's parts and
+ * labor — reads the way the invoice modal does, instead of one run-on
+ * "Parts Used" line. Same fields, same `align` convention and same totals shape
+ * as a printable `PrintDocument`, so a page builds one description for both.
+ */
+export interface ViewTable {
+  /** Heading above the table (`Parts & Labor`). */
+  title?: string;
+  /** The column legend. */
+  columns: string[];
+  /** Per-column alignment, parallel to `columns`; omitted columns read left. */
+  align?: ('left' | 'right')[];
+  /** The cells, one array per row. */
+  rows: string[][];
+  /** Money footer lines, printed under a divider. */
+  totals?: { label: string; value: string; strong?: boolean }[];
+}
+
 /** Everything the viewer needs to render one record. */
 export interface ViewModel {
   title: string;
@@ -29,6 +52,8 @@ export interface ViewModel {
   /** Badge modifier (`st-active`, `st-out`, …); defaults to `st-on`. */
   badgeClass?: string;
   sections: ViewSection[];
+  /** Optional itemised table (the invoice shape) under the facts. */
+  table?: ViewTable;
 }
 
 /**

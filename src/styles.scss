@@ -2100,6 +2100,12 @@ a { color: var(--brand); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  /* Every action is the same 27px box, so the icons line up in columns across
+     rows even when one of them is unavailable in a given row. */
+  width: 27px;
+  height: 27px;
+  box-sizing: border-box;
+  position: relative;              /* the print menu's chevron is a corner marker */
   padding: 6px;
   border: 0;
   border-radius: 6px;
@@ -2111,28 +2117,30 @@ a { color: var(--brand); }
   cursor: pointer;
   transition: color var(--t-fast), background-color var(--t-fast), opacity var(--t-fast);
 }
-.action-btn:hover { background: var(--slate-50); color: var(--ink); }
+.action-btn:not(:disabled):hover { background: var(--slate-50); color: var(--ink); }
 
-/* The glyph takes the action's colour on hover. Keyed off the icon class, so
-   every page — and every new action — picks it up without extra markup. */
-.action-btn:has(.bi-plus-lg):hover { color: var(--success); }
-.action-btn:has(.bi-pencil):hover { color: var(--accent); }
-.action-btn:has(.bi-x-lg):hover,
-.action-btn:has(.bi-trash):hover,
-.action-btn:has(.bi-trash3):hover { color: var(--danger); }
-.action-btn:has(.bi-eye):hover { color: var(--accent); }
+/* The glyph takes the action's colour on hover — but only while the action is
+   actually available, so a disabled glyph cannot light up as though it worked.
+   Keyed off the icon class, so every page — and every new action — picks it up
+   without extra markup. */
+.action-btn:not(:disabled):has(.bi-plus-lg):hover { color: var(--success); }
+.action-btn:not(:disabled):has(.bi-pencil):hover { color: var(--accent); }
+.action-btn:not(:disabled):has(.bi-x-lg):hover,
+.action-btn:not(:disabled):has(.bi-trash):hover,
+.action-btn:not(:disabled):has(.bi-trash3):hover { color: var(--danger); }
+.action-btn:not(:disabled):has(.bi-eye):hover { color: var(--accent); }
 
 /* The print menu renders its own button, which keeps `.btn` for the reset.
    Flatten it too: no lift, no shadow, so it is indistinguishable from the
    bare glyphs beside it. */
-.btn.action-btn:hover { background: var(--slate-50); color: var(--ink); }
+.btn.action-btn:not(:disabled):hover { background: var(--slate-50); color: var(--ink); }
 .btn.action-btn:active,
 .btn.action-btn:hover { transform: none; box-shadow: none; }
 
-/* a disabled row action (e.g. a location type still in use) must not read
-   as clickable */
+/* a disabled row action (an invoice already paid, a sub-rental already back)
+   must not read as clickable, and reads paler than a live glyph */
 .btn:disabled,
-.action-btn:disabled { cursor: not-allowed; }
+.action-btn:disabled { cursor: not-allowed; color: var(--slate-300); }
 
 /* Quiet rows: actions sit at 35% until their row is pointed at (hover) or
    reached by keyboard (focus-within). Where hover does not exist — touch —
@@ -2150,7 +2158,7 @@ a { color: var(--brand); }
    which ignores clicks that land on the row's own action buttons.
    ------------------------------------------------------------------ */
 .table tbody tr.row-open { cursor: pointer; }
-.table tbody tr.row-open:hover { background: rgba(37, 99, 235, .05); }
+.table tbody tr.row-open:hover { background: rgba(37, 99, 235, .09); }
 
 /* =========================================================================
    Visual refresh — additive layer, deliberately loaded LAST.
@@ -2415,7 +2423,7 @@ button.user-chip {
 /* Numerals line up column-to-column in every table in the app. */
 .table td,
 .table th { font-variant-numeric: tabular-nums; }
-.table tbody tr:hover { background: rgba(79, 70, 229, .05); }
+.table tbody tr:hover { background: rgba(79, 70, 229, .09); }
 
 /* Segmented tab tray, a shade cooler so it sits with the new table heads. */
 .subtabs { background: #e9edf5; border-color: rgba(15, 23, 42, .07); }
