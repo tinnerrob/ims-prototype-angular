@@ -38,44 +38,46 @@
       </button>
     </span>
   </div>
-  <div class="card-body table-wrap">
-    <table class="table" imsPaged="inspections">
-      <thead>
-        <tr>
-          <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
-          <th class="num">Meter Out</th><th class="num">Meter In</th>
-          <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th><th>Overage</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (r of logEntries(); track r.id) {
-          <!-- Row click opens the editor, as in the prototype (`inspectionModal`). -->
-          <tr class="row-open" (click)="openEdit(r)" [imsTip]="tipInspection(r)">
-            <td class="strong mono">{{ r.id }}</td>
-            <td class="strong">{{ r.itemId }}</td>
-            <td>{{ r.direction }}</td>
-            <td class="mono text-muted2">{{ data.fmtDate(r.date) }}</td>
-            <td class="num">{{ r.meterOut ?? '—' }}</td>
-            <td class="num">{{ r.meterIn ?? '—' }}</td>
-            <td class="num">{{ r.fuelOut ?? '—' }}</td>
-            <td class="num">{{ r.fuelIn ?? '—' }}</td>
-            <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
-            <td>
-              <!-- Meter overage: the check-in side of the yard math (prototype `meterOverage`). -->
-              @if (overageOf(r); as o) {
-                <span class="badge-status st-reorder">
-                  <i class="bi bi-exclamation-triangle"></i>{{ data.int(o.overage) }} hr
-                </span>
-              } @else {
-                <span class="text-muted2">—</span>
-              }
-            </td>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table" imsPaged="inspections">
+        <thead>
+          <tr>
+            <th>Inspection</th><th>Asset</th><th>Direction</th><th>Date</th>
+            <th class="num">Meter Out</th><th class="num">Meter In</th>
+            <th class="num">Fuel Out</th><th class="num">Fuel In</th><th>Status</th><th>Overage</th>
           </tr>
-        } @empty {
-          <tr><td colspan="10" class="text-center text-muted2 py-4">{{ logEmptyLabel() }}</td></tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (r of logEntries(); track r.id) {
+            <!-- Row click opens the editor, as in the prototype (`inspectionModal`). -->
+            <tr class="row-open" (click)="openEdit(r)" [imsTip]="tipInspection(r)">
+              <td class="strong mono">{{ r.id }}</td>
+              <td class="strong">{{ r.itemId }}</td>
+              <td>{{ r.direction }}</td>
+              <td class="mono text-muted2">{{ data.fmtDate(r.date) }}</td>
+              <td class="num">{{ r.meterOut ?? '—' }}</td>
+              <td class="num">{{ r.meterIn ?? '—' }}</td>
+              <td class="num">{{ r.fuelOut ?? '—' }}</td>
+              <td class="num">{{ r.fuelIn ?? '—' }}</td>
+              <td><span [class]="badge(r.status)"><i class="bi bi-circle-fill"></i>{{ r.status }}</span></td>
+              <td>
+                <!-- Meter overage: the check-in side of the yard math (prototype `meterOverage`). -->
+                @if (overageOf(r); as o) {
+                  <span class="badge-status st-reorder">
+                    <i class="bi bi-exclamation-triangle"></i>{{ data.int(o.overage) }} hr
+                  </span>
+                } @else {
+                  <span class="text-muted2">—</span>
+                }
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="10" class="text-center text-muted2 py-4">{{ logEmptyLabel() }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 

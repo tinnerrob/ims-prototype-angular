@@ -44,55 +44,57 @@
       </button>
     </div>
   </div>
-  <div class="card-body table-wrap">
-    <table class="table" imsPaged="work-orders">
-      <thead>
-        <tr>
-          <th>WO #</th><th>Asset</th><th>Service Type</th><th class="num">Meter Reading</th>
-          <th>Status</th><th>Parts Used</th><th class="num">Labor Hrs</th>
-          <th class="num">Parts Cost</th><th class="num">Labor Cost</th><th class="num">Total Cost</th>
-          <th>Date</th><th class="text-end">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (w of workOrders(); track w.id) {
-          <tr class="row-open" (click)="showView($event, w)" [imsTip]="tipWorkOrder(w)">
-            <td class="strong mono">{{ w.id }}</td>
-            <td class="strong">{{ assetLabel(w) }}</td>
-            <td>{{ w.type }}</td>
-            <td class="num">{{ data.int(w.meterReading) }}</td>
-            <td><span [class]="badge(w.status)"><i class="bi bi-circle-fill"></i>{{ w.status }}</span></td>
-            <td>
-              @for (p of w.parts; track p.refId) {
-                <span class="badge-status st-inshop">{{ partLabel(p) }}</span>
-              } @empty {
-                <span class="text-muted2">—</span>
-              }
-            </td>
-            <td class="num">{{ w.laborHours }}</td>
-            <td class="num">{{ data.money(cost(w).partsCost) }}</td>
-            <td class="num">{{ data.money(cost(w).laborCost) }}</td>
-            <td class="num strong">{{ data.money(cost(w).total) }}</td>
-            <td class="mono text-muted2">{{ data.fmtDate(w.date) }}</td>
-            <td class="text-end text-nowrap">
-              <span class="d-inline-flex align-items-center gap-1">
-                <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
-                  @for (s of statuses; track s) {
-                    <option [value]="s">{{ s }}</option>
-                  }
-                </select>
-                <ims-print-menu label="Print work order" (action)="printWorkOrder(w, $event)"></ims-print-menu>
-                <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(w)">
-                  <i class="bi bi-x-lg"></i>
-                </button>
-              </span>
-            </td>
+  <div class="card-body">
+    <div class="table-wrap">
+      <table class="table" imsPaged="work-orders">
+        <thead>
+          <tr>
+            <th>WO #</th><th>Asset</th><th>Service Type</th><th class="num">Meter Reading</th>
+            <th>Status</th><th>Parts Used</th><th class="num">Labor Hrs</th>
+            <th class="num">Parts Cost</th><th class="num">Labor Cost</th><th class="num">Total Cost</th>
+            <th>Date</th><th class="text-end">Actions</th>
           </tr>
-        } @empty {
-          <tr><td colspan="12" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (w of workOrders(); track w.id) {
+            <tr class="row-open" (click)="showView($event, w)" [imsTip]="tipWorkOrder(w)">
+              <td class="strong mono">{{ w.id }}</td>
+              <td class="strong">{{ assetLabel(w) }}</td>
+              <td>{{ w.type }}</td>
+              <td class="num">{{ data.int(w.meterReading) }}</td>
+              <td><span [class]="badge(w.status)"><i class="bi bi-circle-fill"></i>{{ w.status }}</span></td>
+              <td>
+                @for (p of w.parts; track p.refId) {
+                  <span class="badge-status st-inshop">{{ partLabel(p) }}</span>
+                } @empty {
+                  <span class="text-muted2">—</span>
+                }
+              </td>
+              <td class="num">{{ w.laborHours }}</td>
+              <td class="num">{{ data.money(cost(w).partsCost) }}</td>
+              <td class="num">{{ data.money(cost(w).laborCost) }}</td>
+              <td class="num strong">{{ data.money(cost(w).total) }}</td>
+              <td class="mono text-muted2">{{ data.fmtDate(w.date) }}</td>
+              <td class="text-end text-nowrap">
+                <span class="d-inline-flex align-items-center gap-1">
+                  <select class="form-select form-select-sm w-auto" [value]="w.status" (change)="setStatus(w, $any($event.target).value)">
+                    @for (s of statuses; track s) {
+                      <option [value]="s">{{ s }}</option>
+                    }
+                  </select>
+                  <ims-print-menu label="Print work order" (action)="printWorkOrder(w, $event)"></ims-print-menu>
+                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(w)">
+                    <i class="bi bi-x-lg"></i>
+                  </button>
+                </span>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="12" class="text-center text-muted2 py-4">{{ emptyLabel() }}</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 

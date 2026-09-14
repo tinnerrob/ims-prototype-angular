@@ -469,6 +469,44 @@ try {
     (await page.locator('.tbl-foot[data-table="assets"] select').inputValue()) === '10',
   );
   check('the count sits below the table, not in the header', (await page.locator('.card-header .tbl-foot').count()) === 0);
+
+  /* ---- Every table footer lines up with its table, on every page that has one.
+     The bug this encodes (2026-09-13): three views put `card-body table-wrap` on a
+     single element, so the footer — inserted *after* the wrapper — landed outside the
+     card body's padding and sat 14px wider than the table on each side, while Item
+     Hand-Off (the reference) aligned. The invariant is the one a reader sees: the
+     footer must span the **content box** of the `.table-wrap` it was inserted after —
+     the box the table is laid out in. Comparing border boxes is not enough: a wrapper
+     that carries padding (the buggy shape) has a border box the footer can match
+     exactly while the table inside it sits 14px further in. ---- */
+  const FOOTER_ROUTES = [
+    '/orders', '/purchasing', '/inspections', '/handoff', '/logistics', '/maintenance',
+    '/rentals', '/telemetry', '/invoicing', '/admin/locations', '/admin/verticals',
+  ];
+  for (const route of FOOTER_ROUTES) {
+    await page.goto('http://localhost:' + PORT + route, { waitUntil: 'load' });
+    await page.waitForSelector('.tbl-foot', { timeout: 5000 }).catch(() => {});
+    const misaligned = await page.evaluate(() => {
+      const out = [];
+      for (const foot of document.querySelectorAll('.tbl-foot')) {
+        const wrap = foot.previousElementSibling;
+        if (!wrap || !wrap.classList.contains('table-wrap')) {
+          out.push((foot.dataset.table ?? '?') + ': not directly after a .table-wrap');
+          continue;
+        }
+        const a = foot.getBoundingClientRect();
+        const b = wrap.getBoundingClientRect();
+        const cs = getComputedStyle(wrap);
+        const padL = parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth);
+        const padR = parseFloat(cs.paddingRight) + parseFloat(cs.borderRightWidth);
+        const dl = Math.round((a.left - (b.left + padL)) * 10) / 10;
+        const dr = Math.round((b.right - padR - a.right) * 10) / 10;
+        if (Math.abs(dl) > 1 || Math.abs(dr) > 1) out.push(`${foot.dataset.table}: left off ${dl}, right off ${dr} (wrapper padding ${cs.padding})`);
+      }
+      return out;
+    });
+    check('every table footer lines up with its table: ' + route, misaligned.length === 0, misaligned.join(' | '));
+  }
   check('no console errors through the table footer', consoleErrors.length === 0, consoleErrors.join(' | '));
 
   writeFileSync(SHOTS + '/console-errors.txt', consoleErrors.join('\n'));

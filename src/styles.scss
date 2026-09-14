@@ -1839,13 +1839,6 @@ a { color: var(--brand); }
   min-height: 0;
 }
 
-/* some views put both classes on the same element (`card-body table-wrap`) */
-.content > :not(router-outlet) > .card > .card-body.table-wrap {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-}
-
 /* fixed-height work areas (scheduler / timesheet boards) */
 .content > :not(router-outlet) > .scheduler-3col,
 .content > :not(router-outlet) > .ts-page {

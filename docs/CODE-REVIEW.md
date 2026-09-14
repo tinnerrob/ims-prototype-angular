@@ -426,6 +426,54 @@ import is hoisted there). `angular.json`'s initial **warn** threshold is now **5
 1 MB error ceiling is untouched. The honest read: the app has outgrown a 500 kB ceiling, and
 the next step should be a deliberate bundle-trimming pass rather than another nudge.
 
+### Phase J — the table footer lines up on every page · `LOW` · status: **done (2026-09-13)**
+
+**The ask.** The footer read as a different size on Receiving/Inspections, Logistics & Dispatch
+and Field Service than on Item Hand-Off — all of them should match Hand-Off.
+
+**The cause — three views used a markup shape no other page used.** `TablePagerDirective` drops
+the footer in *after* the table's wrapper (`wrap.after(foot)`), so the footer's width and insets
+come from whatever contains that wrapper. Every other table nests a plain
+`<div class="table-wrap">` inside `<div class="card-body">`; exactly three — Inspections,
+Maintenance and Logistics — put both classes on **one** element
+(`<div class="card-body table-wrap">`). There `.table-wrap` *is* the card body, so the footer
+landed outside its padding: a child of `.card`, ~1 px from the card's edge, while the table it
+describes sat inside the body's 12–14 px padding. Measured at a 1440 px viewport:
+
+| page | footer's parent | footer inset | vs. its table |
+|---|---|---|---|
+| Item Hand-Off (the reference) | `DIV.card-body` | 15 px | **0 / 0** — flush |
+| Inspections / Logistics / Field Service | `DIV.card` | **1 px** | **−14 / −14** — 28 px wider |
+
+Height (41 px), button size (30 px) and type (12 / 12.5 / 14 px) were identical on all four, so
+the difference was width and inset — which is what reads as "a different size".
+
+**The fix.** Nest the wrapper in those three views, as every other table already does:
+`<div class="card-body"><div class="table-wrap"><table …`. The footer then lands inside the padded
+body and spans exactly the box the table is laid out in. A guard also went in beside it: the
+now-unreachable `.content > … > .card > .card-body.table-wrap` rule is deleted, proved neutral by
+`css:equiv` (**624 → 623 selectors**, and the *only* differences are that rule's own three
+declarations — no other selector's winning value moved).
+
+**Layout-neutral, proved by A/B.** Reverting the three templates, rebuilding and re-measuring:
+
+| route | card height | table height | footer insets |
+|---|---|---|---|
+| /inspections | 270 → 270 | 138 → 138 | 1,1 → **15,15** |
+| /logistics | 427 → 427 | 295 → 295 | 1,1 → **15,15** |
+| /maintenance | 452 → 452 | 320 → 320 | 1,1 → **15,15** |
+
+**And an e2e guard that fails on the bug.** The smoke test now walks eleven table routes and
+asserts, for every `.tbl-foot`, that it spans the **content box** of the `.table-wrap` it follows
+— the box the table is laid out in. (Comparing *border* boxes would not catch this: the buggy
+wrapper's border box is precisely what the footer matched.) Proved by mutation — restoring the old
+markup on Inspections makes the check fail with
+`inspections: left off -12, right off -12 (wrapper padding 10px 12px)` while /handoff stays green.
+
+**Verified:** build exit 0, **0 warnings** (502.92 kB) · `check:store` **294 ok / 0 FAIL in 33
+harnesses** · `lint:dead` 0/0 · `lint:ctor` OK · `css:equiv` as above · **e2e: all checks passed**,
+eleven of them the new per-route footer-alignment walk.
+
 ---
 
 ## 5. Verification recipe (every phase)

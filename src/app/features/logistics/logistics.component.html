@@ -37,54 +37,56 @@
           <i class="bi bi-check2-all"></i> Apply Assignments
         </button>
       </div>
-      <div class="card-body table-wrap">
-        <table class="table" imsPaged="dispatches">
-          <thead>
-            <tr>
-              <th class="num">Route</th><th>Dispatch</th><th>Asset</th><th>Site</th>
-              <th>Driver (CDL)</th><th>Truck</th><th>Status</th><th class="text-end"></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (d of dispatches(); track d.id) {
-              <tr class="row-open" (click)="showView($event, d)" [imsTip]="tipDispatch(d)">
-                <td class="num">{{ d.routeSeq }}</td>
-                <td class="strong mono">{{ d.id }}</td>
-                <td class="strong">{{ d.assetId }}</td>
-                <td class="text-muted2 text-xs2">{{ siteOf(d) }}</td>
-                <td>
-                  <select class="form-select" [value]="driverValue(d)" (change)="onDriver(d, $any($event.target).value)">
-                    <option value="">— none —</option>
-                    @for (e of drivers(); track e.id) {
-                      <option [value]="e.id">{{ e.id }} — {{ e.name }}</option>
-                    }
-                  </select>
-                </td>
-                <td>
-                  <select class="form-select" [value]="vehicleValue(d)" (change)="onVehicle(d, $any($event.target).value)">
-                    <option value="">— none —</option>
-                    @for (v of vehicles(); track v.id) {
-                      <option [value]="v.id">{{ v.id }} — {{ v.name }}</option>
-                    }
-                  </select>
-                </td>
-                <td>
-                  <select class="form-select" [value]="statusValue(d)" (change)="onStatus(d, $any($event.target).value)">
-                    @for (s of statuses; track s) {
-                      <option [value]="s">{{ s }}</option>
-                    }
-                  </select>
-                </td>
-                <td class="text-end text-nowrap">
-                  <ims-print-menu label="Print dispatch note" (action)="printDispatch(d, $event)"></ims-print-menu>
-                  <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(d)">
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                </td>
+      <div class="card-body">
+        <div class="table-wrap">
+          <table class="table" imsPaged="dispatches">
+            <thead>
+              <tr>
+                <th class="num">Route</th><th>Dispatch</th><th>Asset</th><th>Site</th>
+                <th>Driver (CDL)</th><th>Truck</th><th>Status</th><th class="text-end"></th>
               </tr>
-            }
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              @for (d of dispatches(); track d.id) {
+                <tr class="row-open" (click)="showView($event, d)" [imsTip]="tipDispatch(d)">
+                  <td class="num">{{ d.routeSeq }}</td>
+                  <td class="strong mono">{{ d.id }}</td>
+                  <td class="strong">{{ d.assetId }}</td>
+                  <td class="text-muted2 text-xs2">{{ siteOf(d) }}</td>
+                  <td>
+                    <select class="form-select" [value]="driverValue(d)" (change)="onDriver(d, $any($event.target).value)">
+                      <option value="">— none —</option>
+                      @for (e of drivers(); track e.id) {
+                        <option [value]="e.id">{{ e.id }} — {{ e.name }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <select class="form-select" [value]="vehicleValue(d)" (change)="onVehicle(d, $any($event.target).value)">
+                      <option value="">— none —</option>
+                      @for (v of vehicles(); track v.id) {
+                        <option [value]="v.id">{{ v.id }} — {{ v.name }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <select class="form-select" [value]="statusValue(d)" (change)="onStatus(d, $any($event.target).value)">
+                      @for (s of statuses; track s) {
+                        <option [value]="s">{{ s }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td class="text-end text-nowrap">
+                    <ims-print-menu label="Print dispatch note" (action)="printDispatch(d, $event)"></ims-print-menu>
+                    <button class="btn btn-ims-outline btn-sm2" type="button" title="Remove" (click)="remove(d)">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
